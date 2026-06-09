@@ -1,0 +1,1683 @@
+:root {
+  /* Orb's constant green/teal base — never changes with theme. Only the
+   * accent tokens below are overridden per theme by applyThemeVars(); the
+   * default accent is black-gold's primary gold (#D0A76F). */
+  --bg-canvas: #041c1c;
+  --panel: #0d2626;
+  --panel-deep: #082222;
+  --panel-soft: rgba(13, 38, 38, 0.78);
+  --border: rgba(240, 230, 210, 0.16);
+  --teal-line: rgba(93, 214, 197, 0.34);
+  --text-main: #f0e6d2;
+  --text-soft: rgba(240, 230, 210, 0.78);
+  --text-muted: rgba(240, 230, 210, 0.58);
+  --danger: #ff8a7a;
+  /* Accent (theme-driven). */
+  --accent-gold: #d0a76f;
+  --gold-soft: #ab7c40;
+  --orb-accent: #d0a76f;
+  --shot-accent: #d0a76f;
+  --space-md: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  /* Transparent so the frameless window's rounded corners show the desktop. */
+  background: transparent;
+  color: var(--text-main);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── Cockpit shell ─────────────────────────────────────────────────── */
+/* Frameless window. The outer .cockpit is a transparent container with a 10px
+ * inset; the frosted-glass frame fills it and blurs the desktop in that margin,
+ * while the opaque .cockpit-panel sits on top holding the content. This is
+ * orb's translucent drag-frame design. */
+.cockpit {
+  position: relative;
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  padding: 10px;
+  box-sizing: border-box;
+  background: transparent;
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+/* The glass margin — gradient body + backdrop blur + accent ring + soft
+ * shadow. Theme accent tints it, so it shifts with the theme. */
+.cockpit-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 24px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--orb-accent) 8%, rgba(13, 38, 38, 0.5)) 0%,
+    color-mix(in srgb, var(--orb-accent) 3%, rgba(4, 22, 22, 0.62)) 100%
+  );
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--orb-accent) 22%, rgba(255, 255, 255, 0.06));
+  box-shadow:
+    0 36px 90px rgba(0, 0, 0, 0.48),
+    0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 0 38px color-mix(in srgb, var(--orb-accent) 10%, transparent);
+  overflow: hidden;
+}
+
+/* Top sheen — orb's signature HUD line across the frame's top edge. */
+.cockpit-frame::before {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--orb-accent) 60%, transparent) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* Soft top-left corner highlight so no corner reads as a sharp square. */
+.cockpit-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    520px 360px at 6% 0%,
+    color-mix(in srgb, var(--orb-accent) 12%, transparent) 0%,
+    transparent 65%
+  );
+  border-radius: inherit;
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+/* The opaque content panel that sits on the glass frame. */
+.cockpit-panel {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px color-mix(in srgb, var(--orb-accent) 5%, transparent);
+}
+
+/* Row 1: persona brand (left) · tabs + window controls (right). */
+.cockpit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  flex: none;
+}
+
+/* Left: current persona avatar + name + status. */
+.cockpit-persona-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  min-width: 0;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.cockpit-persona-brand:hover {
+  background: color-mix(in srgb, var(--accent-gold) 8%, transparent);
+  border-color: var(--border);
+}
+
+.cockpit-persona-brand-avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+  flex: none;
+}
+
+.cockpit-persona-brand-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.cockpit-persona-brand-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.cockpit-persona-brand-status {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: color-mix(in srgb, var(--accent-gold) 80%, var(--text-muted));
+}
+
+.cockpit-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cockpit-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cockpit-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.cockpit-tab:hover:not(:disabled):not(.active) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+}
+
+.cockpit-tab.active {
+  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 44%, transparent);
+  color: color-mix(in srgb, var(--accent-gold) 92%, #ffffff);
+}
+
+.cockpit-tab.disabled,
+.cockpit-tab:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.cockpit-tab-soon {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.cockpit-tab.add {
+  padding: 6px 8px;
+}
+
+.cockpit-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* ── CLI tab (sidebar + terminal pane) ─────────────────────────────── */
+.cli-tab {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── Session rail ──────────────────────────────────────────────────── */
+.sidebar {
+  position: relative;
+  width: 244px;
+  min-width: 208px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--panel-soft);
+}
+
+.sidebar-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-header-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 6px 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.session-empty.subtle {
+  padding: 6px 12px;
+  font-size: 11px;
+  text-align: left;
+  opacity: 0.7;
+}
+
+/* ── Session groups ────────────────────────────────────────────────── */
+.session-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.session-group-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 4px;
+  color: var(--text-muted);
+}
+
+.session-group-head.static {
+  padding-left: 8px;
+}
+
+.session-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.session-group-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-soft);
+}
+
+.session-group-name {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.session-group-name.muted {
+  opacity: 0.8;
+}
+
+.session-group-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 50%, transparent);
+  background: var(--panel-deep);
+  color: var(--text-main);
+  outline: none;
+}
+
+.session-group-count {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+.session-group-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.session-group-head:hover .session-group-actions {
+  display: flex;
+}
+
+.session-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Session row ───────────────────────────────────────────────────── */
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-soft);
+  border: 1px solid transparent;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.session-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.session-row.active {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 32%, transparent);
+  color: var(--text-main);
+}
+
+.session-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.session-row-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-row-time {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-row-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 55%, transparent);
+  background: var(--panel-deep);
+  color: var(--text-main);
+  outline: none;
+}
+
+.session-row-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.session-row:hover .session-row-actions,
+.session-row.active .session-row-actions {
+  display: flex;
+}
+
+.session-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.session-row-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+.session-row-action.pinned {
+  color: var(--accent-gold);
+}
+
+.session-row-action.danger:hover {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  color: var(--danger);
+}
+
+.session-row-action.danger.confirming {
+  background: color-mix(in srgb, var(--danger) 26%, transparent);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── Floating "New session" pill (orb-style) ───────────────────────── */
+.sidebar-fab {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--orb-accent) 60%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--orb-accent) 34%, #0a2120) 0%,
+    color-mix(in srgb, var(--orb-accent) 20%, #07191a) 100%
+  );
+  color: color-mix(in srgb, var(--orb-accent) 92%, #ffffff);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow:
+    0 8px 22px -8px rgba(0, 0, 0, 0.65),
+    0 0 24px -8px color-mix(in srgb, var(--orb-accent) 60%, transparent);
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.sidebar-fab svg {
+  flex: none;
+}
+
+.sidebar-fab:hover:not(:disabled) {
+  transform: translateX(-50%) translateY(-2px);
+  border-color: var(--orb-accent);
+  box-shadow:
+    0 12px 28px -8px rgba(0, 0, 0, 0.7),
+    0 0 32px -8px color-mix(in srgb, var(--orb-accent) 75%, transparent);
+}
+
+.sidebar-fab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Terminal pane ─────────────────────────────────────────────────── */
+.chat-view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+}
+
+.chat-transcript-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.claude-terminal-host {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px var(--space-md) 0;
+  background: transparent;
+}
+
+.claude-terminal-host .xterm,
+.claude-terminal-host .xterm-viewport,
+.claude-terminal-host .xterm-screen {
+  max-width: 100%;
+}
+
+.claude-terminal-host .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+
+.claude-terminal-host .xterm-viewport::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-gold) 22%, transparent);
+  border-radius: 4px;
+}
+
+/* ── Tool strip (replaces the composer) ───────────────────────────── */
+.cli-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 10px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-deep);
+}
+
+.cli-toolbar-left,
+.cli-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cli-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.cli-tool-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 40%, transparent);
+  color: var(--accent-gold);
+}
+
+.cli-tool-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── "claude not installed" card ───────────────────────────────────── */
+.dashboard-offline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.dashboard-offline-card {
+  max-width: 440px;
+  width: 100%;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  text-align: center;
+}
+
+.dashboard-offline-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: var(--text-main);
+}
+
+.dashboard-offline-body {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.dashboard-offline-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--panel-deep);
+  border: 1px solid var(--border);
+  margin-bottom: 18px;
+}
+
+.dashboard-offline-cmd code {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+
+.dashboard-offline-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.dashboard-offline-copy:hover {
+  color: var(--accent-gold);
+}
+
+.dashboard-offline-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.dashboard-offline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dashboard-offline-btn.primary {
+  background: color-mix(in srgb, var(--accent-gold) 88%, #100d02);
+  color: #0a0a0b;
+}
+
+.dashboard-offline-btn.primary:hover {
+  filter: brightness(1.1);
+}
+
+/* ── Theme switcher (orb dot) ──────────────────────────────────────── */
+.cockpit-theme-dot {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  box-shadow: 0 0 10px -2px currentColor;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.cockpit-theme-dot:hover {
+  transform: scale(1.12);
+}
+
+/* ── Persona avatar (tinted disc + initial) ────────────────────────── */
+.persona-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 12px;
+  color: #08110f;
+  background: var(--persona-color, var(--accent-gold));
+  overflow: hidden;
+  flex: none;
+}
+
+/* Image avatar — fill the disc. */
+.persona-avatar.persona-avatar-img {
+  background: transparent;
+}
+
+.persona-avatar.persona-avatar-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Emoji avatar — neutral disc, emoji glyph centered. */
+.persona-avatar.persona-avatar-emoji {
+  background: color-mix(in srgb, var(--accent-gold) 16%, var(--panel-deep));
+  font-size: 17px;
+  line-height: 1;
+}
+
+/* Claude mascot (default persona) — clay creature on a dark warm disc. */
+.persona-avatar.persona-avatar-mascot {
+  background: #1a0f0b;
+}
+
+.persona-mascot-svg {
+  width: 80%;
+  height: 80%;
+}
+
+/* ── Persona constellation (row 2) ─────────────────────────────────── */
+.window-chat-constellation {
+  flex: none;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-deep) 70%, transparent);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  overflow: hidden;
+}
+
+.window-chat-constellation-scroll {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.window-chat-constellation-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.window-chat-constellation-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 60px;
+  flex: none;
+  padding: 4px 2px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.window-chat-constellation-cell:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.window-chat-constellation-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: border-color 120ms ease;
+}
+
+.window-chat-constellation-cell .persona-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
+  opacity: 0.78;
+  transition: opacity 120ms ease;
+}
+
+.window-chat-constellation-cell:hover .persona-avatar {
+  opacity: 1;
+}
+
+.window-chat-constellation-cell.active .window-chat-constellation-avatar-wrap {
+  border-color: var(--cell-accent, var(--accent-gold));
+  box-shadow: 0 0 14px -3px var(--cell-accent, var(--accent-gold));
+}
+
+.window-chat-constellation-cell.active .persona-avatar {
+  opacity: 1;
+}
+
+.window-chat-constellation-label {
+  max-width: 58px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-chat-constellation-cell.active .window-chat-constellation-label {
+  color: var(--text-main);
+}
+
+.window-chat-constellation-add-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px dashed color-mix(in srgb, var(--accent-gold) 50%, transparent);
+  color: var(--accent-gold);
+}
+
+.window-chat-constellation-add:hover .window-chat-constellation-add-icon {
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+}
+
+/* SOUL hover card — portaled to <body>, fixed-positioned. */
+.window-chat-constellation-soul {
+  position: fixed;
+  z-index: 200;
+  transform: translateX(-50%);
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.window-chat-constellation-soul-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.window-chat-constellation-soul-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Screenshot overlay (its own transparent window) ───────────────── */
+/* The overlay window must NOT paint the cockpit canvas behind its near-zero
+ * alpha hit-test surface, or the desktop wouldn't show through. */
+.window-screenshot-overlay,
+.window-screenshot-overlay body,
+.window-screenshot-overlay #root {
+  background: transparent !important;
+}
+
+.shot-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+  /* Near-zero alpha so the whole surface still hit-tests (a fully transparent
+   * macOS window region would let clicks fall through). */
+  background: rgba(0, 0, 0, 0.004);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.shot-predim {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 1, 1, 0.34);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.shot-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(15, 7, 2, 0.74);
+  border: 1px solid color-mix(in srgb, var(--shot-accent) 40%, transparent);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.shot-hint-key {
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-weight: 600;
+  color: var(--shot-accent);
+  background: color-mix(in srgb, var(--shot-accent) 18%, transparent);
+}
+
+.shot-hint-dot {
+  opacity: 0.4;
+}
+
+.shot-winhint {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  border: 2px solid var(--shot-accent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--shot-accent) 13%, transparent);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--shot-accent) 45%, transparent),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.32);
+  transition:
+    left 60ms ease,
+    top 60ms ease,
+    width 60ms ease,
+    height 60ms ease;
+}
+
+.shot-selection {
+  position: absolute;
+  box-shadow: 0 0 0 100vmax rgba(6, 1, 1, 0.46);
+  border: 1.5px solid var(--shot-accent);
+  cursor: move;
+  outline: 1px solid rgba(0, 0, 0, 0.35);
+}
+
+.shot-size {
+  position: absolute;
+  top: -25px;
+  left: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #1a0d02;
+  background: var(--shot-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.shot-size.inside {
+  top: 4px;
+  left: 4px;
+  color: #fff;
+  background: rgba(15, 7, 2, 0.84);
+}
+
+.shot-handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--shot-accent);
+  border: 1.5px solid rgba(8, 4, 2, 0.85);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.shot-handle.h-n {
+  top: -6px;
+  left: 50%;
+  margin-left: -5.5px;
+  cursor: ns-resize;
+}
+.shot-handle.h-s {
+  bottom: -6px;
+  left: 50%;
+  margin-left: -5.5px;
+  cursor: ns-resize;
+}
+.shot-handle.h-e {
+  right: -6px;
+  top: 50%;
+  margin-top: -5.5px;
+  cursor: ew-resize;
+}
+.shot-handle.h-w {
+  left: -6px;
+  top: 50%;
+  margin-top: -5.5px;
+  cursor: ew-resize;
+}
+.shot-handle.h-ne {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+.shot-handle.h-nw {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+.shot-handle.h-se {
+  bottom: -6px;
+  right: -6px;
+  cursor: nwse-resize;
+}
+.shot-handle.h-sw {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+
+.shot-toolbar {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(15, 7, 2, 0.88);
+  border: 1px solid color-mix(in srgb, var(--shot-accent) 30%, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+}
+
+.shot-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.shot-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.86);
+  background: transparent;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.shot-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.shot-btn.cancel:hover {
+  background: rgba(192, 57, 43, 0.85);
+}
+
+.shot-btn.confirm {
+  color: #1a0d02;
+  background: var(--shot-accent);
+}
+
+.shot-btn.confirm:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.shot-btn.confirm:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ── CLI main pane + header ────────────────────────────────────────── */
+.cli-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cli-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-soft);
+}
+
+.cli-persona-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent-gold) 8%, transparent);
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.cli-persona-chip:hover {
+  border-color: color-mix(in srgb, var(--accent-gold) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+  color: var(--accent-gold);
+}
+
+.cli-persona-name {
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Modals (orb design language) ──────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(4, 1, 1, 0.62);
+  backdrop-filter: blur(3px);
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.modal-subtitle {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+}
+
+.modal-counter {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.modal-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease,
+    filter 120ms ease;
+}
+
+.modal-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+}
+
+.modal-btn.primary {
+  border-color: transparent;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-gold) 92%, #ffffff) 0%,
+    var(--accent-gold) 100%
+  );
+  color: #1a0d02;
+}
+
+.modal-btn.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-status.error {
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
+/* ── Editor form fields (orb agent-editor) ─────────────────────────── */
+.agent-editor-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.agent-editor-input {
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text-main);
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.agent-editor-input:focus {
+  border-color: color-mix(in srgb, var(--accent-gold) 55%, transparent);
+}
+
+.agent-editor-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.agent-editor-input::placeholder {
+  color: var(--text-muted);
+}
+
+.agent-editor-soul {
+  resize: vertical;
+  line-height: 1.55;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+}
+
+.agent-editor-hint {
+  margin: -8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Group picker ──────────────────────────────────────────────────── */
+.group-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text-soft);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.group-picker-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+}
+
+.group-picker-item.active {
+  border-color: color-mix(in srgb, var(--accent-gold) 45%, transparent);
+  color: var(--accent-gold);
+}
+
+.group-picker-new {
+  display: flex;
+  gap: 8px;
+}
+
+.group-picker-new .agent-editor-input {
+  flex: 1;
+}
+
+/* ── Persona manager ───────────────────────────────────────────────── */
+.persona-manager {
+  max-width: 560px;
+}
+
+.persona-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.persona-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
+}
+
+.persona-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.persona-card.active {
+  border-color: color-mix(in srgb, var(--accent-gold) 50%, transparent);
+  background: color-mix(in srgb, var(--accent-gold) 9%, transparent);
+}
+
+/* Sizing only — background/glyph come from the PersonaAvatar variant. */
+.persona-card-avatar.persona-avatar {
+  width: 38px;
+  height: 38px;
+  font-size: 15px;
+}
+
+.persona-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.persona-card-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.persona-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: #1a0d02;
+  background: var(--accent-gold);
+}
+
+.persona-card-preview {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.persona-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+/* ── Frameless window controls ─────────────────────────────────────── */
+.win-ctl-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+}
+
+.win-ctl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.win-ctl:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+.win-ctl.close:hover {
+  background: #e0483b;
+  color: #fff;
+}
+
+/* The brand block sits left; theme + winctl push to the right edge. The
+ * theme button already has margin-left:auto, so winctl trails it. When mini,
+ * the bar lays out its own way. */
+
+/* ── Mini panel ────────────────────────────────────────────────────── */
+.cockpit-mini-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+}
+
+.cockpit-mini-bar > svg {
+  color: var(--accent-gold);
+  flex: none;
+}
+
+.cockpit-mini-title {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* In mini mode the session rail and the per-CLI header collapse away so the
+ * live terminal fills the compact panel. */
+.cockpit.mini .sidebar,
+.cockpit.mini .cli-header {
+  display: none;
+}
+
+.cockpit.mini .cli-toolbar {
+  height: 38px;
+}
+
+/* ── Avatar picker (persona editor) ────────────────────────────────── */
+.avatar-picker {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.avatar-picker-preview {
+  flex: none;
+}
+
+.avatar-picker-preview-img.persona-avatar {
+  width: 64px;
+  height: 64px;
+  font-size: 28px;
+  border-radius: 16px;
+}
+
+.avatar-picker-preview-img.persona-avatar.persona-avatar-img img,
+.avatar-picker-preview-img.persona-avatar.persona-avatar-mascot {
+  border-radius: 16px;
+}
+
+.avatar-picker-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.avatar-picker-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text-soft);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.avatar-picker-cell:hover {
+  border-color: color-mix(in srgb, var(--accent-gold) 45%, transparent);
+}
+
+.avatar-picker-cell.selected {
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 0 1px var(--accent-gold);
+}
+
+.avatar-picker-upload-cell,
+.avatar-picker-clear {
+  color: var(--accent-gold);
+}
+
+.avatar-picker-clear {
+  font-size: 18px;
+  color: var(--text-muted);
+}
+
+.avatar-picker-clear:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}

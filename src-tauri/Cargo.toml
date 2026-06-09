@@ -1,0 +1,49 @@
+[package]
+name = "open-terminus"
+version = "0.1.0"
+description = "OpenTerminus — a terminal-native desktop cockpit for AI coding CLIs"
+authors = ["OpenTerminus contributors"]
+edition = "2021"
+rust-version = "1.77"
+default-run = "open-terminus"
+license = "MIT"
+publish = false
+
+[lib]
+name = "open_terminus_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+# `macos-private-api` is required for the transparent screenshot-overlay window.
+tauri = { version = "2.1", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dirs = "5"
+base64 = "0.22"
+# Crypto-grade random for terminal session ids.
+getrandom = "0.2"
+# Cross-platform PTY (wezterm project) — spawns `claude` in a real terminal
+# behind the embedded xterm.js surface.
+portable-pty = "0.8"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+# Non-macOS screenshot path: xcap grabs the monitor, arboard writes the
+# clipboard, image crops/saves the PNG. (macOS uses the native `screencapture`
+# instead, and CoreGraphics for window enumeration.)
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+xcap = "0.0.14"
+arboard = "3"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Window enumeration for the overlay's window-capture mode
+# (CGWindowListCopyWindowInfo). Already in the tree via Tauri.
+core-foundation = "0.10"

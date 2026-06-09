@@ -1,0 +1,33 @@
+# ── Node ──────────────────────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+.vite/
+
+# ── Rust / Cargo ───────────────────────────────────────────────────────
+src-tauri/target/
+
+# ── Tauri generated files ──────────────────────────────────────────────
+src-tauri/gen/
+
+# ── Environment / secrets ──────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── OS ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor / IDE ──────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+
+# ── Logs ──────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+
+# ── Icons / branding ──────────────────────────────────────────────────
+# Excluded from version control — replace with Open Terminus artwork.
+src-tauri/icons/

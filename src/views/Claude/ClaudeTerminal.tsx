@@ -1,0 +1,258 @@
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+} from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
+import "@xterm/xterm/css/xterm.css";
+import { useThemeStore } from "../../state/themeStore";
+import { xtermThemeForTheme } from "../../state/uiPalette";
+
+/** Imperative handle the parent view uses to drive the terminal — composer
+ *  injection calls `writeLine`. */
+export interface ClaudeTerminalHandle {
+  /** Inject a line into claude's stdin and submit it (appends CR). */
+  writeLine: (text: string) => void;
+  /** Inject text into claude's stdin WITHOUT submitting — lands in the input
+   *  box so the user can add context before pressing Enter. Used by the
+   *  screenshot button to drop the captured file path in. */
+  insert: (text: string) => void;
+  focus: () => void;
+}
+
+interface Props {
+  profileId: string;
+  /** Claude conversation UUID this terminal binds to (`--session-id` /
+   *  `--resume`). */
+  claudeSessionId?: string;
+  /** Resume the bound session instead of starting it fresh. Read once at mount. */
+  resume?: boolean;
+  /** Raised when the backend can't find the `claude` binary, so the view can
+   *  show the install card instead of a blank terminal. */
+  onMissingClaude?: (message: string) => void;
+  /** Raised after the PTY successfully spawns claude — the view uses this to
+   *  mark the session "started" so next open resumes it. */
+  onOpened?: () => void;
+  /** Raised when claude exits (or fails to spawn). */
+  onExit?: (code: number | null) => void;
+}
+
+interface DataEvent {
+  id: string;
+  data: string; // base64 of raw PTY bytes
+}
+interface ExitEvent {
+  id: string;
+  code: number | null;
+}
+
+function decodeBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** xterm.js surface bound to a Rust PTY running `claude`. The parent keys this
+ *  component on profileId + session so switching tears down and respawns. */
+const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
+  function ClaudeTerminal(
+    { profileId, claudeSessionId, resume, onMissingClaude, onOpened, onExit },
+    ref,
+  ) {
+    const hostRef = useRef<HTMLDivElement | null>(null);
+    const termRef = useRef<Terminal | null>(null);
+    const sessionIdRef = useRef<string | null>(null);
+    const themeName = useThemeStore((s) => s.name);
+
+    // Re-theme the live terminal when the cockpit theme changes (no remount).
+    useEffect(() => {
+      if (termRef.current) {
+        termRef.current.options.theme = xtermThemeForTheme(themeName);
+      }
+    }, [themeName]);
+
+    useImperativeHandle(ref, () => ({
+      writeLine: (text: string) => {
+        const id = sessionIdRef.current;
+        if (!id) return;
+        // Claude Code's TUI buffers a fast injected paste and the submitting
+        // carriage return as one chunk, so the line lands in the input box but
+        // never sends. Write the text first, then deliver the Enter as a
+        // separate, slightly delayed keystroke so the TUI registers a discrete
+        // submit. The textarea-paste path may strip a leading `/`, so feed the
+        // body without the CR, then CR alone.
+        void invoke("terminal_write", { id, data: text }).then(() => {
+          window.setTimeout(() => {
+            const cur = sessionIdRef.current;
+            if (cur) void invoke("terminal_write", { id: cur, data: "\r" });
+          }, 30);
+        });
+      },
+      insert: (text: string) => {
+        const id = sessionIdRef.current;
+        if (!id) return;
+        void invoke("terminal_write", { id, data: text });
+        termRef.current?.focus();
+      },
+      focus: () => termRef.current?.focus(),
+    }));
+
+    useEffect(() => {
+      const host = hostRef.current;
+      if (!host) return;
+
+      let disposed = false;
+      const cleanup: Array<() => void> = [];
+
+      const term = new Terminal({
+        allowProposedApi: true,
+        convertEol: false,
+        cursorBlink: true,
+        fontFamily:
+          '"SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, monospace',
+        fontSize: 13,
+        // Integer line height keeps cells pixel-aligned — fractional values
+        // (e.g. 1.15) make glyphs blurry on HiDPI WKWebView.
+        lineHeight: 1,
+        scrollback: 4000,
+        theme: xtermThemeForTheme(useThemeStore.getState().name),
+      });
+      termRef.current = term;
+
+      const fit = new FitAddon();
+      term.loadAddon(fit);
+      term.loadAddon(new WebLinksAddon());
+      const unicode = new Unicode11Addon();
+      term.loadAddon(unicode);
+      term.unicode.activeVersion = "11";
+
+      // DOM renderer only (no WebGL): the WebGL addon ghosts/flickers under
+      // macOS WKWebView, which is what we're rendering inside.
+      term.open(host);
+      fit.fit(); // initial cols/rows for the PTY spawn below
+
+      // Track the size the PTY currently believes it has so we only ever send
+      // a resize when the cell grid genuinely changed. A burst of identical
+      // resizes during a panel's open animation makes Claude Code's TUI
+      // repaint its banner each time, stacking into duplicated headers.
+      let lastCols = term.cols;
+      let lastRows = term.rows;
+      const pushResize = () => {
+        const id = sessionIdRef.current;
+        if (!id) return;
+        if (term.cols === lastCols && term.rows === lastRows) return;
+        lastCols = term.cols;
+        lastRows = term.rows;
+        void invoke("terminal_resize", { id, cols: term.cols, rows: term.rows });
+      };
+
+      // One settle refit after layout finishes. The first fit can measure a
+      // pre-settle pane, leaving the grid too wide/tall so text spills past the
+      // edge. Debounced so an open animation's intermediate frames collapse
+      // into a single resize.
+      let settleTimer = 0;
+      const settle = () => {
+        window.clearTimeout(settleTimer);
+        settleTimer = window.setTimeout(() => {
+          try {
+            fit.fit();
+          } catch {
+            return;
+          }
+          pushResize();
+        }, 140);
+      };
+      settle();
+      cleanup.push(() => window.clearTimeout(settleTimer));
+
+      // Relay keystrokes → PTY stdin.
+      const onData = term.onData((data) => {
+        const id = sessionIdRef.current;
+        if (id) void invoke("terminal_write", { id, data });
+      });
+      cleanup.push(() => onData.dispose());
+
+      // Subscribe to PTY output before opening so we don't drop the banner.
+      void listen<DataEvent>("terminal://data", (ev) => {
+        if (ev.payload.id !== sessionIdRef.current) return;
+        term.write(decodeBase64(ev.payload.data));
+      }).then((un) => {
+        if (disposed) un();
+        else cleanup.push(un);
+      });
+
+      void listen<ExitEvent>("terminal://exit", (ev) => {
+        if (ev.payload.id !== sessionIdRef.current) return;
+        term.write("\r\n\x1b[2m[claude exited]\x1b[0m\r\n");
+        onExit?.(ev.payload.code);
+      }).then((un) => {
+        if (disposed) un();
+        else cleanup.push(un);
+      });
+
+      // Spawn claude for this profile with the fitted size.
+      void invoke<string>("terminal_open", {
+        profileId,
+        cols: term.cols,
+        rows: term.rows,
+        claudeSessionId,
+        resume: resume ?? false,
+      })
+        .then((id) => {
+          if (disposed) {
+            void invoke("terminal_close", { id });
+            return;
+          }
+          sessionIdRef.current = id;
+          term.focus();
+          onOpened?.();
+        })
+        .catch((e: unknown) => {
+          const err = e as { kind?: string; message?: string } | string;
+          if (typeof err === "object" && err?.kind === "ClaudeNotFound") {
+            onMissingClaude?.(err.message ?? "claude not found");
+          } else {
+            const msg =
+              typeof err === "string"
+                ? err
+                : (err?.message ?? JSON.stringify(err));
+            term.write(
+              `\r\n\x1b[31m[openterminus] failed to start claude: ${msg}\x1b[0m\r\n`,
+            );
+          }
+        });
+
+      // Reflow → debounced settle fit. Routing through the same `settle` timer
+      // as startup means a resize animation's stream of intermediate frames
+      // collapses into a single fit + resize once motion stops.
+      const ro = new ResizeObserver(() => settle());
+      ro.observe(host);
+      cleanup.push(() => ro.disconnect());
+
+      return () => {
+        disposed = true;
+        cleanup.forEach((run) => run());
+        const id = sessionIdRef.current;
+        sessionIdRef.current = null;
+        if (id) void invoke("terminal_close", { id });
+        term.dispose();
+        termRef.current = null;
+      };
+      // Callbacks are stable; resume is read once at mount on purpose, so
+      // neither belongs in deps. A profile or session change remounts via the
+      // parent's `key`.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [profileId, claudeSessionId]);
+
+    return <div className="claude-terminal-host" ref={hostRef} />;
+  },
+);
+
+export default ClaudeTerminal;
