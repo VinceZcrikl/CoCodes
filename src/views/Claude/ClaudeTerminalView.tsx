@@ -15,8 +15,8 @@ const CLI_META: Record<string, { title: string; installCmd: string | null; insta
   },
   codex: {
     title: "Codex CLI isn't installed",
-    installCmd: null,
-    installHint: "Install via: curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+    installCmd: "npm install -g @openai/codex",
+    installHint: "Install Codex CLI then click Recheck.",
   },
   grok: {
     title: "Grok CLI isn't installed",

@@ -103,8 +103,26 @@ fn find_in_path(exe: &str, extra_dirs: &[PathBuf]) -> Option<PathBuf> {
     extra_dirs.iter().map(|d| d.join(exe)).find(|c| c.is_file())
 }
 
+/// On Windows, `where.exe` reads the registry-based PATH (HKCU + HKLM) and
+/// finds binaries installed after the current process started — essential for
+/// CLIs installed by PowerShell scripts that modify the user PATH via registry.
+#[cfg(windows)]
+fn where_exe(name: &str) -> Option<PathBuf> {
+    std::process::Command::new("where")
+        .arg(name)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .next()
+                .map(|l| PathBuf::from(l.trim()))
+        })
+        .filter(|p| p.is_file())
+}
+
 fn find_claude() -> Option<PathBuf> {
-    let exe = if cfg!(windows) { "claude.cmd" } else { "claude" };
     let home = dirs::home_dir();
     let mut extras = vec![
         PathBuf::from("/usr/local/bin"),
@@ -116,11 +134,24 @@ fn find_claude() -> Option<PathBuf> {
         extras.push(h.join(".bun/bin"));
         extras.push(h.join(".local/share/claude/bin"));
     }
-    find_in_path(exe, &extras)
+    #[cfg(windows)]
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        extras.push(PathBuf::from(&appdata).join("npm"));
+    }
+
+    #[cfg(windows)]
+    let candidates = ["claude.cmd", "claude.exe", "claude"];
+    #[cfg(not(windows))]
+    let candidates = ["claude"];
+
+    candidates.iter().find_map(|exe| find_in_path(exe, &extras))
+        .or_else(|| {
+            #[cfg(windows)] { where_exe("claude") }
+            #[cfg(not(windows))] { None }
+        })
 }
 
 fn find_codex() -> Option<PathBuf> {
-    let exe = if cfg!(windows) { "codex.cmd" } else { "codex" };
     let home = dirs::home_dir();
     let mut extras = vec![
         PathBuf::from("/usr/local/bin"),
@@ -131,13 +162,32 @@ fn find_codex() -> Option<PathBuf> {
         extras.push(h.join(".local/bin"));
         extras.push(h.join(".bun/bin"));
     }
-    find_in_path(exe, &extras)
+    // Windows: npm global bin is %APPDATA%\npm (not ~/.npm-global/bin).
+    // Also try %APPDATA%\npm for npm-installed packages.
+    #[cfg(windows)]
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        extras.push(PathBuf::from(&appdata).join("npm"));
+    }
+
+    // On Windows try .cmd first (npm shim), then .exe (standalone installer),
+    // then bare name. On Unix just the bare name.
+    #[cfg(windows)]
+    let candidates = ["codex.cmd", "codex.exe", "codex"];
+    #[cfg(not(windows))]
+    let candidates = ["codex"];
+
+    candidates.iter().find_map(|exe| find_in_path(exe, &extras))
+        // Final fallback: ask where.exe, which reads the live registry PATH
+        // and finds binaries installed by PowerShell scripts after app launch.
+        .or_else(|| {
+            #[cfg(windows)] { where_exe("codex") }
+            #[cfg(not(windows))] { None }
+        })
 }
 
 fn find_grok() -> Option<PathBuf> {
     // xAI installs the `grok` binary; on Windows the PowerShell installer may
     // place it in %LOCALAPPDATA%\xai\bin which isn't always on PATH.
-    let exe = if cfg!(windows) { "grok.exe" } else { "grok" };
     let home = dirs::home_dir();
     let mut extras = vec![
         PathBuf::from("/usr/local/bin"),
@@ -146,12 +196,28 @@ fn find_grok() -> Option<PathBuf> {
     if let Some(h) = &home {
         extras.push(h.join(".local/bin"));
         extras.push(h.join(".grok/bin"));
+        extras.push(h.join(".npm-global/bin"));
     }
     #[cfg(windows)]
-    if let Ok(appdata) = std::env::var("LOCALAPPDATA") {
-        extras.push(PathBuf::from(appdata).join("xai").join("bin"));
+    {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            extras.push(PathBuf::from(&local).join("xai").join("bin"));
+        }
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            extras.push(PathBuf::from(&appdata).join("npm"));
+        }
     }
-    find_in_path(exe, &extras)
+
+    #[cfg(windows)]
+    let candidates = ["grok.cmd", "grok.exe", "grok"];
+    #[cfg(not(windows))]
+    let candidates = ["grok"];
+
+    candidates.iter().find_map(|exe| find_in_path(exe, &extras))
+        .or_else(|| {
+            #[cfg(windows)] { where_exe("grok") }
+            #[cfg(not(windows))] { None }
+        })
 }
 
 /// Fold the profile's persona + memory into the file we pass to
@@ -214,8 +280,7 @@ pub async fn terminal_open(
     let binary = match cli_name {
         "codex" => find_codex().ok_or_else(|| {
             TerminalError::CliNotFound(
-                "`codex` not found on PATH. Install: curl -fsSL https://chatgpt.com/codex/install.sh | sh"
-                    .into(),
+                "`codex` not found on PATH. Install: npm install -g @openai/codex".into(),
             )
         })?,
         "grok" => find_grok().ok_or_else(|| {
