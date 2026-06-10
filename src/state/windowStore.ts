@@ -13,14 +13,21 @@ interface WindowState {
 }
 
 async function applyGeometry(mini: boolean) {
+  // Block terminal resizes that fire from CSS layout changes (sidebar hide/show)
+  // before the window has actually reached its new size. Without this, the
+  // 140ms settle fires against the intermediate layout and sends the PTY a wrong
+  // cols/rows, garbling the TUI. The matching 'terminus:refit' in the finally
+  // block lets terminals measure once the Tauri resize is confirmed.
+  window.dispatchEvent(new Event("terminus:geometry-start"));
   try {
     const w = getCurrentWindow();
     const size = mini ? MINI : FULL;
-    await w.setResizable(!mini);
     await w.setSize(new LogicalSize(size.width, size.height));
     await w.setAlwaysOnTop(mini);
   } catch (e) {
     console.error("window geometry change failed", e);
+  } finally {
+    window.dispatchEvent(new Event("terminus:refit"));
   }
 }
 

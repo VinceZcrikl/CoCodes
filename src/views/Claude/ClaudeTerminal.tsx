@@ -158,7 +158,12 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       // edge. Debounced so an open animation's intermediate frames collapse
       // into a single resize.
       let settleTimer = 0;
-      const settle = () => {
+      // Set while windowStore.applyGeometry is in flight. CSS layout events
+      // that fire during a window resize (e.g. sidebar collapsing) must not
+      // trigger an intermediate fit — we wait for the confirmed 'terminus:refit'.
+      let geometryTransitioning = false;
+
+      const doFit = (delay: number) => {
         window.clearTimeout(settleTimer);
         settleTimer = window.setTimeout(() => {
           try {
@@ -167,8 +172,30 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
             return;
           }
           pushResize();
-        }, 140);
+        }, delay);
       };
+
+      const settle = () => {
+        if (geometryTransitioning) return;
+        doFit(140);
+      };
+
+      const onGeometryStart = () => {
+        geometryTransitioning = true;
+        window.clearTimeout(settleTimer);
+      };
+      const onRefit = () => {
+        geometryTransitioning = false;
+        // One frame after Tauri confirms the new window size, measure and sync.
+        doFit(60);
+      };
+      window.addEventListener("terminus:geometry-start", onGeometryStart);
+      window.addEventListener("terminus:refit", onRefit);
+      cleanup.push(() => {
+        window.removeEventListener("terminus:geometry-start", onGeometryStart);
+        window.removeEventListener("terminus:refit", onRefit);
+      });
+
       settle();
       cleanup.push(() => window.clearTimeout(settleTimer));
 

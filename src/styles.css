@@ -126,7 +126,9 @@ body {
   flex-direction: column;
   background: var(--bg-canvas);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  /* radius = frame-radius(24) − glass-inset(10) = 14px so the glass strip is
+   * uniformly wide at every corner and no straight edge bleeds through. */
+  border-radius: 14px;
   overflow: hidden;
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.42),
@@ -280,8 +282,8 @@ body {
 /* ── Session rail ──────────────────────────────────────────────────── */
 .sidebar {
   position: relative;
-  width: 244px;
-  min-width: 208px;
+  /* Fluid width: full at 1180px, shrinks proportionally down to 180px. */
+  width: clamp(180px, 22vw, 244px);
   flex: none;
   display: flex;
   flex-direction: column;
@@ -602,12 +604,6 @@ body {
   overflow: hidden;
   padding: 6px var(--space-md) 0;
   background: transparent;
-}
-
-.claude-terminal-host .xterm,
-.claude-terminal-host .xterm-viewport,
-.claude-terminal-host .xterm-screen {
-  max-width: 100%;
 }
 
 .claude-terminal-host .xterm-viewport::-webkit-scrollbar {
@@ -1222,7 +1218,6 @@ body {
 }
 
 .cli-persona-name {
-  max-width: 220px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1680,4 +1675,37 @@ body {
 .avatar-picker-clear:hover {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+/* ── Responsive layout ──────────────────────────────────────────────── */
+/* Fluid persona-name in the cli-header sub-bar. */
+.cli-persona-name {
+  max-width: clamp(80px, 18vw, 220px);
+}
+
+/* 680px: compact header — drop "soon" badges, tighten tab padding. */
+@media (max-width: 680px) {
+  .cockpit-tab-soon { display: none; }
+  .cockpit-tab { padding: 5px 9px; }
+  .cockpit-persona-brand-name { max-width: 110px; }
+}
+
+/* 560px: micro header — collapse persona to avatar-only, shrink tabs. */
+@media (max-width: 560px) {
+  .cockpit-persona-brand-meta { display: none; }
+  .cockpit-persona-brand { padding: 4px; }
+  .cockpit-tab { padding: 5px 7px; font-size: 12px; }
+  .cockpit-header { gap: 6px; padding: 0 8px; }
+}
+
+/* 500px: in non-mini (full) mode, fold the sidebar away so the terminal
+ * is not squeezed into an unusable sliver. Mini mode already hides it. */
+@media (max-width: 500px) {
+  .cockpit:not(.mini) .sidebar { display: none; }
+}
+
+/* Tight mini toolbar: shrink icon buttons below 400px. */
+@media (max-width: 400px) {
+  .cli-tool-btn { width: 28px; height: 28px; }
+  .cli-toolbar { padding: 0 6px; gap: 4px; }
 }
