@@ -38,8 +38,10 @@ interface Props {
   cwd?: string | null;
   /** Raised when the backend can't find the `claude` binary, so the view can
    *  show the install card instead of a blank terminal. */
-  onMissingClaude?: (message: string) => void;
-  /** Raised after the PTY successfully spawns claude — the view uses this to
+  /** "claude" | "codex" | "grok" — which CLI binary to spawn. */
+  cli?: string;
+  onMissingCli?: (message: string) => void;
+  /** Raised after the PTY successfully spawns the CLI — the view uses this to
    *  mark the session "started" so next open resumes it. */
   onOpened?: () => void;
   /** Raised when claude exits (or fails to spawn). */
@@ -66,7 +68,7 @@ function decodeBase64(b64: string): Uint8Array {
  *  component on profileId + session so switching tears down and respawns. */
 const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
   function ClaudeTerminal(
-    { profileId, claudeSessionId, cwd, onMissingClaude, onOpened, onExit },
+    { profileId, claudeSessionId, cwd, cli = "claude", onMissingCli, onOpened, onExit },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
@@ -211,6 +213,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
               rows: term.rows,
               claudeSessionId,
               cwd: cwd ?? null,
+              cli,
             })
               .then((id) => {
                 if (disposed) {
@@ -230,15 +233,15 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
               })
               .catch((e: unknown) => {
                 const err = e as { kind?: string; message?: string } | string;
-                if (typeof err === "object" && err?.kind === "ClaudeNotFound") {
-                  onMissingClaude?.(err.message ?? "claude not found");
+                if (typeof err === "object" && err?.kind === "CliNotFound") {
+                  onMissingCli?.(err.message ?? `${cli} not found`);
                 } else {
                   const msg =
                     typeof err === "string"
                       ? err
                       : (err?.message ?? JSON.stringify(err));
                   term.write(
-                    `\r\n\x1b[31m[openterminus] failed to start claude: ${msg}\x1b[0m\r\n`,
+                    `\r\n\x1b[31m[openterminus] failed to start ${cli}: ${msg}\x1b[0m\r\n`,
                   );
                 }
               });
@@ -316,8 +319,8 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         termRef.current = null;
       };
       // Callbacks are stable; resume is read once at mount on purpose, so
-      // neither belongs in deps. A profile or session change remounts via the
-      // parent's `key`.
+      // neither belongs in deps. A profile, session, or cli change remounts via
+      // the parent's `key`.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profileId, claudeSessionId]);
 

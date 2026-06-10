@@ -7,39 +7,50 @@ import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
 import type { ClaudeSession } from "../../hooks/useClaudeSessions";
 import { useDirectoryStore } from "../../state/directoryStore";
 
-const INSTALL_CMD = "npm i -g @anthropic-ai/claude-code";
+const CLI_META: Record<string, { title: string; installCmd: string | null; installHint: string }> = {
+  claude: {
+    title: "Claude Code isn't installed",
+    installCmd: "npm i -g @anthropic-ai/claude-code",
+    installHint: "Install Claude Code then click Recheck.",
+  },
+  codex: {
+    title: "Codex CLI isn't installed",
+    installCmd: null,
+    installHint: "Install via: curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+  },
+  grok: {
+    title: "Grok CLI isn't installed",
+    installCmd: null,
+    installHint: "Install via: https://docs.x.ai/build — see the Grok Build quickstart.",
+  },
+};
 
-/** Claude pane: an embedded xterm running `claude` plus the composer. The
- *  composer injects each sent line into claude's stdin. Session state is owned
- *  by useClaudeSessions and passed in. */
+/** Terminal pane: an embedded xterm running a CLI tool plus the toolbar.
+ *  Works for Claude, Codex, and Grok by routing through the `cli` prop. */
 export default function ClaudeTerminalView({
   profileId,
   activeId,
   active,
+  cli = "claude",
   onOpened,
 }: {
   profileId: string;
   activeId: string | null;
   active: ClaudeSession | null;
+  cli?: string;
   onOpened: () => void;
 }) {
   const termRef = useRef<ClaudeTerminalHandle | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  // Bumped on "Recheck" to remount the terminal after the user installs claude.
   const [reloadKey, setReloadKey] = useState(0);
 
   const { cwd } = useDirectoryStore();
 
-  // Open the region/window selection overlay. The grab completes async and
-  // arrives via the `screenshot:captured` event below.
   const onScreenshot = useCallback(() => {
     void invoke("screenshot_open");
   }, []);
 
-  // When the user picks a new directory from the toolbar, inject `cd <path>`
-  // into the running terminal so it takes effect immediately. For the NEXT
-  // spawned session the stored cwd (via directoryStore) is used as the PTY cwd.
   const onCwdChange = useCallback((newCwd: string | null) => {
     if (!newCwd) return;
     const safe = newCwd.replace(/\\/g, "/");
@@ -54,64 +65,55 @@ export default function ClaudeTerminalView({
     }
   }, []);
 
-  // Captured PNG path → drop it into the terminal input (without submitting) so
-  // the user can add a prompt before sending.
   useEffect(() => {
     const p = listen<string>("screenshot:captured", (e) => {
       const path = e.payload;
       if (path) termRef.current?.insert(`${path} `);
     });
-    return () => {
-      void p.then((fn) => fn());
-    };
+    return () => { void p.then((fn) => fn()); };
   }, []);
 
+  // Clear "missing" error when CLI tab changes so we try again.
+  useEffect(() => { setMissing(null); setReloadKey((k) => k + 1); }, [cli]);
+
+  const meta = CLI_META[cli] ?? CLI_META.claude;
+
   const onCopy = async () => {
+    if (!meta.installCmd) return;
     try {
-      await navigator.clipboard.writeText(INSTALL_CMD);
+      await navigator.clipboard.writeText(meta.installCmd);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      /* clipboard unavailable — ignore */
-    }
+    } catch { /* clipboard unavailable */ }
   };
 
-  const onRecheck = () => {
-    setMissing(null);
-    setReloadKey((k) => k + 1);
-  };
+  const onRecheck = () => { setMissing(null); setReloadKey((k) => k + 1); };
 
   if (missing) {
     return (
       <div className="chat-view">
         <div className="dashboard-offline" role="alert">
           <div className="dashboard-offline-card">
-            <h2 className="dashboard-offline-title">
-              Claude Code isn't installed
-            </h2>
+            <h2 className="dashboard-offline-title">{meta.title}</h2>
             <p className="dashboard-offline-body">{missing}</p>
-            <div className="dashboard-offline-cmd">
-              <code>{INSTALL_CMD}</code>
-              <button
-                type="button"
-                className="dashboard-offline-copy"
-                onClick={() => void onCopy()}
-                aria-label="Copy command"
-                title={copied ? "Copied" : "Copy command"}
-              >
-                {copied ? (
-                  <Check size={13} strokeWidth={2} />
-                ) : (
-                  <Copy size={13} strokeWidth={1.75} />
-                )}
-              </button>
-            </div>
+            {meta.installCmd ? (
+              <div className="dashboard-offline-cmd">
+                <code>{meta.installCmd}</code>
+                <button
+                  type="button"
+                  className="dashboard-offline-copy"
+                  onClick={() => void onCopy()}
+                  aria-label="Copy command"
+                  title={copied ? "Copied" : "Copy command"}
+                >
+                  {copied ? <Check size={13} strokeWidth={2} /> : <Copy size={13} strokeWidth={1.75} />}
+                </button>
+              </div>
+            ) : (
+              <p className="dashboard-offline-body" style={{ opacity: 0.7 }}>{meta.installHint}</p>
+            )}
             <div className="dashboard-offline-actions">
-              <button
-                type="button"
-                className="dashboard-offline-btn primary"
-                onClick={onRecheck}
-              >
+              <button type="button" className="dashboard-offline-btn primary" onClick={onRecheck}>
                 <RefreshCw size={13} strokeWidth={1.75} />
                 <span>Recheck</span>
               </button>
@@ -128,17 +130,23 @@ export default function ClaudeTerminalView({
         {activeId && (
           <ClaudeTerminal
             ref={termRef}
-            key={`${profileId}:${activeId}:${reloadKey}`}
+            key={`${cli}:${profileId}:${activeId}:${reloadKey}`}
             profileId={profileId}
             claudeSessionId={activeId}
             resume={active?.started ?? false}
             cwd={cwd}
-            onMissingClaude={setMissing}
+            cli={cli}
+            onMissingCli={setMissing}
             onOpened={onOpened}
           />
         )}
       </section>
-      <Toolbar onScreenshot={onScreenshot} onCwdChange={onCwdChange} onCommand={onCommand} />
+      <Toolbar
+        onScreenshot={onScreenshot}
+        onCwdChange={onCwdChange}
+        onCommand={onCommand}
+        cli={cli}
+      />
     </div>
   );
 }

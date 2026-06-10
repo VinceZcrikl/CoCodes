@@ -4,7 +4,7 @@ import { create } from "zustand";
  *  injects (`profileId` → `--append-system-prompt-file`). Persisted so the
  *  cockpit reopens with the same persona. */
 const STORAGE_KEY = "openterminus:active-profile";
-const DEFAULT_PROFILE = "default";
+const DEFAULT_PROFILE = "claude";
 
 function loadInitial(): string {
   if (typeof localStorage === "undefined") return DEFAULT_PROFILE;

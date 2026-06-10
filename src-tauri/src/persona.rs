@@ -20,7 +20,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_PROFILE: &str = "default";
+pub const DEFAULT_PROFILE: &str = "claude";
 
 /// Persona + memory for one profile, folded into the CLI's system prompt.
 #[derive(Serialize, Clone, Default)]
@@ -44,6 +44,10 @@ pub struct PersonaDoc {
     pub soul: String,
     pub memory: String,
     pub user: String,
+    /// Preferred CLI for this persona: "claude" | "codex" | "grok".
+    /// Defaults to "claude" for existing personas that pre-date this field.
+    #[serde(default = "default_cli")]
+    pub cli: String,
 }
 
 /// A persona list-row summary (id, display name, avatar, short SOUL preview).
@@ -53,6 +57,11 @@ pub struct PersonaSummary {
     pub name: String,
     pub avatar: String,
     pub soul_preview: String,
+    pub cli: String,
+}
+
+fn default_cli() -> String {
+    "claude".to_string()
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -61,6 +70,9 @@ struct Meta {
     name: String,
     #[serde(default)]
     avatar: String,
+    /// Preferred CLI for this persona. Missing in legacy meta.json → "claude".
+    #[serde(default = "default_cli")]
+    cli: String,
 }
 
 /// The OpenTerminus data home — `~/.openterminus`.
@@ -167,6 +179,7 @@ pub async fn persona_list() -> Result<Vec<PersonaSummary>, String> {
                     meta.name
                 },
                 avatar: meta.avatar,
+                cli: meta.cli,
                 soul_preview: soul.trim().chars().take(120).collect(),
                 id,
             });
@@ -179,8 +192,9 @@ pub async fn persona_list() -> Result<Vec<PersonaSummary>, String> {
             0,
             PersonaSummary {
                 id: DEFAULT_PROFILE.to_string(),
-                name: "Default".to_string(),
+                name: "Claude Code".to_string(),
                 avatar: String::new(),
+                cli: default_cli(),
                 soul_preview: String::new(),
             },
         );
@@ -193,10 +207,12 @@ pub async fn persona_list() -> Result<Vec<PersonaSummary>, String> {
 pub async fn persona_get(id: String) -> Result<PersonaDoc, String> {
     let pid = sanitize_id(&id);
     let dir = persona_dir(&pid);
+    let meta = read_meta(&dir);
     let read = |name: &str| std::fs::read_to_string(dir.join(name)).unwrap_or_default();
     Ok(PersonaDoc {
-        name: read_name(&dir, &pid),
-        avatar: read_meta(&dir).avatar,
+        name: if meta.name.trim().is_empty() { pid.clone() } else { meta.name },
+        avatar: meta.avatar,
+        cli: meta.cli,
         soul: read("SOUL.md"),
         memory: read("MEMORY.md"),
         user: read("USER.md"),
@@ -221,9 +237,11 @@ pub async fn persona_save(doc: PersonaDoc) -> Result<String, String> {
     } else {
         doc.name.trim().to_string()
     };
+    let cli = if doc.cli.trim().is_empty() { default_cli() } else { doc.cli.trim().to_string() };
     let meta = serde_json::to_string_pretty(&Meta {
         name,
         avatar: doc.avatar,
+        cli,
     })
     .map_err(|e| e.to_string())?;
     std::fs::write(dir.join("meta.json"), meta).map_err(|e| e.to_string())?;
@@ -247,6 +265,76 @@ pub async fn persona_delete(id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Create the three built-in default personas if they don't already exist.
+/// Idempotent — only writes files that are missing, never overwrites user edits.
+pub async fn seed_default_personas() {
+    struct Seed {
+        id: &'static str,
+        name: &'static str,
+        cli: &'static str,
+        soul: &'static str,
+        avatar: &'static str,
+    }
+
+    let seeds = [
+        Seed {
+            id: "claude",
+            name: "Claude Code",
+            cli: "claude",
+            soul: "You are a senior software engineer powered by Claude Code.\n\
+                   Write clean, minimal, and correct code. Be direct and concise.\n\
+                   Prefer editing existing files over creating new ones.\n\
+                   Don't add error handling or abstractions beyond what the task requires.",
+            avatar: "__mascot:claude__",
+        },
+        Seed {
+            id: "codex",
+            name: "Codex",
+            cli: "codex",
+            soul: "",
+            avatar: "__mascot:codex__",
+        },
+        Seed {
+            id: "grok",
+            name: "Grok Build",
+            cli: "grok",
+            soul: "",
+            avatar: "__mascot:grok__",
+        },
+    ];
+
+    for s in &seeds {
+        let dir = persona_dir(s.id);
+        if !dir.is_dir() {
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                tracing::warn!("seed_default_personas: could not create {}: {}", s.id, e);
+                continue;
+            }
+        }
+        let meta_path = dir.join("meta.json");
+        if !meta_path.exists() {
+            let meta = Meta {
+                name: s.name.to_string(),
+                avatar: s.avatar.to_string(),
+                cli: s.cli.to_string(),
+            };
+            if let Ok(json) = serde_json::to_string_pretty(&meta) {
+                let _ = std::fs::write(&meta_path, json);
+            }
+        }
+        let soul_path = dir.join("SOUL.md");
+        if !soul_path.exists() && !s.soul.is_empty() {
+            let _ = std::fs::write(&soul_path, s.soul);
+        }
+        for stub in &["MEMORY.md", "USER.md"] {
+            let p = dir.join(stub);
+            if !p.exists() {
+                let _ = std::fs::write(&p, "");
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,7 +347,7 @@ mod tests {
     }
 
     #[test]
-    fn blank_profile_id_falls_back_to_default() {
+    fn blank_profile_id_falls_back_to_claude() {
         let ctx = load(Some("   ".into()));
         assert_eq!(ctx.name, DEFAULT_PROFILE);
     }
@@ -267,7 +355,7 @@ mod tests {
     #[test]
     fn sanitize_id_is_filesystem_safe() {
         assert_eq!(sanitize_id("Dev Bot 2!"), "dev-bot-2");
-        assert_eq!(sanitize_id("  "), "default");
+        assert_eq!(sanitize_id("  "), "claude");
         assert_eq!(sanitize_id("../etc/passwd"), "etc-passwd");
     }
 }

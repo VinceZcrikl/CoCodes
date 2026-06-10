@@ -19,6 +19,10 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        .setup(|_app| {
+            tauri::async_runtime::spawn(persona::seed_default_personas());
+            Ok(())
+        })
         .manage(terminal::TerminalRegistry::default())
         .invoke_handler(tauri::generate_handler![
             directory::pick_directory,

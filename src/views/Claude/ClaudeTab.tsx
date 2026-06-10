@@ -4,10 +4,15 @@ import { useProfileStore } from "../../state/profileStore";
 import ClaudeSidebar from "./ClaudeSidebar";
 import ClaudeTerminalView from "./ClaudeTerminalView";
 
-/** A full Claude CLI tab: session rail + the live embedded terminal. The active
- *  persona (from the cockpit header) is the terminal's profileId, so switching
- *  persona respawns claude with that SOUL injected. */
-export default function ClaudeTab() {
+interface Props {
+  /** "claude" | "codex" | "grok" — determines which binary to spawn and which
+   *  localStorage namespace to use for sessions. */
+  cli: string;
+}
+
+/** A full CLI tab: session rail + the live embedded terminal. The active
+ *  persona (from the cockpit header) is the terminal's profileId. */
+export default function ClaudeTab({ cli }: Props) {
   const profileId = useProfileStore((s) => s.activeProfileId);
 
   const {
@@ -25,7 +30,7 @@ export default function ClaudeTab() {
     newGroup,
     renameGroup,
     removeGroup,
-  } = useClaudeSessions(profileId);
+  } = useClaudeSessions(profileId, cli);
 
   // Always have at least one session so the terminal has something to bind to.
   useEffect(() => {
@@ -54,6 +59,7 @@ export default function ClaudeTab() {
           profileId={profileId}
           activeId={activeId}
           active={active}
+          cli={cli}
           onOpened={() => activeId && markStarted(activeId)}
         />
       </div>

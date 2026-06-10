@@ -9,9 +9,11 @@ interface Props {
   onCwdChange?: (cwd: string | null) => void;
   onCommand?: (cmd: string, submit: boolean) => void;
   busy?: boolean;
+  /** "claude" | "codex" | "grok" — hides Claude-specific controls for other CLIs. */
+  cli?: string;
 }
 
-export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy }: Props) {
+export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cli = "claude" }: Props) {
   const { cwd, recent, setCwd } = useDirectoryStore();
   const [dropOpen, setDropOpen] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -134,23 +136,25 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy }: 
           )}
         </div>
 
-        {/* ── Slash command palette trigger ── */}
-        <button
-          type="button"
-          className={`cmd-trigger${paletteOpen ? " open" : ""}`}
-          onClick={() => setPaletteOpen((v) => !v)}
-          aria-label="Open command palette"
-          aria-expanded={paletteOpen}
-          title="Slash commands"
-        >
-          <span className="cmd-trigger-slash">/</span>
-          <span className="cmd-trigger-label">Commands</span>
-          <ChevronDown
-            size={10}
-            strokeWidth={2.2}
-            className={`cmd-trigger-chevron${paletteOpen ? " open" : ""}`}
-          />
-        </button>
+        {/* ── Slash command palette trigger (Claude only) ── */}
+        {cli === "claude" && (
+          <button
+            type="button"
+            className={`cmd-trigger${paletteOpen ? " open" : ""}`}
+            onClick={() => setPaletteOpen((v) => !v)}
+            aria-label="Open command palette"
+            aria-expanded={paletteOpen}
+            title="Slash commands"
+          >
+            <span className="cmd-trigger-slash">/</span>
+            <span className="cmd-trigger-label">Commands</span>
+            <ChevronDown
+              size={10}
+              strokeWidth={2.2}
+              className={`cmd-trigger-chevron${paletteOpen ? " open" : ""}`}
+            />
+          </button>
+        )}
 
         {/* ── Screenshot ── */}
         <button

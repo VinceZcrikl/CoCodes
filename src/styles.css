@@ -238,11 +238,17 @@ body {
   color: var(--text-main);
 }
 
+/* Each CLI tab gets its own accent so the active state is instantly readable. */
 .cockpit-tab.active {
-  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
-  border-color: color-mix(in srgb, var(--accent-gold) 44%, transparent);
-  color: color-mix(in srgb, var(--accent-gold) 92%, #ffffff);
+  --tab-accent: var(--accent-gold);
+  background: color-mix(in srgb, var(--tab-accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--tab-accent) 44%, transparent);
+  color: color-mix(in srgb, var(--tab-accent) 92%, #ffffff);
 }
+.cockpit-tab--codex.active { --tab-accent: #5dd6c5; }   /* teal  — OpenAI */
+.cockpit-tab--grok.active  { --tab-accent: #b48ee0; }   /* violet — xAI   */
+.cockpit-tab--gemini.active { --tab-accent: #7eb8f7; }  /* blue  — Google */
+.cockpit-tab--kimi.active  { --tab-accent: #e07e7e; }   /* rose  — Kimi   */
 
 .cockpit-tab.disabled,
 .cockpit-tab:disabled {
@@ -1830,6 +1836,46 @@ body {
   color: var(--text-muted);
 }
 
+/* ── CLI picker (persona editor) ──────────────────────────────────── */
+.cli-picker {
+  display: flex;
+  gap: 6px;
+}
+.cli-picker-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.cli-picker-btn:hover {
+  background: color-mix(in srgb, var(--accent-gold) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 30%, transparent);
+}
+.cli-picker-btn.active {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 50%, transparent);
+}
+.cli-picker-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+.cli-picker-btn.active .cli-picker-label {
+  color: var(--accent-gold);
+}
+.cli-picker-hint {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 /* ── Group picker ──────────────────────────────────────────────────── */
 .group-picker-list {
   display: flex;
@@ -2106,6 +2152,25 @@ body {
 .avatar-picker-clear:hover {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.avatar-picker-mascot-cell {
+  padding: 3px;
+}
+
+.avatar-picker-mascot-svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* vertical separator between mascot presets and emoji/upload presets */
+.avatar-picker-sep-v {
+  width: 1px;
+  height: 34px;
+  background: var(--border);
+  margin: 0 2px;
+  align-self: center;
+  flex: none;
 }
 
 /* ── Responsive layout ──────────────────────────────────────────────── */

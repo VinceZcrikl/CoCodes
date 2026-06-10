@@ -1,9 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import type { PersonaDoc } from "../../hooks/usePersonas";
-import PersonaAvatar from "./PersonaAvatar";
+import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
+import ClaudeMascot from "./ClaudeMascot";
+import CodexMascot from "./CodexMascot";
+import GrokMascot from "./GrokMascot";
 
 const EMOJI_PRESETS = ["🤖", "🦊", "🧠", "✨", "🐙", "📝", "🎨", "🚀", "🦉", "👾"];
+
+const MASCOT_PRESETS = [
+  { sentinel: MASCOT_SENTINEL.claude, label: "Claude", Component: ClaudeMascot },
+  { sentinel: MASCOT_SENTINEL.codex,  label: "Codex",  Component: CodexMascot  },
+  { sentinel: MASCOT_SENTINEL.grok,   label: "Grok",   Component: GrokMascot   },
+];
+
+const CLI_OPTIONS = [
+  { id: "claude", label: "Claude", hint: "Anthropic · Claude Code" },
+  { id: "codex",  label: "Codex",  hint: "OpenAI · Codex CLI" },
+  { id: "grok",   label: "Grok",   hint: "xAI · Grok Build" },
+];
 
 interface Props {
   /** Existing persona id to edit, or null to create a new one. */
@@ -27,6 +42,7 @@ export default function PersonaEditor({
   const isEdit = editId !== null && editId !== "";
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState("");
+  const [cli, setCli] = useState("claude");
   const [soul, setSoul] = useState("");
   const [memory, setMemory] = useState("");
   const [user, setUser] = useState("");
@@ -41,6 +57,7 @@ export default function PersonaEditor({
       if (cancelled) return;
       setName(doc.name);
       setAvatar(doc.avatar);
+      setCli(doc.cli || "claude");
       setSoul(doc.soul);
       setMemory(doc.memory);
       setUser(doc.user);
@@ -65,8 +82,8 @@ export default function PersonaEditor({
       setError("Name is required.");
       return;
     }
-    if (!soul.trim()) {
-      setError("SOUL (system prompt) is required.");
+    if (cli === "claude" && !soul.trim()) {
+      setError("SOUL (system prompt) is required for Claude personas.");
       return;
     }
     setSubmitting(true);
@@ -75,6 +92,7 @@ export default function PersonaEditor({
         id: editId ?? "",
         name: name.trim(),
         avatar: avatar.trim(),
+        cli,
         soul: soul.trim(),
         memory: memory.trim(),
         user: user.trim(),
@@ -118,6 +136,19 @@ export default function PersonaEditor({
                 />
               </div>
               <div className="avatar-picker-gallery">
+                {MASCOT_PRESETS.map(({ sentinel, label, Component }) => (
+                  <button
+                    key={sentinel}
+                    type="button"
+                    className={`avatar-picker-cell avatar-picker-mascot-cell${avatar === sentinel ? " selected" : ""}`}
+                    onClick={() => setAvatar(sentinel)}
+                    title={`${label} mascot`}
+                    aria-label={`${label} mascot`}
+                  >
+                    <Component className="avatar-picker-mascot-svg" />
+                  </button>
+                ))}
+                <div className="avatar-picker-sep-v" aria-hidden="true" />
                 {EMOJI_PRESETS.map((e) => (
                   <button
                     key={e}
@@ -157,6 +188,24 @@ export default function PersonaEditor({
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+
+          <div className="agent-editor-label">
+            <span>CLI</span>
+            <div className="cli-picker">
+              {CLI_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`cli-picker-btn${cli === opt.id ? " active" : ""}`}
+                  onClick={() => setCli(opt.id)}
+                  title={opt.hint}
+                >
+                  <span className="cli-picker-label">{opt.label}</span>
+                  <span className="cli-picker-hint">{opt.hint}</span>
+                </button>
+              ))}
             </div>
           </div>
 

@@ -1,4 +1,14 @@
 import ClaudeMascot from "./ClaudeMascot";
+import CodexMascot from "./CodexMascot";
+import GrokMascot from "./GrokMascot";
+
+/** Special avatar values that render a built-in mascot SVG rather than an image
+ *  or emoji. Stored literally in meta.json as e.g. "__mascot:claude__". */
+export const MASCOT_SENTINEL = {
+  claude: "__mascot:claude__",
+  codex:  "__mascot:codex__",
+  grok:   "__mascot:grok__",
+} as const;
 
 /** Stable accent palette for persona avatars (mirrors orb's member palette). */
 const PALETTE = [
@@ -45,6 +55,28 @@ interface Props {
 export default function PersonaAvatar({ id, name, avatar, className = "" }: Props) {
   const v = (avatar ?? "").trim();
 
+  if (v === MASCOT_SENTINEL.claude) {
+    return (
+      <span className={`persona-avatar persona-avatar-mascot ${className}`} aria-hidden="true">
+        <ClaudeMascot className="persona-mascot-svg" />
+      </span>
+    );
+  }
+  if (v === MASCOT_SENTINEL.codex) {
+    return (
+      <span className={`persona-avatar persona-avatar-mascot ${className}`} aria-hidden="true">
+        <CodexMascot className="persona-mascot-svg" />
+      </span>
+    );
+  }
+  if (v === MASCOT_SENTINEL.grok) {
+    return (
+      <span className={`persona-avatar persona-avatar-mascot ${className}`} aria-hidden="true">
+        <GrokMascot className="persona-mascot-svg" />
+      </span>
+    );
+  }
+
   if (v && isImage(v)) {
     return (
       <span className={`persona-avatar persona-avatar-img ${className}`}>
@@ -62,10 +94,26 @@ export default function PersonaAvatar({ id, name, avatar, className = "" }: Prop
     );
   }
 
-  if (id === "default") {
+  if (id === "default" || id === "claude") {
     return (
       <span className={`persona-avatar persona-avatar-mascot ${className}`} aria-hidden="true">
         <ClaudeMascot className="persona-mascot-svg" />
+      </span>
+    );
+  }
+
+  if (id === "codex") {
+    return (
+      <span className={`persona-avatar persona-avatar-mascot ${className}`} aria-hidden="true">
+        <CodexMascot className="persona-mascot-svg" />
+      </span>
+    );
+  }
+
+  if (id === "grok") {
+    return (
+      <span className={`persona-avatar persona-avatar-mascot ${className}`} aria-hidden="true">
+        <GrokMascot className="persona-mascot-svg" />
       </span>
     );
   }

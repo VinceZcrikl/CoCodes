@@ -12,8 +12,6 @@ import { ORB_THEMES } from "../../state/orbThemes";
 import { applyThemeVars } from "../../state/uiPalette";
 import { useWindowStore } from "../../state/windowStore";
 
-/** A CLI the cockpit can host. Phase 0 ships Claude; the others are placeholders
- *  the registry (§7 of the plan) will light up in later phases. */
 interface CliDef {
   id: string;
   label: string;
@@ -22,14 +20,18 @@ interface CliDef {
 
 const CLIS: CliDef[] = [
   { id: "claude", label: "Claude", ready: true },
-  { id: "codex", label: "Codex", ready: false },
+  { id: "codex",  label: "Codex",  ready: true },
   { id: "gemini", label: "Gemini", ready: false },
-  { id: "grok", label: "Grok", ready: false },
-  { id: "kimi", label: "Kimi", ready: false },
+  { id: "grok",   label: "Grok",   ready: true },
+  { id: "kimi",   label: "Kimi",   ready: false },
 ];
 
+const CLI_STORAGE_KEY = "openterminus:active-cli";
+
 export default function Cockpit() {
-  const activeCli = "claude";
+  const [activeCli, setActiveCli] = useState<string>(
+    () => localStorage.getItem(CLI_STORAGE_KEY) ?? "claude",
+  );
 
   const themeName = useThemeStore((s) => s.name);
   const cycleTheme = useThemeStore((s) => s.cycleTheme);
@@ -42,8 +44,28 @@ export default function Cockpit() {
   const activeName = activePersona?.name ?? profileId;
   const activeAvatar = activePersona?.avatar ?? "";
 
+  // When the active persona changes, switch the CLI tab to that persona's
+  // preferred CLI (if it is one of the enabled tabs).
+  useEffect(() => {
+    const preferred = activePersona?.cli;
+    if (preferred && CLIS.find((c) => c.id === preferred && c.ready)) {
+      setActiveCli(preferred);
+    }
+  // Only run when the persona identity changes, not on every activeCli update.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePersona?.id, activePersona?.cli]);
+
+  // Persist chosen tab so the cockpit reopens on the same CLI.
+  useEffect(() => {
+    try { localStorage.setItem(CLI_STORAGE_KEY, activeCli); } catch { /* ignore */ }
+  }, [activeCli]);
+
   useEffect(() => applyThemeVars(themeName), [themeName]);
   useEffect(() => installThemeSync(), []);
+
+  const handleTabClick = (cli: CliDef) => {
+    if (cli.ready) setActiveCli(cli.id);
+  };
 
   return (
     <div className={`cockpit${mini ? " mini" : ""}`}>
@@ -89,10 +111,11 @@ export default function Cockpit() {
                       type="button"
                       role="tab"
                       aria-selected={activeCli === cli.id}
-                      className={`cockpit-tab${activeCli === cli.id ? " active" : ""}${
+                      className={`cockpit-tab cockpit-tab--${cli.id}${activeCli === cli.id ? " active" : ""}${
                         cli.ready ? "" : " disabled"
                       }`}
                       disabled={!cli.ready}
+                      onClick={() => handleTabClick(cli)}
                       title={cli.ready ? cli.label : `${cli.label} — coming soon`}
                     >
                       {cli.label}
@@ -128,7 +151,16 @@ export default function Cockpit() {
         )}
 
         <main className="cockpit-body">
-          {activeCli === "claude" && <ClaudeTab />}
+          {/* Each enabled CLI reuses the same ClaudeTab stack with a cli prop.
+              Sessions are namespaced per-cli so they never intermix. */}
+          {CLIS.filter((c) => c.ready).map((cli) => (
+            <div
+              key={cli.id}
+              style={{ display: activeCli === cli.id ? "contents" : "none" }}
+            >
+              <ClaudeTab cli={cli.id} />
+            </div>
+          ))}
         </main>
       </div>
 

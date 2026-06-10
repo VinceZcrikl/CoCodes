@@ -9,6 +9,8 @@ export interface PersonaSummary {
   name: string;
   avatar: string;
   soulPreview: string;
+  /** Preferred CLI for this persona: "claude" | "codex" | "grok" */
+  cli: string;
 }
 
 export interface PersonaDoc {
@@ -18,6 +20,8 @@ export interface PersonaDoc {
   soul: string;
   memory: string;
   user: string;
+  /** Preferred CLI for this persona: "claude" | "codex" | "grok" */
+  cli: string;
 }
 
 /** Thin wrapper over the persona_* backend commands. Personas are app-owned

@@ -29,11 +29,13 @@ interface Store {
   groups: ClaudeGroup[];
 }
 
-const KEY = (profileId: string) => `openterminus.claude.sessions.${profileId}`;
+// cli defaults to "claude" so existing localStorage keys are unchanged.
+const KEY = (profileId: string, cli = "claude") =>
+  `openterminus.${cli}.sessions.${profileId}`;
 
-function load(profileId: string): Store {
+function load(profileId: string, cli = "claude"): Store {
   try {
-    const raw = localStorage.getItem(KEY(profileId));
+    const raw = localStorage.getItem(KEY(profileId, cli));
     if (!raw) return { sessions: [], groups: [] };
     const parsed = JSON.parse(raw) as unknown;
     // Back-compat: the original schema persisted a bare ClaudeSession[].
@@ -63,9 +65,9 @@ function migrate(s: Partial<ClaudeSession> & { id: string; title: string }): Cla
   };
 }
 
-function save(profileId: string, store: Store) {
+function save(profileId: string, store: Store, cli = "claude") {
   try {
-    localStorage.setItem(KEY(profileId), JSON.stringify(store));
+    localStorage.setItem(KEY(profileId, cli), JSON.stringify(store));
   } catch {
     /* storage full / unavailable — non-fatal */
   }
@@ -76,27 +78,28 @@ function newId(): string {
   return `${Date.now().toString(16)}-${Math.floor(Math.random() * 1e9).toString(16)}`;
 }
 
-/** Per-profile store of Claude terminal sessions + groups, persisted to
- *  localStorage. Supports rename, pin, grouping and "history" (the list). */
-export function useClaudeSessions(profileId: string) {
-  const [store, setStore] = useState<Store>(() => load(profileId));
+/** Per-profile, per-CLI store of terminal sessions + groups, persisted to
+ *  localStorage. Supports rename, pin, grouping and "history" (the list).
+ *  `cli` defaults to "claude" so existing call-sites work without changes. */
+export function useClaudeSessions(profileId: string, cli = "claude") {
+  const [store, setStore] = useState<Store>(() => load(profileId, cli));
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
-    const loaded = load(profileId);
+    const loaded = load(profileId, cli);
     setStore(loaded);
     setActiveId(loaded.sessions.length ? mostRecent(loaded.sessions).id : null);
-  }, [profileId]);
+  }, [profileId, cli]);
 
   const update = useCallback(
     (fn: (s: Store) => Store) => {
       setStore((prev) => {
         const next = fn(prev);
-        save(profileId, next);
+        save(profileId, next, cli);
         return next;
       });
     },
-    [profileId],
+    [profileId, cli],
   );
 
   const newSession = useCallback(

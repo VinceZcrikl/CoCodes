@@ -59,12 +59,12 @@ struct ExitEvent {
     code: Option<i32>,
 }
 
-/// Structured failure the frontend can branch on. `ClaudeNotFound` drives the
-/// "install claude" card instead of a generic error toast.
+/// Structured failure the frontend can branch on. `CliNotFound` drives the
+/// "install <cli>" card instead of a generic error toast.
 #[derive(Serialize)]
 #[serde(tag = "kind", content = "message")]
 pub enum TerminalError {
-    ClaudeNotFound(String),
+    CliNotFound(String),
     Spawn(String),
     Internal(String),
 }
@@ -88,12 +88,10 @@ fn gen_id() -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Resolve the `claude` binary. GUI apps on macOS launch with a minimal PATH
-/// (no /usr/local/bin, no node-manager dirs), so we search PATH first, then a
-/// list of common global-install locations. Returns the absolute path.
-fn find_claude() -> Option<PathBuf> {
-    let exe = if cfg!(windows) { "claude.cmd" } else { "claude" };
-
+/// Search PATH then a list of common global-install dirs for `exe`.
+/// GUI apps on macOS launch with a minimal PATH (no /usr/local/bin, no
+/// node-manager dirs), so the fallback list is necessary.
+fn find_in_path(exe: &str, extra_dirs: &[PathBuf]) -> Option<PathBuf> {
     if let Ok(path) = std::env::var("PATH") {
         for dir in std::env::split_paths(&path) {
             let candidate = dir.join(exe);
@@ -102,22 +100,58 @@ fn find_claude() -> Option<PathBuf> {
             }
         }
     }
+    extra_dirs.iter().map(|d| d.join(exe)).find(|c| c.is_file())
+}
 
+fn find_claude() -> Option<PathBuf> {
+    let exe = if cfg!(windows) { "claude.cmd" } else { "claude" };
     let home = dirs::home_dir();
-    let mut extras: Vec<PathBuf> = vec![
+    let mut extras = vec![
         PathBuf::from("/usr/local/bin"),
         PathBuf::from("/opt/homebrew/bin"),
     ];
-    if let Some(h) = home {
+    if let Some(h) = &home {
         extras.push(h.join(".npm-global/bin"));
         extras.push(h.join(".local/bin"));
         extras.push(h.join(".bun/bin"));
         extras.push(h.join(".local/share/claude/bin"));
     }
-    extras
-        .into_iter()
-        .map(|d| d.join(exe))
-        .find(|c| c.is_file())
+    find_in_path(exe, &extras)
+}
+
+fn find_codex() -> Option<PathBuf> {
+    let exe = if cfg!(windows) { "codex.cmd" } else { "codex" };
+    let home = dirs::home_dir();
+    let mut extras = vec![
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+    ];
+    if let Some(h) = &home {
+        extras.push(h.join(".npm-global/bin"));
+        extras.push(h.join(".local/bin"));
+        extras.push(h.join(".bun/bin"));
+    }
+    find_in_path(exe, &extras)
+}
+
+fn find_grok() -> Option<PathBuf> {
+    // xAI installs the `grok` binary; on Windows the PowerShell installer may
+    // place it in %LOCALAPPDATA%\xai\bin which isn't always on PATH.
+    let exe = if cfg!(windows) { "grok.exe" } else { "grok" };
+    let home = dirs::home_dir();
+    let mut extras = vec![
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+    ];
+    if let Some(h) = &home {
+        extras.push(h.join(".local/bin"));
+        extras.push(h.join(".grok/bin"));
+    }
+    #[cfg(windows)]
+    if let Ok(appdata) = std::env::var("LOCALAPPDATA") {
+        extras.push(PathBuf::from(appdata).join("xai").join("bin"));
+    }
+    find_in_path(exe, &extras)
 }
 
 /// Fold the profile's persona + memory into the file we pass to
@@ -159,35 +193,55 @@ fn write_persona_file(id: &str, ctx: &PersonaContext) -> Option<PathBuf> {
     }
 }
 
-/// Open a PTY, spawn `claude` with the active profile's persona/memory, and
-/// start streaming its output as `terminal://data` events. Returns the session
-/// id the frontend uses to write/resize/close and to filter inbound events.
+/// Open a PTY, spawn the requested CLI tool with the active profile's
+/// persona/memory (Claude only), and stream its output as `terminal://data`
+/// events. Returns the session id the frontend uses to write/resize/close.
+///
+/// `cli`: "claude" (default) | "codex" | "grok"
 #[tauri::command]
 pub async fn terminal_open(
     profile_id: Option<String>,
     cols: Option<u16>,
     rows: Option<u16>,
-    // `claude_session_id`: claude conversation UUID this terminal binds to, so
-    // each cockpit-side Claude session maps to a distinct, resumable claude
-    // chat. `resume`: true → `--resume` an existing session; false/absent →
-    // start it with `--session-id`.
     claude_session_id: Option<String>,
     cwd: Option<String>,
+    cli: Option<String>,
     app: AppHandle,
     reg: State<'_, TerminalRegistry>,
 ) -> Result<String, TerminalError> {
-    let claude = find_claude().ok_or_else(|| {
-        TerminalError::ClaudeNotFound(
-            "`claude` not found on PATH. Install it with `npm i -g @anthropic-ai/claude-code`."
-                .into(),
-        )
-    })?;
+    let cli_name = cli.as_deref().unwrap_or("claude");
+
+    let binary = match cli_name {
+        "codex" => find_codex().ok_or_else(|| {
+            TerminalError::CliNotFound(
+                "`codex` not found on PATH. Install: curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+                    .into(),
+            )
+        })?,
+        "grok" => find_grok().ok_or_else(|| {
+            TerminalError::CliNotFound(
+                "`grok` not found on PATH. Install: https://docs.x.ai/build"
+                    .into(),
+            )
+        })?,
+        _ => find_claude().ok_or_else(|| {
+            TerminalError::CliNotFound(
+                "`claude` not found on PATH. Install: npm i -g @anthropic-ai/claude-code"
+                    .into(),
+            )
+        })?,
+    };
 
     let id = gen_id();
 
-    // Persona + memory for this profile (app-owned, from ~/.openterminus).
-    let persona_ctx = crate::persona::load_persona_context(profile_id.clone()).await;
-    let persona_file = write_persona_file(&id, &persona_ctx);
+    // Persona injection is Claude Code-specific (--append-system-prompt-file).
+    // For other CLIs we skip it entirely.
+    let persona_file = if cli_name == "claude" {
+        let ctx = crate::persona::load_persona_context(profile_id.clone()).await;
+        write_persona_file(&id, &ctx)
+    } else {
+        None
+    };
 
     let size = PtySize {
         cols: cols.unwrap_or(80).max(2),
@@ -200,39 +254,40 @@ pub async fn terminal_open(
         .openpty(size)
         .map_err(TerminalError::internal)?;
 
-    let mut cmd = CommandBuilder::new(claude.as_os_str());
-    if let Some(file) = persona_file.as_ref() {
-        cmd.arg("--append-system-prompt-file");
-        cmd.arg(file.as_os_str());
+    let mut cmd = CommandBuilder::new(binary.as_os_str());
+
+    if cli_name == "claude" {
+        if let Some(file) = persona_file.as_ref() {
+            cmd.arg("--append-system-prompt-file");
+            cmd.arg(file.as_os_str());
+        }
+        // Bind to a conversation UUID so the sidebar can resume independent
+        // Claude Code sessions. --session-id loads an existing conversation if
+        // the file is on disk, or starts a fresh one with that UUID otherwise.
+        if let Some(sid) = claude_session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            cmd.arg("--session-id");
+            cmd.arg(sid);
+        }
     }
-    // Bind this terminal to a specific claude conversation so the sidebar can
-    // list / resume independent Claude sessions.
-    if let Some(sid) = claude_session_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        // Always use --session-id: if the conversation file exists on disk,
-        // Claude Code loads it (same as --resume); if it doesn't exist, Claude
-        // Code starts a fresh conversation with this UUID rather than printing
-        // "No conversation found" and failing.  The `resume` hint from the
-        // frontend is intentionally ignored — --session-id subsumes it safely.
-        cmd.arg("--session-id");
-        cmd.arg(sid);
-    }
-    // Resolve working directory: use the caller-supplied path if it exists on
-    // disk, otherwise fall back to home.  Pre-trust the chosen dir so Claude
-    // Code skips its workspace-trust dialog on every launch.
+
+    // Resolve working directory for all CLIs.
     let work_dir: Option<PathBuf> = cwd
         .as_deref()
         .map(PathBuf::from)
         .filter(|p| p.is_dir())
         .or_else(dirs::home_dir);
-    if let Some(dir) = work_dir {
-        ensure_claude_trusts(&dir);
-        cmd.cwd(&dir);
+    if let Some(dir) = &work_dir {
+        if cli_name == "claude" {
+            ensure_claude_trusts(dir);
+        }
+        cmd.cwd(dir);
     }
-    // Force a real terminal type so claude's TUI renders correctly in xterm.
+
+    // Force a real terminal type so every CLI's TUI renders correctly in xterm.
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
 
