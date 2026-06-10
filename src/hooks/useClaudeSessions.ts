@@ -1,5 +1,41 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+/** A leaf in the split layout: one terminal pane running its own CLI session.
+ *  `convId` is the Claude conversation UUID handed to `--session-id`, so every
+ *  pane is an independent, resumable chat. */
+export interface PaneNode {
+  type: "pane";
+  /** Layout-local identity: React key + handle-registry key. Distinct from
+   *  `convId` so "respawn this pane fresh" never needs a new layout slot. */
+  paneId: string;
+  /** Claude conversation UUID for this pane (`--session-id`). */
+  convId: string;
+  /** Which CLI binary this pane runs ("claude" | "codex" | "grok"). Panes in
+   *  one session can run different CLIs. */
+  cli: string;
+  /** True once the PTY has spawned this pane at least once. Per-pane (not
+   *  per-session) so restoration resumes each conversation idempotently. */
+  started: boolean;
+  /** Working directory for the spawned process; inherits the parent pane on
+   *  split, defaults to the directory store. null/absent → home dir. */
+  cwd?: string | null;
+}
+
+/** An internal split: two children divided horizontally or vertically. */
+export interface SplitNode {
+  type: "split";
+  /** "row" = side by side (vertical divider); "col" = stacked (horizontal). */
+  dir: "row" | "col";
+  /** First child's fraction of the split (0..1). A single ratio can't desync
+   *  the way a two-element sizes array can. */
+  ratio: number;
+  /** Stable id so divider drags can target this split node. */
+  splitId: string;
+  children: [LayoutNode, LayoutNode];
+}
+
+export type LayoutNode = PaneNode | SplitNode;
+
 /** One independent Claude terminal conversation. `id` is the claude session
  *  UUID passed as `--session-id` / `--resume`, so each entry is a distinct,
  *  resumable claude chat. */
@@ -15,6 +51,10 @@ export interface ClaudeSession {
   pinned: boolean;
   /** Group membership, or null for the ungrouped section. */
   groupId: string | null;
+  /** Split layout tree. Absent for unsplit sessions — the view lazily renders
+   *  a single default pane bound to `id`, so legacy sessions never grow a
+   *  persisted layout until the user actually splits. */
+  layout?: LayoutNode;
 }
 
 /** A user-created session group (folder) in the sidebar. */
@@ -62,6 +102,111 @@ function migrate(s: Partial<ClaudeSession> & { id: string; title: string }): Cla
     started: s.started ?? false,
     pinned: s.pinned ?? false,
     groupId: s.groupId ?? null,
+    // Pass the layout through untouched when present; unsplit sessions keep it
+    // undefined so the view synthesizes a default single pane at render time.
+    layout: s.layout,
+  };
+}
+
+/** Build the default single-pane layout for a session that has never split.
+ *  Synthesized lazily by callers (not baked into `migrate`) so legacy sessions
+ *  keep an unchanged localStorage blob until the user actually splits. */
+export function defaultLayout(session: ClaudeSession, cli: string): PaneNode {
+  return {
+    type: "pane",
+    paneId: session.id,
+    convId: session.id,
+    cli,
+    started: session.started,
+  };
+}
+
+/** Walk every pane leaf in a layout tree. */
+export function forEachPane(node: LayoutNode, fn: (p: PaneNode) => void) {
+  if (node.type === "pane") {
+    fn(node);
+  } else {
+    forEachPane(node.children[0], fn);
+    forEachPane(node.children[1], fn);
+  }
+}
+
+/** Find the pane leaf with `paneId`, or null. */
+export function findPane(node: LayoutNode, paneId: string): PaneNode | null {
+  if (node.type === "pane") return node.paneId === paneId ? node : null;
+  return findPane(node.children[0], paneId) ?? findPane(node.children[1], paneId);
+}
+
+/** Replace the pane `paneId` with a split holding the original pane plus a new
+ *  sibling pane. Returns the same node if `paneId` isn't found. */
+function splitNode(
+  node: LayoutNode,
+  paneId: string,
+  dir: "row" | "col",
+  fresh: PaneNode,
+): LayoutNode {
+  if (node.type === "pane") {
+    if (node.paneId !== paneId) return node;
+    return {
+      type: "split",
+      dir,
+      ratio: 0.5,
+      splitId: newId(),
+      children: [node, fresh],
+    };
+  }
+  return {
+    ...node,
+    children: [
+      splitNode(node.children[0], paneId, dir, fresh),
+      splitNode(node.children[1], paneId, dir, fresh),
+    ],
+  };
+}
+
+/** Remove the pane `paneId`, hoisting its surviving sibling up to replace the
+ *  parent split. Returns null if the whole tree collapsed (last pane closed),
+ *  or the unchanged node if `paneId` wasn't found. */
+function closeNode(node: LayoutNode, paneId: string): LayoutNode | null {
+  if (node.type === "pane") {
+    return node.paneId === paneId ? null : node;
+  }
+  const left = closeNode(node.children[0], paneId);
+  const right = closeNode(node.children[1], paneId);
+  if (left === null) return right;
+  if (right === null) return left;
+  return { ...node, children: [left, right] };
+}
+
+/** Set the divider ratio on the split `splitId` (clamped to a sane range so a
+ *  pane can never be dragged to zero width). */
+function setRatio(node: LayoutNode, splitId: string, ratio: number): LayoutNode {
+  if (node.type === "pane") return node;
+  if (node.splitId === splitId) {
+    return { ...node, ratio: Math.min(0.9, Math.max(0.1, ratio)) };
+  }
+  return {
+    ...node,
+    children: [
+      setRatio(node.children[0], splitId, ratio),
+      setRatio(node.children[1], splitId, ratio),
+    ],
+  };
+}
+
+/** Flip `started` on the pane `paneId` once its PTY has spawned. */
+function markStartedNode(node: LayoutNode, paneId: string): LayoutNode {
+  if (node.type === "pane") {
+    return node.paneId === paneId && !node.started
+      ? { ...node, started: true }
+      : node;
+  }
+  return {
+    ...node,
+    children: [
+      markStartedNode(node.children[0], paneId),
+      markStartedNode(node.children[1], paneId),
+    ],
   };
 }
 
@@ -163,6 +308,97 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     [update],
   );
 
+  /** Resolve a session's layout, synthesizing the default single pane when it
+   *  has never been split. */
+  const resolveLayout = useCallback(
+    (s: ClaudeSession): LayoutNode => s.layout ?? defaultLayout(s, cli),
+    [cli],
+  );
+
+  /** Split `paneId` in `sessionId`, adding a fresh pane bound to a new
+   *  conversation UUID. The new pane inherits the source pane's cli + cwd. */
+  const splitPane = useCallback(
+    (sessionId: string, paneId: string, dir: "row" | "col") => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          const layout = sess.layout ?? defaultLayout(sess, cli);
+          const source = findPane(layout, paneId);
+          const fresh: PaneNode = {
+            type: "pane",
+            paneId: newId(),
+            convId: newId(),
+            cli: source?.cli ?? cli,
+            started: false,
+            cwd: source?.cwd ?? null,
+          };
+          return { ...sess, layout: splitNode(layout, paneId, dir, fresh) };
+        }),
+      }));
+    },
+    [update, cli],
+  );
+
+  /** Close `paneId`. When the last pane is closed the layout collapses back to
+   *  a fresh single default pane (the session itself is never removed here). */
+  const closePane = useCallback(
+    (sessionId: string, paneId: string) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          const layout = sess.layout ?? defaultLayout(sess, cli);
+          const next = closeNode(layout, paneId);
+          // Last pane gone → drop the persisted layout so it reverts to the
+          // synthesized default bound to the session id.
+          if (next === null) {
+            const { layout: _drop, ...rest } = sess;
+            return rest;
+          }
+          return { ...sess, layout: next };
+        }),
+      }));
+    },
+    [update, cli],
+  );
+
+  /** Update a divider position (first child's fraction of the split). */
+  const setSplitRatio = useCallback(
+    (sessionId: string, splitId: string, ratio: number) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) =>
+          sess.id === sessionId && sess.layout
+            ? { ...sess, layout: setRatio(sess.layout, splitId, ratio) }
+            : sess,
+        ),
+      }));
+    },
+    [update],
+  );
+
+  /** Mark a pane's conversation started after its PTY spawns, so a later
+   *  restore resumes it via `--session-id` rather than re-creating. */
+  const markPaneStarted = useCallback(
+    (sessionId: string, paneId: string) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          // The default (unsplit) pane shares the session id: fold the started
+          // flag onto the session itself, leaving layout absent.
+          if (!sess.layout && paneId === sess.id) {
+            return sess.started ? sess : { ...sess, started: true };
+          }
+          if (!sess.layout) return sess;
+          return { ...sess, layout: markStartedNode(sess.layout, paneId) };
+        }),
+      }));
+    },
+    [update],
+  );
+
   const togglePin = useCallback(
     (id: string) =>
       update((s) => ({
@@ -228,6 +464,11 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     remove,
     rename,
     markStarted,
+    resolveLayout,
+    splitPane,
+    closePane,
+    setSplitRatio,
+    markPaneStarted,
     togglePin,
     setGroup,
     newGroup,

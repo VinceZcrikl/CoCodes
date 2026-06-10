@@ -3,9 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Copy, Check, RefreshCw } from "lucide-react";
 import Toolbar from "./Toolbar";
-import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
-import type { ClaudeSession } from "../../hooks/useClaudeSessions";
+import { type ClaudeTerminalHandle } from "./ClaudeTerminal";
+import PaneLayout from "./PaneLayout";
+import type { ClaudeSession, LayoutNode } from "../../hooks/useClaudeSessions";
 import { useDirectoryStore } from "../../state/directoryStore";
+import { useWindowStore } from "../../state/windowStore";
 
 const CLI_META: Record<string, { title: string; installCmd: string | null; installHint: string }> = {
   claude: {
@@ -31,14 +33,24 @@ export default function ClaudeTerminalView({
   profileId,
   activeId,
   active,
+  layout,
   cli = "claude",
-  onOpened,
+  onSplitPane,
+  onClosePane,
+  onSetSplitRatio,
+  onPaneStarted,
 }: {
   profileId: string;
   activeId: string | null;
   active: ClaudeSession | null;
+  /** Resolved split layout for the active session (default single pane when the
+   *  session has never been split). */
+  layout: LayoutNode | null;
   cli?: string;
-  onOpened: () => void;
+  onSplitPane: (sessionId: string, paneId: string, dir: "row" | "col") => void;
+  onClosePane: (sessionId: string, paneId: string) => void;
+  onSetSplitRatio: (sessionId: string, splitId: string, ratio: number) => void;
+  onPaneStarted: (sessionId: string, paneId: string) => void;
 }) {
   const termRef = useRef<ClaudeTerminalHandle | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
@@ -46,6 +58,7 @@ export default function ClaudeTerminalView({
   const [reloadKey, setReloadKey] = useState(0);
 
   const { cwd } = useDirectoryStore();
+  const mini = useWindowStore((s) => s.mini);
 
   const onScreenshot = useCallback(() => {
     void invoke("screenshot_open");
@@ -127,17 +140,21 @@ export default function ClaudeTerminalView({
   return (
     <div className="chat-view">
       <section className="chat-transcript-wrap claude-transcript-wrap">
-        {activeId && (
-          <ClaudeTerminal
+        {activeId && active && layout && (
+          <PaneLayout
             ref={termRef}
-            key={`${cli}:${profileId}:${activeId}:${reloadKey}`}
+            key={`${cli}:${profileId}:${activeId}`}
+            sessionId={active.id}
+            layout={layout}
             profileId={profileId}
-            claudeSessionId={activeId}
-            resume={active?.started ?? false}
-            cwd={cwd}
-            cli={cli}
+            defaultCwd={cwd}
+            reloadKey={reloadKey}
+            mini={mini}
+            onSplit={(paneId, dir) => onSplitPane(active.id, paneId, dir)}
+            onClose={(paneId) => onClosePane(active.id, paneId)}
+            onSetRatio={(splitId, ratio) => onSetSplitRatio(active.id, splitId, ratio)}
+            onPaneStarted={(paneId) => onPaneStarted(active.id, paneId)}
             onMissingCli={setMissing}
-            onOpened={onOpened}
           />
         )}
       </section>
