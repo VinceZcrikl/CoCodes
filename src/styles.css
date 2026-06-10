@@ -606,30 +606,25 @@ body {
   background: transparent;
 }
 
-/* xterm scrollbar — hidden at rest so it never overlaps terminal content.
- * Both .xterm-viewport and .xterm-screen are position:absolute; width:100%,
- * so any non-zero scrollbar width visually covers the rightmost column of text.
- * Mouse-wheel scrolling works regardless of scrollbar visibility. */
+/* xterm scrollbar — sits in the ≥6 px right-padding zone that xterm's padding:6
+ * option reserves. Text never reaches the scrollbar because FitAddon subtracts
+ * (padding * 2) from available width before calculating columns. */
 .claude-terminal-host .xterm-viewport::-webkit-scrollbar {
-  width: 0;
-}
-
-/* Reveal a thin overlay thumb on hover so power-users can drag-scroll. */
-.claude-terminal-host:hover .xterm-viewport::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
 
 .claude-terminal-host .xterm-viewport::-webkit-scrollbar-track {
   background: transparent;
+  margin: 4px 0;
 }
 
 .claude-terminal-host .xterm-viewport::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--accent-gold) 36%, transparent);
-  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent-gold) 32%, transparent);
+  border-radius: 3px;
 }
 
 .claude-terminal-host .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--accent-gold) 60%, transparent);
+  background: color-mix(in srgb, var(--accent-gold) 55%, transparent);
 }
 
 /* ── Directory picker chip ─────────────────────────────────────────── */

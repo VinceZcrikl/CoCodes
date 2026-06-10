@@ -139,6 +139,20 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       // DOM renderer only (no WebGL): the WebGL addon ghosts/flickers under
       // macOS WKWebView, which is what we're rendering inside.
       term.open(host);
+
+      // Fix xterm's scrollBarWidth for WKWebView.
+      // xterm detects scrollbar width via `viewport.offsetWidth - scrollArea.offsetWidth`
+      // in its Viewport constructor (called during open). WKWebView uses overlay
+      // scrollbars so that difference = 0, and xterm falls back to 15 px. FitAddon
+      // then subtracts 15 px from availableWidth, wasting ~2 columns. Overriding to
+      // our actual CSS scrollbar width (5 px) keeps the column calculation accurate
+      // and ensures the scrollbar sits to the right of the last character, not on it.
+      const CSS_SCROLLBAR_WIDTH = 5;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (term as any)._core.viewport.scrollBarWidth = CSS_SCROLLBAR_WIDTH;
+      } catch { /* private API — safe to skip on future xterm versions */ }
+
       fit.fit(); // initial cols/rows for the PTY spawn below
 
       // Track the size the PTY currently believes it has so we only ever send
@@ -150,6 +164,12 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       const pushResize = () => {
         const id = sessionIdRef.current;
         if (!id) return;
+        // Suppress PTY resize during the startup grace window so Claude Code's
+        // TUI finishes rendering its welcome banner before receiving a resize.
+        // lastCols/lastRows are intentionally NOT updated here — the post-grace
+        // doFit will compare against the spawn dimensions and send exactly one
+        // corrective resize if layout drifted during startup.
+        if (Date.now() - spawnedAt < SPAWN_GRACE_MS) return;
         if (term.cols === lastCols && term.rows === lastRows) return;
         lastCols = term.cols;
         lastRows = term.rows;
@@ -165,6 +185,9 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       // that fire during a window resize (e.g. sidebar collapsing) must not
       // trigger an intermediate fit — we wait for the confirmed 'terminus:refit'.
       let geometryTransitioning = false;
+      let spawned = false;
+      let spawnedAt = 0;
+      const SPAWN_GRACE_MS = 1000;
 
       const doFit = (delay: number) => {
         window.clearTimeout(settleTimer);
@@ -174,7 +197,56 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
           } catch {
             return;
           }
-          pushResize();
+          if (!spawned) {
+            // First settle: spawn the PTY with stable, post-animation dimensions.
+            // Delaying spawn until layout is settled means Claude Code's TUI starts
+            // at the correct column width and never receives a corrective resize for
+            // the welcome banner — eliminating the duplicate-header stacking.
+            spawned = true;
+            lastCols = term.cols;
+            lastRows = term.rows;
+            void invoke<string>("terminal_open", {
+              profileId,
+              cols: term.cols,
+              rows: term.rows,
+              claudeSessionId,
+              cwd: cwd ?? null,
+            })
+              .then((id) => {
+                if (disposed) {
+                  void invoke("terminal_close", { id });
+                  return;
+                }
+                sessionIdRef.current = id;
+                spawnedAt = Date.now();
+                // After the grace window expires, run one final fit. By then
+                // the welcome banner has rendered and any layout drift accumulated
+                // during startup is flushed in a single clean resize.
+                window.setTimeout(() => {
+                  if (!disposed) doFit(50);
+                }, SPAWN_GRACE_MS + 100);
+                term.focus();
+                onOpened?.();
+              })
+              .catch((e: unknown) => {
+                const err = e as { kind?: string; message?: string } | string;
+                if (typeof err === "object" && err?.kind === "ClaudeNotFound") {
+                  onMissingClaude?.(err.message ?? "claude not found");
+                } else {
+                  const msg =
+                    typeof err === "string"
+                      ? err
+                      : (err?.message ?? JSON.stringify(err));
+                  term.write(
+                    `\r\n\x1b[31m[openterminus] failed to start claude: ${msg}\x1b[0m\r\n`,
+                  );
+                }
+              });
+          } else {
+            // Defer PTY resize notification by one frame so xterm finishes
+            // re-rendering before Claude Code's TUI sees the new dimensions.
+            requestAnimationFrame(pushResize);
+          }
         }, delay);
       };
 
@@ -226,38 +298,6 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         if (disposed) un();
         else cleanup.push(un);
       });
-
-      // Spawn claude for this profile with the fitted size.
-      void invoke<string>("terminal_open", {
-        profileId,
-        cols: term.cols,
-        rows: term.rows,
-        claudeSessionId,
-        cwd: cwd ?? null,
-      })
-        .then((id) => {
-          if (disposed) {
-            void invoke("terminal_close", { id });
-            return;
-          }
-          sessionIdRef.current = id;
-          term.focus();
-          onOpened?.();
-        })
-        .catch((e: unknown) => {
-          const err = e as { kind?: string; message?: string } | string;
-          if (typeof err === "object" && err?.kind === "ClaudeNotFound") {
-            onMissingClaude?.(err.message ?? "claude not found");
-          } else {
-            const msg =
-              typeof err === "string"
-                ? err
-                : (err?.message ?? JSON.stringify(err));
-            term.write(
-              `\r\n\x1b[31m[openterminus] failed to start claude: ${msg}\x1b[0m\r\n`,
-            );
-          }
-        });
 
       // Reflow → debounced settle fit. Routing through the same `settle` timer
       // as startup means a resize animation's stream of intermediate frames
