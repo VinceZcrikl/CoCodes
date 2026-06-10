@@ -46,6 +46,13 @@ interface Props {
   onOpened?: () => void;
   /** Raised when claude exits (or fails to spawn). */
   onExit?: (code: number | null) => void;
+  /** Raised whenever this terminal gains keyboard focus, so the pane layout can
+   *  track the active pane for toolbar injection + prefix commands. */
+  onFocus?: () => void;
+  /** Intercept key events before they reach the PTY (xterm
+   *  `attachCustomKeyEventHandler`). Return `false` to swallow the key — used by
+   *  the pane layout to implement the tmux-style split/close/focus prefix. */
+  onKeyEvent?: (e: KeyboardEvent) => boolean;
 }
 
 interface DataEvent {
@@ -68,13 +75,20 @@ function decodeBase64(b64: string): Uint8Array {
  *  component on profileId + session so switching tears down and respawns. */
 const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
   function ClaudeTerminal(
-    { profileId, claudeSessionId, cwd, cli = "claude", onMissingCli, onOpened, onExit },
+    { profileId, claudeSessionId, cwd, cli = "claude", onMissingCli, onOpened, onExit, onFocus, onKeyEvent },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const termRef = useRef<Terminal | null>(null);
     const sessionIdRef = useRef<string | null>(null);
     const themeName = useThemeStore((s) => s.name);
+
+    // Keep the latest focus/key callbacks in refs so the mount-time effect (which
+    // intentionally doesn't re-run on prop changes) always calls the current one.
+    const onFocusRef = useRef(onFocus);
+    onFocusRef.current = onFocus;
+    const onKeyEventRef = useRef(onKeyEvent);
+    onKeyEventRef.current = onKeyEvent;
 
     // Re-theme the live terminal when the cockpit theme changes (no remount).
     useEffect(() => {
@@ -138,9 +152,21 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       term.loadAddon(unicode);
       term.unicode.activeVersion = "11";
 
+      // Intercept keys before they reach the PTY so the pane layout can run the
+      // tmux-style prefix (split/close/focus). Returning false swallows the key.
+      term.attachCustomKeyEventHandler((e) =>
+        onKeyEventRef.current ? onKeyEventRef.current(e) : true,
+      );
+
       // DOM renderer only (no WebGL): the WebGL addon ghosts/flickers under
       // macOS WKWebView, which is what we're rendering inside.
       term.open(host);
+
+      // Report focus so the layout can mark this the active pane. xterm's
+      // textarea is the real focus target.
+      const onFocusIn = () => onFocusRef.current?.();
+      host.addEventListener("focusin", onFocusIn);
+      cleanup.push(() => host.removeEventListener("focusin", onFocusIn));
 
       // Fix xterm's scrollBarWidth for WKWebView.
       // xterm detects scrollbar width via `viewport.offsetWidth - scrollArea.offsetWidth`

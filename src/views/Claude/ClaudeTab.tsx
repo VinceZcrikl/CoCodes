@@ -24,7 +24,11 @@ export default function ClaudeTab({ cli }: Props) {
     select,
     remove,
     rename,
-    markStarted,
+    resolveLayout,
+    splitPane,
+    closePane,
+    setSplitRatio,
+    markPaneStarted,
     togglePin,
     setGroup,
     newGroup,
@@ -59,8 +63,12 @@ export default function ClaudeTab({ cli }: Props) {
           profileId={profileId}
           activeId={activeId}
           active={active}
+          layout={active ? resolveLayout(active) : null}
           cli={cli}
-          onOpened={() => activeId && markStarted(activeId)}
+          onSplitPane={splitPane}
+          onClosePane={closePane}
+          onSetSplitRatio={setSplitRatio}
+          onPaneStarted={markPaneStarted}
         />
       </div>
     </div>
