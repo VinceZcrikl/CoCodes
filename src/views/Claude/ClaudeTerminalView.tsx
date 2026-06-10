@@ -5,6 +5,7 @@ import { Copy, Check, RefreshCw } from "lucide-react";
 import Toolbar from "./Toolbar";
 import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
 import type { ClaudeSession } from "../../hooks/useClaudeSessions";
+import { useDirectoryStore } from "../../state/directoryStore";
 
 const INSTALL_CMD = "npm i -g @anthropic-ai/claude-code";
 
@@ -28,10 +29,29 @@ export default function ClaudeTerminalView({
   // Bumped on "Recheck" to remount the terminal after the user installs claude.
   const [reloadKey, setReloadKey] = useState(0);
 
+  const { cwd } = useDirectoryStore();
+
   // Open the region/window selection overlay. The grab completes async and
   // arrives via the `screenshot:captured` event below.
   const onScreenshot = useCallback(() => {
     void invoke("screenshot_open");
+  }, []);
+
+  // When the user picks a new directory from the toolbar, inject `cd <path>`
+  // into the running terminal so it takes effect immediately. For the NEXT
+  // spawned session the stored cwd (via directoryStore) is used as the PTY cwd.
+  const onCwdChange = useCallback((newCwd: string | null) => {
+    if (!newCwd) return;
+    const safe = newCwd.replace(/\\/g, "/");
+    termRef.current?.insert(`cd "${safe}"`);
+  }, []);
+
+  const onCommand = useCallback((cmd: string, submit: boolean) => {
+    if (submit) {
+      termRef.current?.writeLine(cmd);
+    } else {
+      termRef.current?.insert(cmd + " ");
+    }
   }, []);
 
   // Captured PNG path → drop it into the terminal input (without submitting) so
@@ -112,12 +132,13 @@ export default function ClaudeTerminalView({
             profileId={profileId}
             claudeSessionId={activeId}
             resume={active?.started ?? false}
+            cwd={cwd}
             onMissingClaude={setMissing}
             onOpened={onOpened}
           />
         )}
       </section>
-      <Toolbar onScreenshot={onScreenshot} />
+      <Toolbar onScreenshot={onScreenshot} onCwdChange={onCwdChange} onCommand={onCommand} />
     </div>
   );
 }

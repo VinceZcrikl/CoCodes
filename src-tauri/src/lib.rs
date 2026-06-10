@@ -4,6 +4,7 @@
 //! The per-CLI registry (`CliSpec`) and provider-switching modules land in
 //! later phases; the PTY engine here is already generic enough to drive them.
 
+pub mod directory;
 pub mod persona;
 pub mod screenshot;
 pub mod terminal;
@@ -20,6 +21,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(terminal::TerminalRegistry::default())
         .invoke_handler(tauri::generate_handler![
+            directory::pick_directory,
             terminal::terminal_open,
             terminal::terminal_write,
             terminal::terminal_resize,

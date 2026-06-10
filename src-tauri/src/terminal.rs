@@ -172,7 +172,7 @@ pub async fn terminal_open(
     // chat. `resume`: true → `--resume` an existing session; false/absent →
     // start it with `--session-id`.
     claude_session_id: Option<String>,
-    resume: Option<bool>,
+    cwd: Option<String>,
     app: AppHandle,
     reg: State<'_, TerminalRegistry>,
 ) -> Result<String, TerminalError> {
@@ -212,20 +212,25 @@ pub async fn terminal_open(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        if resume.unwrap_or(false) {
-            cmd.arg("--resume");
-        } else {
-            cmd.arg("--session-id");
-        }
+        // Always use --session-id: if the conversation file exists on disk,
+        // Claude Code loads it (same as --resume); if it doesn't exist, Claude
+        // Code starts a fresh conversation with this UUID rather than printing
+        // "No conversation found" and failing.  The `resume` hint from the
+        // frontend is intentionally ignored — --session-id subsumes it safely.
+        cmd.arg("--session-id");
         cmd.arg(sid);
     }
-    // Run claude from the user's home so relative paths and CLAUDE.md discovery
-    // behave like a normal shell launch. Pre-trust the dir in ~/.claude.json so
-    // the workspace-trust dialog doesn't reappear on every relaunch — our PTY
-    // close SIGKILLs claude, which can drop its own persistence of the accept.
-    if let Some(home) = dirs::home_dir() {
-        ensure_claude_trusts(&home);
-        cmd.cwd(home);
+    // Resolve working directory: use the caller-supplied path if it exists on
+    // disk, otherwise fall back to home.  Pre-trust the chosen dir so Claude
+    // Code skips its workspace-trust dialog on every launch.
+    let work_dir: Option<PathBuf> = cwd
+        .as_deref()
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .or_else(dirs::home_dir);
+    if let Some(dir) = work_dir {
+        ensure_claude_trusts(&dir);
+        cmd.cwd(&dir);
     }
     // Force a real terminal type so claude's TUI renders correctly in xterm.
     cmd.env("TERM", "xterm-256color");

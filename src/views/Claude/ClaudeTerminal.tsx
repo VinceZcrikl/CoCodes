@@ -33,6 +33,9 @@ interface Props {
   claudeSessionId?: string;
   /** Resume the bound session instead of starting it fresh. Read once at mount. */
   resume?: boolean;
+  /** Working directory for the spawned claude process. null/absent → home dir.
+   *  Read once at mount; use the `cd` injection path for mid-session changes. */
+  cwd?: string | null;
   /** Raised when the backend can't find the `claude` binary, so the view can
    *  show the install card instead of a blank terminal. */
   onMissingClaude?: (message: string) => void;
@@ -63,7 +66,7 @@ function decodeBase64(b64: string): Uint8Array {
  *  component on profileId + session so switching tears down and respawns. */
 const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
   function ClaudeTerminal(
-    { profileId, claudeSessionId, resume, onMissingClaude, onOpened, onExit },
+    { profileId, claudeSessionId, cwd, onMissingClaude, onOpened, onExit },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
@@ -230,7 +233,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         cols: term.cols,
         rows: term.rows,
         claudeSessionId,
-        resume: resume ?? false,
+        cwd: cwd ?? null,
       })
         .then((id) => {
           if (disposed) {

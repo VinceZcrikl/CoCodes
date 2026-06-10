@@ -30,6 +30,8 @@ getrandom = "0.2"
 # Cross-platform PTY (wezterm project) — spawns `claude` in a real terminal
 # behind the embedded xterm.js surface.
 portable-pty = "0.8"
+# Native folder-picker dialog for the directory selector in the toolbar.
+rfd = "0.14"
 
 [features]
 default = ["custom-protocol"]
