@@ -39,6 +39,7 @@ export default function ClaudeTerminalView({
   onClosePane,
   onSetSplitRatio,
   onPaneStarted,
+  onAssignPaneProfile,
 }: {
   profileId: string;
   activeId: string | null;
@@ -51,6 +52,7 @@ export default function ClaudeTerminalView({
   onClosePane: (sessionId: string, paneId: string) => void;
   onSetSplitRatio: (sessionId: string, splitId: string, ratio: number) => void;
   onPaneStarted: (sessionId: string, paneId: string) => void;
+  onAssignPaneProfile: (sessionId: string, paneId: string, profileId: string, cli: string) => void;
 }) {
   const termRef = useRef<ClaudeTerminalHandle | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
@@ -154,6 +156,9 @@ export default function ClaudeTerminalView({
             onClose={(paneId) => onClosePane(active.id, paneId)}
             onSetRatio={(splitId, ratio) => onSetSplitRatio(active.id, splitId, ratio)}
             onPaneStarted={(paneId) => onPaneStarted(active.id, paneId)}
+            onAssignPaneProfile={(paneId, profileId, cli) =>
+              onAssignPaneProfile(active.id, paneId, profileId, cli)
+            }
             onMissingCli={setMissing}
           />
         )}

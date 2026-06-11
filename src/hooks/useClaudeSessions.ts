@@ -19,6 +19,9 @@ export interface PaneNode {
   /** Working directory for the spawned process; inherits the parent pane on
    *  split, defaults to the directory store. null/absent → home dir. */
   cwd?: string | null;
+  /** Per-pane persona override. When set, this pane uses a different profile
+   *  than the session-level profileId — set by dragging an avatar onto the pane. */
+  profileId?: string;
 }
 
 /** An internal split: two children divided horizontally or vertically. */
@@ -190,6 +193,27 @@ function setRatio(node: LayoutNode, splitId: string, ratio: number): LayoutNode 
     children: [
       setRatio(node.children[0], splitId, ratio),
       setRatio(node.children[1], splitId, ratio),
+    ],
+  };
+}
+
+/** Reassign the pane `paneId` to a new profile + CLI, issuing a fresh convId
+ *  so ClaudeTerminal's effect sees a changed dep and respawns the PTY. */
+function reassignPaneNode(
+  node: LayoutNode,
+  paneId: string,
+  profileId: string,
+  cli: string,
+): LayoutNode {
+  if (node.type === "pane") {
+    if (node.paneId !== paneId) return node;
+    return { ...node, cli, profileId, convId: newId(), started: false };
+  }
+  return {
+    ...node,
+    children: [
+      reassignPaneNode(node.children[0], paneId, profileId, cli),
+      reassignPaneNode(node.children[1], paneId, profileId, cli),
     ],
   };
 }
@@ -399,6 +423,22 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     [update],
   );
 
+  /** Rebind `paneId` to a new persona + CLI. Issues a fresh convId so the
+   *  terminal respawns immediately with the new binary and persona context. */
+  const assignPaneProfile = useCallback(
+    (sessionId: string, paneId: string, profileId: string, newCli: string) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          const layout = sess.layout ?? defaultLayout(sess, cli);
+          return { ...sess, layout: reassignPaneNode(layout, paneId, profileId, newCli) };
+        }),
+      }));
+    },
+    [update, cli],
+  );
+
   const togglePin = useCallback(
     (id: string) =>
       update((s) => ({
@@ -469,6 +509,7 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     closePane,
     setSplitRatio,
     markPaneStarted,
+    assignPaneProfile,
     togglePin,
     setGroup,
     newGroup,

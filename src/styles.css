@@ -679,6 +679,7 @@ body {
 }
 
 .pane-leaf {
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -735,6 +736,53 @@ body {
  * shows the header so the split affordance stays discoverable. */
 .pane-root > .pane-leaf:only-child {
   border-color: transparent;
+}
+
+/* Floating ghost that follows the cursor during a persona drag. */
+.persona-drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -120%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+.persona-drag-ghost-avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  flex: none;
+}
+.persona-drag-ghost-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Drop target: persona avatar dragged onto a pane. --drop-accent is set inline
+ * to the dragged persona's stable colour so the user sees "this CLI/profile". */
+.pane-leaf.pane-drop-over {
+  outline: 2px solid var(--drop-accent, var(--accent-gold));
+  outline-offset: -2px;
+}
+.pane-leaf.pane-drop-over::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--drop-accent, var(--accent-gold)) 12%, transparent);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 10;
 }
 
 /* ── Directory picker chip ─────────────────────────────────────────── */

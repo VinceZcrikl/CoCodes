@@ -13,6 +13,8 @@ import {
   type PaneNode,
   type SplitNode,
 } from "../../hooks/useClaudeSessions";
+import { draggingPersona } from "../../state/dragState";
+import { personaColor } from "../Persona/PersonaAvatar";
 
 /** Ctrl+B — the tmux-style prefix. Sent to the PTY as 0x02 when the follow-up
  *  key isn't a pane command, so a real readline Ctrl+B still works. */
@@ -32,6 +34,7 @@ interface PaneCtx {
   onSetRatio: (splitId: string, ratio: number) => void;
   onPaneStarted: (paneId: string) => void;
   onMissingCli?: (message: string) => void;
+  onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
   makeKeyHandler: (paneId: string) => (e: KeyboardEvent) => boolean;
   /** >1 pane in the tree → show per-pane close buttons. */
   multi: boolean;
@@ -51,6 +54,7 @@ interface Props {
   onSetRatio: (splitId: string, ratio: number) => void;
   onPaneStarted: (paneId: string) => void;
   onMissingCli?: (message: string) => void;
+  onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
 }
 
 /** Ordered list of pane ids as they appear left-to-right / top-to-bottom. */
@@ -66,18 +70,33 @@ function countPanes(node: LayoutNode): number {
   return n;
 }
 
-/** One terminal pane: a header with split/close controls plus the xterm. */
+/** One terminal pane: a header with split/close controls plus the xterm.
+ *  Also acts as a drop target — dragging a persona avatar here rebinds the
+ *  pane to that persona's CLI and profile. */
 function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   const active = ctx.activePaneId === node.paneId;
+  const [dropOver, setDropOver] = useState(false);
+
+  // Per-pane profile override: if this pane was assigned a persona directly,
+  // use its own profileId; otherwise fall back to the session-level one.
+  const effectiveProfileId = node.profileId ?? ctx.profileId;
+
   return (
     <div
-      className={`pane-leaf${active ? " active" : ""}`}
+      className={`pane-leaf${active ? " active" : ""}${dropOver ? " pane-drop-over" : ""}`}
+      style={
+        dropOver && draggingPersona
+          ? ({ "--drop-accent": personaColor(draggingPersona.id) } as React.CSSProperties)
+          : undefined
+      }
       data-pane-id={node.paneId}
       ref={(el) => {
         if (el) ctx.leafEls.current.set(node.paneId, el);
         else ctx.leafEls.current.delete(node.paneId);
       }}
       onMouseDownCapture={() => ctx.setActive(node.paneId)}
+      onPointerEnter={() => { if (draggingPersona) setDropOver(true); }}
+      onPointerLeave={() => setDropOver(false)}
     >
       <div className="pane-header">
         <span className="pane-header-cli">{node.cli}</span>
@@ -115,7 +134,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
           if (h) ctx.handles.current.set(node.paneId, h);
           else ctx.handles.current.delete(node.paneId);
         }}
-        profileId={ctx.profileId}
+        profileId={effectiveProfileId}
         claudeSessionId={node.convId}
         cwd={node.cwd ?? ctx.defaultCwd}
         cli={node.cli}
@@ -195,6 +214,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     onSetRatio,
     onPaneStarted,
     onMissingCli,
+    onAssignPaneProfile,
   },
   ref,
 ) {
@@ -350,6 +370,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
       onSetRatio,
       onPaneStarted,
       onMissingCli,
+      onAssignPaneProfile,
       makeKeyHandler,
       multi: false,
     };
@@ -372,6 +393,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     onSetRatio,
     onPaneStarted,
     onMissingCli,
+    onAssignPaneProfile,
     makeKeyHandler,
     multi: order.length > 1,
   };

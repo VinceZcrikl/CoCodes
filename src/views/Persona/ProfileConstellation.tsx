@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
 import { usePersonas } from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
 import PersonaAvatar, { personaColor } from "./PersonaAvatar";
+import {
+  setDraggingPersona,
+  PERSONA_DROP_EVENT,
+  type PersonaDropDetail,
+} from "../../state/dragState";
+import type { PersonaSummary } from "../../hooks/usePersonas";
 
 interface Props {
   /** Opens the persona library (create / edit / delete). */
@@ -16,19 +22,81 @@ interface HoverState {
   y: number;
 }
 
+interface GhostState {
+  persona: PersonaSummary;
+  x: number;
+  y: number;
+}
+
 /** Horizontal persona constellation — one avatar per persona, click to switch
  *  the active persona (injected into the terminal), plus a trailing "+" that
- *  opens the persona library. Hover reveals that persona's SOUL preview. Ported
- *  from orb's ProfileConstellation. */
+ *  opens the persona library. Hover reveals that persona's SOUL preview.
+ *
+ *  Avatars can be dragged (pointer events, not HTML5 DnD) onto split panes to
+ *  rebind that pane to the persona's preferred CLI and profile. */
 export default function ProfileConstellation({ onManage }: Props) {
   const { personas } = usePersonas();
   const activeId = useProfileStore((s) => s.activeProfileId);
   const setActive = useProfileStore((s) => s.setActiveProfile);
   const [hover, setHover] = useState<HoverState | null>(null);
+  const [ghost, setGhost] = useState<GhostState | null>(null);
+
+  const dragRef = useRef<{ persona: PersonaSummary; startX: number; startY: number } | null>(null);
+  const didDragRef = useRef(false);
 
   const hovered = hover
     ? personas.find((p) => p.id === hover.id) ?? null
     : null;
+
+  // Window-level pointer events so we track movement after leaving the button.
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dx = e.clientX - d.startX;
+      const dy = e.clientY - d.startY;
+      if (!didDragRef.current && Math.hypot(dx, dy) > 5) {
+        didDragRef.current = true;
+        setDraggingPersona({ id: d.persona.id, cli: d.persona.cli });
+      }
+      if (didDragRef.current) {
+        setGhost({ persona: d.persona, x: e.clientX, y: e.clientY });
+      }
+    };
+
+    const onUp = (e: PointerEvent) => {
+      const d = dragRef.current;
+      dragRef.current = null;
+      if (!didDragRef.current || !d) {
+        didDragRef.current = false;
+        setGhost(null);
+        setDraggingPersona(null);
+        return;
+      }
+      didDragRef.current = false;
+      setGhost(null);
+      setDraggingPersona(null);
+
+      // Find the pane leaf under the release point.
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const paneEl = el?.closest("[data-pane-id]") as HTMLElement | null;
+      if (paneEl?.dataset.paneId) {
+        const detail: PersonaDropDetail = {
+          paneId: paneEl.dataset.paneId,
+          profileId: d.persona.id,
+          cli: d.persona.cli,
+        };
+        window.dispatchEvent(new CustomEvent(PERSONA_DROP_EVENT, { detail }));
+      }
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
 
   return (
     <div className="window-chat-constellation" aria-label="Personas">
@@ -41,14 +109,22 @@ export default function ProfileConstellation({ onManage }: Props) {
               type="button"
               className={`window-chat-constellation-cell${active ? " active" : ""}`}
               style={{ ["--cell-accent" as string]: personaColor(p.id) }}
-              onClick={() => setActive(p.id)}
+              onClick={() => {
+                if (!didDragRef.current) setActive(p.id);
+              }}
               onMouseEnter={(e) => {
+                if (dragRef.current) return;
                 const r = e.currentTarget.getBoundingClientRect();
                 setHover({ id: p.id, x: r.left + r.width / 2, y: r.bottom + 8 });
               }}
               onMouseLeave={() =>
                 setHover((h) => (h?.id === p.id ? null : h))
               }
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                dragRef.current = { persona: p, startX: e.clientX, startY: e.clientY };
+                didDragRef.current = false;
+              }}
               aria-current={active ? "true" : undefined}
             >
               <span className="window-chat-constellation-avatar-wrap">
@@ -80,7 +156,26 @@ export default function ProfileConstellation({ onManage }: Props) {
         </button>
       </div>
 
-      {hovered &&
+      {/* Floating drag ghost — pointer-events:none so it doesn't block drops */}
+      {ghost &&
+        createPortal(
+          <div
+            className="persona-drag-ghost"
+            style={{ left: ghost.x, top: ghost.y }}
+            aria-hidden="true"
+          >
+            <PersonaAvatar
+              id={ghost.persona.id}
+              name={ghost.persona.name}
+              avatar={ghost.persona.avatar}
+              className="persona-drag-ghost-avatar"
+            />
+            <span className="persona-drag-ghost-label">{ghost.persona.cli}</span>
+          </div>,
+          document.body,
+        )}
+
+      {hovered && !ghost &&
         createPortal(
           <div
             className="window-chat-constellation-soul"
