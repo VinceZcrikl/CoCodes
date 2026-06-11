@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
 import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2 } from "lucide-react";
 import { INJECT_PANE_EVENT, type InjectPaneDetail } from "../../state/delegationMonitor";
@@ -41,6 +42,8 @@ interface PaneCtx {
   onRelay: (fromPaneId: string) => boolean;
   /** Generate a new convId for `paneId` to recover from a session lock conflict. */
   onRespawn: (paneId: string) => void;
+  /** Pane ID currently hovered by an OS file drag, or null. */
+  fileDragOverPaneId: string | null;
   /** Expand `paneId` to a centered overlay. */
   onZoom: (paneId: string) => void;
   /** Collapse the currently zoomed pane back into the layout. */
@@ -93,6 +96,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
 
   const isZoomed = ctx.zoomedPaneId === node.paneId;
   const isExiting = isZoomed && ctx.zoomExiting;
+  const isFileDragOver = ctx.fileDragOverPaneId === node.paneId;
 
   // Per-pane profile override: if this pane was assigned a persona directly,
   // use its own profileId; otherwise fall back to the session-level one.
@@ -102,6 +106,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   let cls = "pane-leaf";
   if (active) cls += " active";
   if (dropOver) cls += " pane-drop-over";
+  if (isFileDragOver) cls += " pane-file-drop-over";
   if (isZoomed && !isExiting) cls += " pane-zoomed";
   if (isExiting) cls += " pane-zoom-exiting";
 
@@ -287,6 +292,9 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
   const [zoomExiting, setZoomExiting] = useState(false);
   const zoomExitTimer = useRef<number>(0);
 
+  // Which pane is currently hovered by an OS-level file drag.
+  const [fileDragOverPaneId, setFileDragOverPaneId] = useState<string | null>(null);
+
   const onZoom = (paneId: string) => {
     window.clearTimeout(zoomExitTimer.current);
     setZoomExiting(false);
@@ -321,6 +329,47 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     return () => window.removeEventListener("keydown", handler, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoomedPaneId]);
+
+  // Handle OS-level file / folder drag-drop onto any pane.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    const getPaneAtPhysical = (px: number, py: number): string | null => {
+      // Tauri emits physical (device) pixels; convert to CSS pixels.
+      const ratio = window.devicePixelRatio || 1;
+      const cx = px / ratio;
+      const cy = py / ratio;
+      for (const [id, el] of leafEls.current) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) {
+          return id;
+        }
+      }
+      return null;
+    };
+
+    void getCurrentWebview().onDragDropEvent((ev) => {
+      const p = ev.payload;
+      if (p.type === "enter" || p.type === "over") {
+        setFileDragOverPaneId(getPaneAtPhysical(p.position.x, p.position.y));
+      } else if (p.type === "drop") {
+        setFileDragOverPaneId(null);
+        const paneId = getPaneAtPhysical(p.position.x, p.position.y);
+        if (paneId && p.paths.length > 0) {
+          // Quote paths that contain spaces; join multiple with a space separator.
+          const text = p.paths
+            .map((path) => (/\s/.test(path) ? `"${path}"` : path))
+            .join(" ");
+          handles.current.get(paneId)?.insert(text + " ");
+          handles.current.get(paneId)?.focus();
+        }
+      } else if (p.type === "leave") {
+        setFileDragOverPaneId(null);
+      }
+    }).then((fn) => { unlisten = fn; });
+
+    return () => { unlisten?.(); };
+  }, []);
 
   const order = paneOrder(layout);
   const orderKey = order.join(",");
@@ -483,8 +532,8 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     },
   }));
 
-  // Shared zoom props injected into every ctx.
-  const zoomCtx = { zoomedPaneId, zoomExiting, onZoom, onUnzoom };
+  // Shared zoom + file-drag props injected into every ctx.
+  const zoomCtx = { zoomedPaneId, zoomExiting, onZoom, onUnzoom, fileDragOverPaneId };
 
   // Mini mode: a split layout is unusable at 460px — render the active pane only.
   if (mini) {

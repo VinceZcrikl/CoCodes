@@ -819,6 +819,21 @@ body {
   z-index: 10;
 }
 
+/* File / folder dragged from OS file manager onto a pane. */
+.pane-leaf.pane-file-drop-over {
+  outline: 2px dashed var(--accent-cyan, #00e5ff);
+  outline-offset: -2px;
+}
+.pane-leaf.pane-file-drop-over::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent-cyan, #00e5ff) 10%, transparent);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 10;
+}
+
 /* ── Pane zoom — card-style overlay ───────────────────────────────── */
 /* Semi-transparent backdrop that sits below the zoomed pane. Clicking it
  * collapses the pane back into the split layout. */

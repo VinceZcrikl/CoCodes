@@ -71,7 +71,7 @@ export default function ClaudeTerminalView({
   const onCwdChange = useCallback((newCwd: string | null) => {
     if (!newCwd) return;
     const safe = newCwd.replace(/\\/g, "/");
-    termRef.current?.insert(`cd "${safe}"`);
+    termRef.current?.writeLine(`cd "${safe}"`);
   }, []);
 
   const onCommand = useCallback((cmd: string, submit: boolean) => {
