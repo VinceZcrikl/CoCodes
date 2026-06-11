@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useClaudeSessions, forEachPane } from "../../hooks/useClaudeSessions";
 import ClaudeSidebar from "./ClaudeSidebar";
 import ClaudeTerminalView from "./ClaudeTerminalView";
+import { useSidebarStore } from "../../state/sidebarStore";
 import { PERSONA_DROP_EVENT, type PersonaDropDetail } from "../../state/dragState";
 import {
   startDelegationMonitor,
@@ -153,6 +154,8 @@ export default function ClaudeTab({ cli, profileId, visible }: Props) {
     return () => window.removeEventListener(DELEGATION_RESULT_EVENT, handler);
   }, [sessions, resolveLayout]);
 
+  const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
+
   return (
     <div className="cli-tab">
       {delegationToast && (
@@ -160,20 +163,22 @@ export default function ClaudeTab({ cli, profileId, visible }: Props) {
           Task routed {delegationToast}
         </div>
       )}
-      <ClaudeSidebar
-        sessions={sessions}
-        groups={groups}
-        activeId={activeId}
-        onNew={newSession}
-        onSelect={select}
-        onRename={rename}
-        onDelete={remove}
-        onTogglePin={togglePin}
-        onSetGroup={setGroup}
-        onNewGroup={newGroup}
-        onRenameGroup={renameGroup}
-        onRemoveGroup={removeGroup}
-      />
+      {!sidebarCollapsed && (
+        <ClaudeSidebar
+          sessions={sessions}
+          groups={groups}
+          activeId={activeId}
+          onNew={newSession}
+          onSelect={select}
+          onRename={rename}
+          onDelete={remove}
+          onTogglePin={togglePin}
+          onSetGroup={setGroup}
+          onNewGroup={newGroup}
+          onRenameGroup={renameGroup}
+          onRemoveGroup={removeGroup}
+        />
+      )}
       <div className="cli-main">
         {everVisible && (
           <ClaudeTerminalView

@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, FolderOpen, ChevronDown, Home, Clock } from "lucide-react";
+import {
+  Camera,
+  FolderOpen,
+  ChevronDown,
+  Home,
+  Clock,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
+import { useSidebarStore } from "../../state/sidebarStore";
 import CommandPalette from "./CommandPalette";
 
 interface Props {
@@ -15,6 +24,8 @@ interface Props {
 
 export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cli = "claude" }: Props) {
   const { cwd, recent, setCwd } = useDirectoryStore();
+  const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
+  const toggleSidebar = useSidebarStore((s) => s.toggle);
   const [dropOpen, setDropOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -70,6 +81,22 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
       />
 
       <div className="cli-toolbar-left">
+        {/* ── Sidebar toggle ── */}
+        <button
+          type="button"
+          className="cli-tool-btn"
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+          aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+          aria-pressed={sidebarCollapsed}
+        >
+          {sidebarCollapsed ? (
+            <PanelLeftOpen size={15} strokeWidth={1.75} />
+          ) : (
+            <PanelLeftClose size={15} strokeWidth={1.75} />
+          )}
+        </button>
+
         {/* ── Directory picker ── */}
         <div className="dir-picker" ref={dropRef}>
           <button
