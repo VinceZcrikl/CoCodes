@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Bot } from "lucide-react";
 import ClaudeTab from "../Claude/ClaudeTab";
 import WindowControls from "./WindowControls";
-import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaAvatar from "../Persona/PersonaAvatar";
 import PersonaManager from "../Persona/PersonaManager";
 import { usePersonas } from "../../hooks/usePersonas";
@@ -44,6 +43,19 @@ export default function Cockpit() {
   const activeName = activePersona?.name ?? profileId;
   const activeAvatar = activePersona?.avatar ?? "";
 
+  // Keep a ClaudeTab alive for every persona we've visited (not just the
+  // active one), so switching persona toggles visibility instead of tearing
+  // down + respawning the terminals. Combined with the always-mounted CLI
+  // tabs below, every visited (persona, cli) panel persists.
+  const [visitedPersonas, setVisitedPersonas] = useState<Set<string>>(
+    () => new Set([profileId]),
+  );
+  useEffect(() => {
+    setVisitedPersonas((prev) =>
+      prev.has(profileId) ? prev : new Set(prev).add(profileId),
+    );
+  }, [profileId]);
+
   // When the active persona changes, switch the CLI tab to that persona's
   // preferred CLI (if it is one of the enabled tabs).
   useEffect(() => {
@@ -75,8 +87,9 @@ export default function Cockpit() {
           </div>
         ) : (
           <>
-            {/* Single header row: current persona (left) · persona
-                constellation (switch + add) · theme + window controls (right) */}
+            {/* Single header row: current persona (left) · theme + window
+                controls (right). Switch persona via the brand → manager;
+                the active persona drives which CLI is shown. */}
             <nav className="cockpit-header" data-tauri-drag-region>
               <button
                 type="button"
@@ -96,8 +109,6 @@ export default function Cockpit() {
                 </span>
               </button>
 
-              <ProfileConstellation onManage={() => setPersonaOpen(true)} />
-
               <div className="cockpit-header-right">
                 <button
                   type="button"
@@ -114,16 +125,23 @@ export default function Cockpit() {
         )}
 
         <main className="cockpit-body">
-          {/* Each enabled CLI reuses the same ClaudeTab stack with a cli prop.
-              Sessions are namespaced per-cli so they never intermix. */}
-          {CLIS.filter((c) => c.ready).map((cli) => (
-            <div
-              key={cli.id}
-              style={{ display: activeCli === cli.id ? "contents" : "none" }}
-            >
-              <ClaudeTab cli={cli.id} />
-            </div>
-          ))}
+          {/* One ClaudeTab per visited (persona, cli). All stay mounted and
+              only the active one is shown — switching persona or CLI tab keeps
+              every other panel's terminals live. Sessions are namespaced per
+              (persona, cli) so they never intermix. */}
+          {[...visitedPersonas].flatMap((pid) =>
+            CLIS.filter((c) => c.ready).map((cli) => {
+              const isVisible = pid === profileId && cli.id === activeCli;
+              return (
+                <div
+                  key={`${pid}::${cli.id}`}
+                  style={{ display: isVisible ? "contents" : "none" }}
+                >
+                  <ClaudeTab cli={cli.id} profileId={pid} visible={isVisible} />
+                </div>
+              );
+            }),
+          )}
         </main>
       </div>
 

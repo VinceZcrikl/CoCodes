@@ -633,6 +633,25 @@ body {
   flex-direction: column;
 }
 
+/* Keep-alive session stack: every session's panes stay mounted; only the
+ * active slot is visible. Slots are stacked (absolute) and retain their size
+ * while hidden, so a hidden terminal stays fitted — switching is instant and
+ * doesn't drop the live PTY (the persistence minimize gives). */
+.claude-transcript-wrap {
+  position: relative;
+}
+
+.session-pane-slot {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  visibility: hidden;
+}
+
+.session-pane-slot.active {
+  visibility: visible;
+}
+
 .claude-terminal-host {
   flex: 1;
   min-width: 0;

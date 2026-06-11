@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useClaudeSessions, forEachPane } from "../../hooks/useClaudeSessions";
-import { useProfileStore } from "../../state/profileStore";
 import ClaudeSidebar from "./ClaudeSidebar";
 import ClaudeTerminalView from "./ClaudeTerminalView";
 import { PERSONA_DROP_EVENT, type PersonaDropDetail } from "../../state/dragState";
@@ -19,21 +18,36 @@ interface Props {
   /** "claude" | "codex" | "grok" — determines which binary to spawn and which
    *  localStorage namespace to use for sessions. */
   cli: string;
+  /** The persona this panel is bound to. Cockpit mounts one ClaudeTab per
+   *  visited (persona, cli) and keeps them all alive, so switching persona or
+   *  CLI tab just toggles visibility — the live terminals persist. */
+  profileId: string;
+  /** True only for the active (persona, cli) panel; the rest stay mounted but
+   *  hidden. Gates global event handlers + terminal spawning. */
+  visible: boolean;
 }
 
-/** A full CLI tab: session rail + the live embedded terminal. The active
- *  persona (from the cockpit header) is the terminal's profileId. */
-export default function ClaudeTab({ cli }: Props) {
-  const profileId = useProfileStore((s) => s.activeProfileId);
+/** A full CLI tab: session rail + the live embedded terminals, bound to one
+ *  (persona, cli). Kept mounted by Cockpit across switches for keep-alive. */
+export default function ClaudeTab({ cli, profileId, visible }: Props) {
   const [delegationToast, setDelegationToast] = useState<string | null>(null);
   // Tracks the last CLI we delegated to so the return toast can name it.
   const lastDelegatedCliRef = useRef<string>("agent");
+
+  // Live visibility for gating global event handlers without re-subscribing.
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  // Whether this panel has ever been shown — gates spawning terminals so a
+  // never-opened (persona, cli) combo doesn't launch a CLI in the background.
+  const [everVisible, setEverVisible] = useState(visible);
+  useEffect(() => {
+    if (visible) setEverVisible(true);
+  }, [visible]);
 
   const {
     sessions,
     groups,
     activeId,
-    active,
     newSession,
     select,
     remove,
@@ -52,15 +66,16 @@ export default function ClaudeTab({ cli }: Props) {
     removeGroup,
   } = useClaudeSessions(profileId, cli);
 
-  // Always have at least one session so the terminal has something to bind to.
+  // Create a first session only once this panel is actually opened.
   useEffect(() => {
-    if (sessions.length === 0) newSession();
+    if (visible && sessions.length === 0) newSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions.length, profileId]);
+  }, [visible, sessions.length, profileId]);
 
   // Handle persona-drop events: find which session owns the pane and reassign.
   useEffect(() => {
     const handler = (e: Event) => {
+      if (!visibleRef.current) return;
       const { paneId, profileId: dropProfileId, cli: dropCli } =
         (e as CustomEvent<PersonaDropDetail>).detail;
       const owningSession = sessions.find((s) => {
@@ -85,8 +100,11 @@ export default function ClaudeTab({ cli }: Props) {
   }, []);
 
   // Route delegation events to a pane in this tab that runs the target CLI.
+  // Only the visible panel routes, so kept-alive background panels don't also
+  // inject into their (hidden) panes.
   useEffect(() => {
     const handler = (e: Event) => {
+      if (!visibleRef.current) return;
       const { targetCli, task } = (e as CustomEvent<DelegationDetail>).detail;
       let targetPaneId: string | null = null;
       for (const s of sessions) {
@@ -113,6 +131,7 @@ export default function ClaudeTab({ cli }: Props) {
   // Route sub-agent result blocks back into the first Claude pane found.
   useEffect(() => {
     const handler = (e: Event) => {
+      if (!visibleRef.current) return;
       const { result } = (e as CustomEvent<DelegationResultDetail>).detail;
       // V1 heuristic: find the first pane with cli === "claude" across all sessions.
       let claudePaneId: string | null = null;
@@ -156,19 +175,22 @@ export default function ClaudeTab({ cli }: Props) {
         onRemoveGroup={removeGroup}
       />
       <div className="cli-main">
-        <ClaudeTerminalView
-          profileId={profileId}
-          activeId={activeId}
-          active={active}
-          layout={active ? resolveLayout(active) : null}
-          cli={cli}
-          onSplitPane={splitPane}
-          onClosePane={closePane}
-          onSetSplitRatio={setSplitRatio}
-          onPaneStarted={markPaneStarted}
-          onAssignPaneProfile={assignPaneProfile}
-          onRespawnPane={respawnPane}
-        />
+        {everVisible && (
+          <ClaudeTerminalView
+            profileId={profileId}
+            activeId={activeId}
+            sessions={sessions}
+            resolveLayout={resolveLayout}
+            cli={cli}
+            panelVisible={visible}
+            onSplitPane={splitPane}
+            onClosePane={closePane}
+            onSetSplitRatio={setSplitRatio}
+            onPaneStarted={markPaneStarted}
+            onAssignPaneProfile={assignPaneProfile}
+            onRespawnPane={respawnPane}
+          />
+        )}
       </div>
     </div>
   );

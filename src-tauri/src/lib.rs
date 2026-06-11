@@ -42,15 +42,39 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             // The frameless main window's custom close button calls
-            // `window.close()`. Since the hidden screenshot-overlay window would
-            // otherwise keep the process alive, exit explicitly when the main
-            // window closes. The overlay's own close is ignored (it just hides).
-            if let tauri::WindowEvent::CloseRequested { .. } = event {
+            // `window.close()`. Keep the process — and every live terminal —
+            // running so reopening restores the live session. On macOS, hide
+            // and reopen via the dock icon (Cmd+Q still quits). Elsewhere there
+            // is no dock to reopen from, so exit as before.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
-                    std::process::exit(0);
+                    #[cfg(target_os = "macos")]
+                    {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        let _ = api;
+                        std::process::exit(0);
+                    }
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, _event| {
+            // Closing only hides the window; re-show it when the dock icon is
+            // clicked (macOS Reopen) so the live session comes back.
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                if let tauri::RunEvent::Reopen { .. } = _event {
+                    if let Some(w) = _app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                }
+            }
+        });
 }

@@ -43,6 +43,10 @@ interface Props {
   cwd?: string | null;
   /** "claude" | "codex" | "grok" — which CLI binary to spawn. */
   cli?: string;
+  /** True when this conversation already exists (a previously-started session
+   *  being restored) — spawn with `--resume` instead of `--session-id` so the
+   *  history comes back instead of erroring "already in use". Read once at mount. */
+  resume?: boolean;
   /** Raised when the backend can't find the `cli` binary. */
   onMissingCli?: (message: string) => void;
   /** Raised after the PTY successfully spawns the CLI. */
@@ -78,7 +82,7 @@ function decodeBase64(b64: string): Uint8Array {
  *  component on profileId + session so switching tears down and respawns. */
 const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
   function ClaudeTerminal(
-    { profileId, claudeSessionId, forkFromSessionId, cwd, cli = "claude",
+    { profileId, claudeSessionId, forkFromSessionId, cwd, cli = "claude", resume,
       onMissingCli, onOpened, onExit, onFocus, onKeyEvent, onSessionConflict },
     ref,
   ) {
@@ -248,6 +252,9 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
               cols: term.cols,
               rows: term.rows,
               claudeSessionId: spawnSessionId,
+              // Only resume when reopening the pane's own existing conversation —
+              // a fork's first spawn uses --session-id to branch from the source.
+              resume: forkFromSessionId ? false : !!resume,
               cwd: cwd ?? null,
               cli,
             })

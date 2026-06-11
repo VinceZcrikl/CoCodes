@@ -295,18 +295,14 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     [update],
   );
 
-  const select = useCallback(
-    (id: string) => {
-      setActiveId(id);
-      update((s) => ({
-        ...s,
-        sessions: s.sessions.map((x) =>
-          x.id === id ? { ...x, updatedAt: Date.now() } : x,
-        ),
-      }));
-    },
-    [update],
-  );
+  const select = useCallback((id: string) => {
+    // Only flip the active id — do NOT bump updatedAt here. Re-sorting the list
+    // on click makes the clicked row jump to the top of its section, so the
+    // highlight appears to "land" on a different row than the one tapped (even
+    // though the content pane switches correctly). Recency is bumped on actual
+    // use (spawn / input), not on mere selection.
+    setActiveId(id);
+  }, []);
 
   const remove = useCallback(
     (id: string) => {

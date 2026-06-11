@@ -64,6 +64,9 @@ interface Props {
   reloadKey: number;
   /** Mini window mode → render only the active pane full-bleed. */
   mini: boolean;
+  /** True only for the currently-visible session. Background (kept-alive)
+   *  sessions pass false so their global listeners (OS file-drag) stay dormant. */
+  active?: boolean;
   onSplit: (paneId: string, dir: "row" | "col", forkConvId?: string) => void;
   onClose: (paneId: string) => void;
   onSetRatio: (splitId: string, ratio: number) => void;
@@ -198,6 +201,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         profileId={effectiveProfileId}
         claudeSessionId={node.convId}
         forkFromSessionId={node.started ? undefined : node.forkFromConvId}
+        resume={node.started}
         cwd={node.cwd ?? ctx.defaultCwd}
         cli={node.cli}
         onMissingCli={ctx.onMissingCli}
@@ -272,6 +276,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     defaultCwd,
     reloadKey,
     mini,
+    active = true,
     onSplit,
     onClose,
     onSetRatio,
@@ -286,6 +291,9 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
   const leafEls = useRef<Map<string, HTMLElement>>(new Map());
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const armedRef = useRef(false);
+  // Live `active` for the file-drag listener closure (registered once on mount).
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   // Pane zoom state — purely visual, doesn't affect stored layout.
   const [zoomedPaneId, setZoomedPaneId] = useState<string | null>(null);
@@ -349,6 +357,9 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     };
 
     void getCurrentWebview().onDragDropEvent((ev) => {
+      // Only the visible session reacts — background kept-alive sessions share
+      // this webview-level event and would otherwise all insert on one drop.
+      if (!activeRef.current) return;
       const p = ev.payload;
       if (p.type === "enter" || p.type === "over") {
         setFileDragOverPaneId(getPaneAtPhysical(p.position.x, p.position.y));

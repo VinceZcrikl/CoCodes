@@ -278,6 +278,10 @@ pub async fn terminal_open(
     cols: Option<u16>,
     rows: Option<u16>,
     claude_session_id: Option<String>,
+    // True when this conversation already exists on disk (a previously-started
+    // session being restored). Claude Code rejects a reused `--session-id` with
+    // "already in use", so existing sessions must be reopened with `--resume`.
+    resume: Option<bool>,
     cwd: Option<String>,
     cli: Option<String>,
     app: AppHandle,
@@ -352,15 +356,21 @@ pub async fn terminal_open(
             cmd.arg("--append-system-prompt-file");
             cmd.arg(file.as_os_str());
         }
-        // Bind to a conversation UUID so the sidebar can resume independent
-        // Claude Code sessions. --session-id loads an existing conversation if
-        // the file is on disk, or starts a fresh one with that UUID otherwise.
+        // Bind to a conversation UUID so the sidebar manages independent,
+        // resumable Claude Code sessions. A brand-new conversation is created
+        // with `--session-id <uuid>`; an existing one (being restored after a
+        // restart) is reopened with `--resume <uuid>` — reusing `--session-id`
+        // on an existing id errors with "already in use".
         if let Some(sid) = claude_session_id
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            cmd.arg("--session-id");
+            if resume.unwrap_or(false) {
+                cmd.arg("--resume");
+            } else {
+                cmd.arg("--session-id");
+            }
             cmd.arg(sid);
         }
     }
