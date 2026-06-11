@@ -1532,6 +1532,34 @@ body {
   overflow: hidden;
 }
 
+/* Inline in the header row (next to the persona brand) — strip the standalone
+ * panel chrome, flex to fill the middle, and compact the cells to row height. */
+.cockpit-header > .window-chat-constellation {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: none;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.cockpit-header > .window-chat-constellation .window-chat-constellation-scroll {
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.cockpit-header > .window-chat-constellation .window-chat-constellation-cell {
+  width: auto;
+  padding: 4px;
+}
+
+/* Avatar-only in the header; the per-persona name labels would blow past the
+ * 52px row height. Identity still reads from the brand block on the left. */
+.cockpit-header > .window-chat-constellation .window-chat-constellation-label {
+  display: none;
+}
+
 .window-chat-constellation-scroll {
   display: flex;
   align-items: flex-start;

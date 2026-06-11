@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bot, Plus } from "lucide-react";
+import { Bot } from "lucide-react";
 import ClaudeTab from "../Claude/ClaudeTab";
 import WindowControls from "./WindowControls";
 import ProfileConstellation from "../Persona/ProfileConstellation";
@@ -63,10 +63,6 @@ export default function Cockpit() {
   useEffect(() => applyThemeVars(themeName), [themeName]);
   useEffect(() => installThemeSync(), []);
 
-  const handleTabClick = (cli: CliDef) => {
-    if (cli.ready) setActiveCli(cli.id);
-  };
-
   return (
     <div className={`cockpit${mini ? " mini" : ""}`}>
       <div className="cockpit-frame" aria-hidden="true" data-tauri-drag-region />
@@ -79,7 +75,8 @@ export default function Cockpit() {
           </div>
         ) : (
           <>
-            {/* Row 1: current persona (left) · CLI tabs + window controls (right) */}
+            {/* Single header row: current persona (left) · persona
+                constellation (switch + add) · theme + window controls (right) */}
             <nav className="cockpit-header" data-tauri-drag-region>
               <button
                 type="button"
@@ -99,40 +96,9 @@ export default function Cockpit() {
                 </span>
               </button>
 
-              <div className="cockpit-header-right">
-                <div
-                  className="cockpit-tab-row"
-                  role="tablist"
-                  aria-label="AI coding CLIs"
-                >
-                  {CLIS.map((cli) => (
-                    <button
-                      key={cli.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={activeCli === cli.id}
-                      className={`cockpit-tab cockpit-tab--${cli.id}${activeCli === cli.id ? " active" : ""}${
-                        cli.ready ? "" : " disabled"
-                      }`}
-                      disabled={!cli.ready}
-                      onClick={() => handleTabClick(cli)}
-                      title={cli.ready ? cli.label : `${cli.label} — coming soon`}
-                    >
-                      {cli.label}
-                      {!cli.ready && <span className="cockpit-tab-soon">soon</span>}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="cockpit-tab add"
-                    disabled
-                    title="Add a CLI — coming soon"
-                    aria-label="Add a CLI"
-                  >
-                    <Plus size={14} strokeWidth={2} />
-                  </button>
-                </div>
+              <ProfileConstellation onManage={() => setPersonaOpen(true)} />
 
+              <div className="cockpit-header-right">
                 <button
                   type="button"
                   className="cockpit-theme-dot"
@@ -144,9 +110,6 @@ export default function Cockpit() {
                 <WindowControls />
               </div>
             </nav>
-
-            {/* Row 2: full-width persona constellation (switch + add). */}
-            <ProfileConstellation onManage={() => setPersonaOpen(true)} />
           </>
         )}
 
