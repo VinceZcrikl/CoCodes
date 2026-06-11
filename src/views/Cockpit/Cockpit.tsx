@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Bot } from "lucide-react";
 import ClaudeTab from "../Claude/ClaudeTab";
 import WindowControls from "./WindowControls";
+import AppLogo from "./AppLogo";
 import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaAvatar from "../Persona/PersonaAvatar";
 import PersonaManager from "../Persona/PersonaManager";
@@ -82,7 +82,7 @@ export default function Cockpit() {
       <div className="cockpit-panel">
         {mini ? (
           <div className="cockpit-mini-bar" data-tauri-drag-region>
-            <Bot size={14} strokeWidth={2} aria-hidden="true" />
+            <AppLogo className="cockpit-mini-logo" />
             <span className="cockpit-mini-title">Open Terminus · {activeName}</span>
             <WindowControls />
           </div>
@@ -92,6 +92,7 @@ export default function Cockpit() {
                 constellation (avatars + add) · theme + window controls (right).
                 The active persona drives which CLI is shown. */}
             <nav className="cockpit-header" data-tauri-drag-region>
+              <AppLogo className="cockpit-header-logo" />
               <button
                 type="button"
                 className="cockpit-persona-brand"

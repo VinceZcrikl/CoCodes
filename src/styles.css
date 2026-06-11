@@ -2378,6 +2378,19 @@ body {
   flex: none;
 }
 
+.cockpit-mini-logo {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.cockpit-header-logo {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  margin-right: 2px;
+}
+
 .cockpit-mini-title {
   flex: 1;
   font-size: 12px;
