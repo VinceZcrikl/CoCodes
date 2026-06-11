@@ -328,12 +328,17 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       cleanup.push(() => onData.dispose());
 
       // Subscribe to PTY output before opening so we don't drop the banner.
-      // Also scan for Claude Code's session-lock error to auto-recover from stale locks.
-      // Pattern is intentionally narrow: Node.js EADDRINUSE also contains "is already in use"
-      // (e.g. "address already in use :::3000") and would fire false positives. We require
-      // the word "Session" or "session-id" nearby so only Claude Code's own conflict message
-      // triggers a respawn. The null guard prevents the ~300ms startup window (before
-      // terminal_open resolves and sessionIdRef is set) from processing other terminals' data.
+      // Also scan for two Claude Code session errors that both recover by
+      // respawning the pane with a fresh conversation id:
+      //   • "...is already in use" — a stale lock or duplicate `--session-id`.
+      //   • "No conversation found with session ID" — a `--resume` of a session
+      //     that was marked started but never actually persisted by claude
+      //     (e.g. an empty session, or one created before the resume change).
+      // The "already in use" pattern is kept narrow (requires "Session" nearby)
+      // so Node's EADDRINUSE ("address already in use") can't trigger a false
+      // positive. The null guard prevents the ~300ms startup window (before
+      // terminal_open resolves and sessionIdRef is set) from processing other
+      // terminals' data.
       let conflictFired = false;
       void listen<DataEvent>("terminal://data", (ev) => {
         if (!sessionIdRef.current || ev.payload.id !== sessionIdRef.current) return;
@@ -341,7 +346,10 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         term.write(bytes);
         if (!conflictFired) {
           const text = new TextDecoder().decode(bytes);
-          if (/[Ss]ession.*is already in use|is already in use.*session/i.test(text)) {
+          if (
+            /[Ss]ession.*is already in use|is already in use.*session/i.test(text) ||
+            /No conversation found with session ID/i.test(text)
+          ) {
             conflictFired = true;
             onSessionConflictRef.current?.();
           }
