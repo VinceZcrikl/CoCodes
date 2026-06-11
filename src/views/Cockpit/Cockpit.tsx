@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Bot } from "lucide-react";
 import ClaudeTab from "../Claude/ClaudeTab";
 import WindowControls from "./WindowControls";
+import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaAvatar from "../Persona/PersonaAvatar";
 import PersonaManager from "../Persona/PersonaManager";
 import { usePersonas } from "../../hooks/usePersonas";
@@ -87,9 +88,9 @@ export default function Cockpit() {
           </div>
         ) : (
           <>
-            {/* Single header row: current persona (left) · theme + window
-                controls (right). Switch persona via the brand → manager;
-                the active persona drives which CLI is shown. */}
+            {/* Single header row: current persona (left) · persona
+                constellation (avatars + add) · theme + window controls (right).
+                The active persona drives which CLI is shown. */}
             <nav className="cockpit-header" data-tauri-drag-region>
               <button
                 type="button"
@@ -108,6 +109,8 @@ export default function Cockpit() {
                   <span className="cockpit-persona-brand-status">ready</span>
                 </span>
               </button>
+
+              <ProfileConstellation onManage={() => setPersonaOpen(true)} />
 
               <div className="cockpit-header-right">
                 <button
