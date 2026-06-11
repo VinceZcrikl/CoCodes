@@ -24,35 +24,38 @@ export interface ClaudeTerminalHandle {
    *  screenshot button to drop the captured file path in. */
   insert: (text: string) => void;
   focus: () => void;
+  /** Returns the currently selected text in the terminal (empty string when
+   *  nothing is selected). Used by the relay feature to copy a selection to
+   *  another pane's input. */
+  getSelection: () => string;
 }
 
 interface Props {
   profileId: string;
-  /** Claude conversation UUID this terminal binds to (`--session-id` /
-   *  `--resume`). */
+  /** Claude conversation UUID this terminal binds to (`--session-id`). */
   claudeSessionId?: string;
-  /** Resume the bound session instead of starting it fresh. Read once at mount. */
-  resume?: boolean;
+  /** On the very first spawn of a forked pane, use this session ID instead of
+   *  `claudeSessionId` so the fork starts with the source conversation history.
+   *  After the first spawn this is ignored — the pane diverges under its own ID. */
+  forkFromSessionId?: string;
   /** Working directory for the spawned claude process. null/absent → home dir.
    *  Read once at mount; use the `cd` injection path for mid-session changes. */
   cwd?: string | null;
-  /** Raised when the backend can't find the `claude` binary, so the view can
-   *  show the install card instead of a blank terminal. */
   /** "claude" | "codex" | "grok" — which CLI binary to spawn. */
   cli?: string;
+  /** Raised when the backend can't find the `cli` binary. */
   onMissingCli?: (message: string) => void;
-  /** Raised after the PTY successfully spawns the CLI — the view uses this to
-   *  mark the session "started" so next open resumes it. */
+  /** Raised after the PTY successfully spawns the CLI. */
   onOpened?: () => void;
   /** Raised when claude exits (or fails to spawn). */
   onExit?: (code: number | null) => void;
-  /** Raised whenever this terminal gains keyboard focus, so the pane layout can
-   *  track the active pane for toolbar injection + prefix commands. */
+  /** Raised whenever this terminal gains keyboard focus. */
   onFocus?: () => void;
-  /** Intercept key events before they reach the PTY (xterm
-   *  `attachCustomKeyEventHandler`). Return `false` to swallow the key — used by
-   *  the pane layout to implement the tmux-style split/close/focus prefix. */
+  /** Intercept key events before they reach the PTY. Return `false` to swallow. */
   onKeyEvent?: (e: KeyboardEvent) => boolean;
+  /** Raised when the PTY output contains "already in use" — the caller should
+   *  generate a new convId and remount this terminal to recover. */
+  onSessionConflict?: () => void;
 }
 
 interface DataEvent {
@@ -75,7 +78,8 @@ function decodeBase64(b64: string): Uint8Array {
  *  component on profileId + session so switching tears down and respawns. */
 const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
   function ClaudeTerminal(
-    { profileId, claudeSessionId, cwd, cli = "claude", onMissingCli, onOpened, onExit, onFocus, onKeyEvent },
+    { profileId, claudeSessionId, forkFromSessionId, cwd, cli = "claude",
+      onMissingCli, onOpened, onExit, onFocus, onKeyEvent, onSessionConflict },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
@@ -83,12 +87,14 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
     const sessionIdRef = useRef<string | null>(null);
     const themeName = useThemeStore((s) => s.name);
 
-    // Keep the latest focus/key callbacks in refs so the mount-time effect (which
-    // intentionally doesn't re-run on prop changes) always calls the current one.
+    // Keep the latest focus/key/conflict callbacks in refs so the mount-time
+    // effect always calls the current version without being in its deps.
     const onFocusRef = useRef(onFocus);
     onFocusRef.current = onFocus;
     const onKeyEventRef = useRef(onKeyEvent);
     onKeyEventRef.current = onKeyEvent;
+    const onSessionConflictRef = useRef(onSessionConflict);
+    onSessionConflictRef.current = onSessionConflict;
 
     // Re-theme the live terminal when the cockpit theme changes (no remount).
     useEffect(() => {
@@ -121,6 +127,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         termRef.current?.focus();
       },
       focus: () => termRef.current?.focus(),
+      getSelection: () => termRef.current?.getSelection() ?? "",
     }));
 
     useEffect(() => {
@@ -233,11 +240,14 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
             spawned = true;
             lastCols = term.cols;
             lastRows = term.rows;
+            // For a fork pane (not yet started), use the source session ID so
+            // the fork inherits conversation history on its very first run.
+            const spawnSessionId = forkFromSessionId ?? claudeSessionId;
             void invoke<string>("terminal_open", {
               profileId,
               cols: term.cols,
               rows: term.rows,
-              claudeSessionId,
+              claudeSessionId: spawnSessionId,
               cwd: cwd ?? null,
               cli,
             })
@@ -311,9 +321,19 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       cleanup.push(() => onData.dispose());
 
       // Subscribe to PTY output before opening so we don't drop the banner.
+      // Also scan for "already in use" to auto-recover from stale session locks.
+      let conflictFired = false;
       void listen<DataEvent>("terminal://data", (ev) => {
         if (ev.payload.id !== sessionIdRef.current) return;
-        term.write(decodeBase64(ev.payload.data));
+        const bytes = decodeBase64(ev.payload.data);
+        term.write(bytes);
+        if (!conflictFired) {
+          const text = new TextDecoder().decode(bytes);
+          if (text.includes("is already in use")) {
+            conflictFired = true;
+            onSessionConflictRef.current?.();
+          }
+        }
       }).then((un) => {
         if (disposed) un();
         else cleanup.push(un);

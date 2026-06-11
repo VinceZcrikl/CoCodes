@@ -22,6 +22,12 @@ export interface PaneNode {
   /** Per-pane persona override. When set, this pane uses a different profile
    *  than the session-level profileId — set by dragging an avatar onto the pane. */
   profileId?: string;
+  /** Set by fork-split: on the FIRST spawn only, the PTY opens with this
+   *  session ID (to load the forked conversation history). After the first
+   *  spawn `started` becomes true and subsequent restarts use `convId`.
+   *  This field is never the same as `convId`, avoiding the "already in use"
+   *  conflict that arises when two panes share the same `--session-id`. */
+  forkFromConvId?: string;
 }
 
 /** An internal split: two children divided horizontally or vertically. */
@@ -340,9 +346,12 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
   );
 
   /** Split `paneId` in `sessionId`, adding a fresh pane bound to a new
-   *  conversation UUID. The new pane inherits the source pane's cli + cwd. */
+   *  conversation UUID. The new pane inherits the source pane's cli + cwd.
+   *  When `forkConvId` is supplied the new pane sets `forkFromConvId` so its
+   *  first PTY spawn loads the source conversation history; subsequent restarts
+   *  use the pane's own fresh `convId` (no "already in use" conflict). */
   const splitPane = useCallback(
-    (sessionId: string, paneId: string, dir: "row" | "col") => {
+    (sessionId: string, paneId: string, dir: "row" | "col", forkConvId?: string) => {
       update((s) => ({
         ...s,
         sessions: s.sessions.map((sess) => {
@@ -352,7 +361,8 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
           const fresh: PaneNode = {
             type: "pane",
             paneId: newId(),
-            convId: newId(),
+            convId: newId(),                    // always unique
+            forkFromConvId: forkConvId,         // used once on first spawn
             cli: source?.cli ?? cli,
             started: false,
             cwd: source?.cwd ?? null,
@@ -421,6 +431,30 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
       }));
     },
     [update],
+  );
+
+  /** Issue a fresh `convId` for `paneId` so `ClaudeTerminal` remounts and
+   *  starts a new session. Called automatically when the PTY output contains
+   *  "already in use", recovering from stale lock files or duplicate forks. */
+  const respawnPane = useCallback(
+    (sessionId: string, paneId: string) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          const layout = sess.layout ?? defaultLayout(sess, cli);
+          const patch = (node: LayoutNode): LayoutNode => {
+            if (node.type === "pane") {
+              if (node.paneId !== paneId) return node;
+              return { ...node, convId: newId(), forkFromConvId: undefined, started: false };
+            }
+            return { ...node, children: [patch(node.children[0]), patch(node.children[1])] };
+          };
+          return { ...sess, layout: patch(layout) };
+        }),
+      }));
+    },
+    [update, cli],
   );
 
   /** Rebind `paneId` to a new persona + CLI. Issues a fresh convId so the
@@ -510,6 +544,7 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     setSplitRatio,
     markPaneStarted,
     assignPaneProfile,
+    respawnPane,
     togglePin,
     setGroup,
     newGroup,

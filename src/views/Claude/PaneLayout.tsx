@@ -6,8 +6,10 @@ import {
   useState,
 } from "react";
 import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
-import { SplitSquareHorizontal, SplitSquareVertical, X } from "lucide-react";
+import { SplitSquareHorizontal, SplitSquareVertical, X, Send } from "lucide-react";
+import { INJECT_PANE_EVENT, type InjectPaneDetail } from "../../state/delegationMonitor";
 import {
+  findPane,
   forEachPane,
   type LayoutNode,
   type PaneNode,
@@ -29,12 +31,16 @@ interface PaneCtx {
   handles: React.MutableRefObject<Map<string, ClaudeTerminalHandle>>;
   leafEls: React.MutableRefObject<Map<string, HTMLElement>>;
   setActive: (paneId: string) => void;
-  onSplit: (paneId: string, dir: "row" | "col") => void;
+  onSplit: (paneId: string, dir: "row" | "col", forkConvId?: string) => void;
   onClose: (paneId: string) => void;
   onSetRatio: (splitId: string, ratio: number) => void;
   onPaneStarted: (paneId: string) => void;
   onMissingCli?: (message: string) => void;
   onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
+  /** Returns true if text was relayed, false if nothing was selected. */
+  onRelay: (fromPaneId: string) => boolean;
+  /** Generate a new convId for `paneId` to recover from a session lock conflict. */
+  onRespawn: (paneId: string) => void;
   makeKeyHandler: (paneId: string) => (e: KeyboardEvent) => boolean;
   /** >1 pane in the tree → show per-pane close buttons. */
   multi: boolean;
@@ -49,12 +55,13 @@ interface Props {
   reloadKey: number;
   /** Mini window mode → render only the active pane full-bleed. */
   mini: boolean;
-  onSplit: (paneId: string, dir: "row" | "col") => void;
+  onSplit: (paneId: string, dir: "row" | "col", forkConvId?: string) => void;
   onClose: (paneId: string) => void;
   onSetRatio: (splitId: string, ratio: number) => void;
   onPaneStarted: (paneId: string) => void;
   onMissingCli?: (message: string) => void;
   onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
+  onRespawn: (paneId: string) => void;
 }
 
 /** Ordered list of pane ids as they appear left-to-right / top-to-bottom. */
@@ -76,6 +83,7 @@ function countPanes(node: LayoutNode): number {
 function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   const active = ctx.activePaneId === node.paneId;
   const [dropOver, setDropOver] = useState(false);
+  const [relayMiss, setRelayMiss] = useState(false);
 
   // Per-pane profile override: if this pane was assigned a persona directly,
   // use its own profileId; otherwise fall back to the session-level one.
@@ -101,19 +109,35 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
       <div className="pane-header">
         <span className="pane-header-cli">{node.cli}</span>
         <span className="pane-header-spacer" />
+        {ctx.multi && (
+          <button
+            type="button"
+            className={`pane-header-btn${relayMiss ? " relay-miss" : ""}`}
+            title="Select text in terminal, then click to relay to the next pane"
+            onClick={() => {
+              const ok = ctx.onRelay(node.paneId);
+              if (!ok) {
+                setRelayMiss(true);
+                window.setTimeout(() => setRelayMiss(false), 500);
+              }
+            }}
+          >
+            <Send size={12} strokeWidth={1.75} />
+          </button>
+        )}
         <button
           type="button"
           className="pane-header-btn"
-          title="Split right (Ctrl+B %)"
-          onClick={() => ctx.onSplit(node.paneId, "row")}
+          title="Split right (Ctrl+B %) · Shift+click to fork conversation"
+          onClick={(e) => ctx.onSplit(node.paneId, "row", e.shiftKey ? node.convId : undefined)}
         >
           <SplitSquareHorizontal size={13} strokeWidth={1.75} />
         </button>
         <button
           type="button"
           className="pane-header-btn"
-          title='Split down (Ctrl+B ")'
-          onClick={() => ctx.onSplit(node.paneId, "col")}
+          title='Split down (Ctrl+B ") · Shift+click to fork conversation'
+          onClick={(e) => ctx.onSplit(node.paneId, "col", e.shiftKey ? node.convId : undefined)}
         >
           <SplitSquareVertical size={13} strokeWidth={1.75} />
         </button>
@@ -136,10 +160,12 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         }}
         profileId={effectiveProfileId}
         claudeSessionId={node.convId}
+        forkFromSessionId={node.started ? undefined : node.forkFromConvId}
         cwd={node.cwd ?? ctx.defaultCwd}
         cli={node.cli}
         onMissingCli={ctx.onMissingCli}
         onOpened={() => ctx.onPaneStarted(node.paneId)}
+        onSessionConflict={() => ctx.onRespawn(node.paneId)}
         onFocus={() => ctx.setActive(node.paneId)}
         onKeyEvent={ctx.makeKeyHandler(node.paneId)}
       />
@@ -215,6 +241,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     onPaneStarted,
     onMissingCli,
     onAssignPaneProfile,
+    onRespawn,
   },
   ref,
 ) {
@@ -300,6 +327,12 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
         onSplit(paneId, "col");
         return false;
       }
+      if (e.key === "f" || e.key === "F") {
+        // Fork: new pane that shares the current conversation history.
+        const srcPane = findPane(layout, paneId);
+        if (srcPane) onSplit(paneId, "row", srcPane.convId);
+        return false;
+      }
       if (e.key === "x") {
         if (countPanes(layout) > 1) onClose(paneId);
         return false;
@@ -334,6 +367,31 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     return true;
   };
 
+  // Relay the selected text from `fromPaneId` to the next pane in tree order.
+  // Returns false when nothing was selected so PaneLeaf can flash the button.
+  const onRelay = (fromPaneId: string): boolean => {
+    const text = handles.current.get(fromPaneId)?.getSelection() ?? "";
+    if (!text.trim()) return false;
+    const fromIdx = order.indexOf(fromPaneId);
+    const targetId = order[(fromIdx + 1) % order.length];
+    if (targetId && targetId !== fromPaneId) {
+      handles.current.get(targetId)?.writeLine(text);
+      return true;
+    }
+    return false;
+  };
+
+  // Listen for cross-component injection events dispatched by the delegation
+  // monitor routing layer in ClaudeTab.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { paneId: tgt, text } = (e as CustomEvent<InjectPaneDetail>).detail;
+      handles.current.get(tgt)?.writeLine(text);
+    };
+    window.addEventListener(INJECT_PANE_EVENT, handler);
+    return () => window.removeEventListener(INJECT_PANE_EVENT, handler);
+  }, []);
+
   useImperativeHandle(ref, () => ({
     writeLine: (text: string) => {
       const id = activePaneId ?? order[0];
@@ -346,6 +404,10 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     focus: () => {
       const id = activePaneId ?? order[0];
       if (id) handles.current.get(id)?.focus();
+    },
+    getSelection: () => {
+      const id = activePaneId ?? order[0];
+      return id ? (handles.current.get(id)?.getSelection() ?? "") : "";
     },
   }));
 
@@ -371,6 +433,8 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
       onPaneStarted,
       onMissingCli,
       onAssignPaneProfile,
+      onRelay,
+      onRespawn,
       makeKeyHandler,
       multi: false,
     };
@@ -394,6 +458,8 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     onPaneStarted,
     onMissingCli,
     onAssignPaneProfile,
+    onRelay,
+    onRespawn,
     makeKeyHandler,
     multi: order.length > 1,
   };

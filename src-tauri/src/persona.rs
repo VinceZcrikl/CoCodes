@@ -284,7 +284,13 @@ pub async fn seed_default_personas() {
             soul: "You are a senior software engineer powered by Claude Code.\n\
                    Write clean, minimal, and correct code. Be direct and concise.\n\
                    Prefer editing existing files over creating new ones.\n\
-                   Don't add error handling or abstractions beyond what the task requires.",
+                   Don't add error handling or abstractions beyond what the task requires.\n\n\
+                   When you need to delegate a sub-task to another AI agent, emit this block on its own line:\n\
+                   [TASK→codex]\n\
+                   <task description>\n\
+                   [/TASK]\n\
+                   Replace 'codex' with 'grok' to target the Grok CLI instead.\n\
+                   The app will automatically route the task to the appropriate pane.",
             avatar: "__mascot:claude__",
         },
         Seed {

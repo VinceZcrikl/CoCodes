@@ -1,9 +1,17 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useClaudeSessions, forEachPane } from "../../hooks/useClaudeSessions";
 import { useProfileStore } from "../../state/profileStore";
 import ClaudeSidebar from "./ClaudeSidebar";
 import ClaudeTerminalView from "./ClaudeTerminalView";
 import { PERSONA_DROP_EVENT, type PersonaDropDetail } from "../../state/dragState";
+import {
+  startDelegationMonitor,
+  stopDelegationMonitor,
+  DELEGATION_EVENT,
+  INJECT_PANE_EVENT,
+  type DelegationDetail,
+  type InjectPaneDetail,
+} from "../../state/delegationMonitor";
 
 interface Props {
   /** "claude" | "codex" | "grok" — determines which binary to spawn and which
@@ -15,6 +23,7 @@ interface Props {
  *  persona (from the cockpit header) is the terminal's profileId. */
 export default function ClaudeTab({ cli }: Props) {
   const profileId = useProfileStore((s) => s.activeProfileId);
+  const [delegationToast, setDelegationToast] = useState<string | null>(null);
 
   const {
     sessions,
@@ -31,6 +40,7 @@ export default function ClaudeTab({ cli }: Props) {
     setSplitRatio,
     markPaneStarted,
     assignPaneProfile,
+    respawnPane,
     togglePin,
     setGroup,
     newGroup,
@@ -63,8 +73,41 @@ export default function ClaudeTab({ cli }: Props) {
     return () => window.removeEventListener(PERSONA_DROP_EVENT, handler);
   }, [sessions, assignPaneProfile]);
 
+  // Start the PTY output monitor that watches for [TASK→<cli>] delegation
+  // blocks. Reference-counted so multiple tabs share one Tauri listener.
+  useEffect(() => {
+    void startDelegationMonitor();
+    return () => stopDelegationMonitor();
+  }, []);
+
+  // Route delegation events to a pane in this tab that runs the target CLI.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { targetCli, task } = (e as CustomEvent<DelegationDetail>).detail;
+      let targetPaneId: string | null = null;
+      for (const s of sessions) {
+        forEachPane(resolveLayout(s), (p) => {
+          if (!targetPaneId && p.cli === targetCli) targetPaneId = p.paneId;
+        });
+        if (targetPaneId) break;
+      }
+      if (!targetPaneId) return;
+      const detail: InjectPaneDetail = { paneId: targetPaneId, text: task };
+      window.dispatchEvent(new CustomEvent(INJECT_PANE_EVENT, { detail }));
+      setDelegationToast(`→ ${targetCli}`);
+      window.setTimeout(() => setDelegationToast(null), 2800);
+    };
+    window.addEventListener(DELEGATION_EVENT, handler);
+    return () => window.removeEventListener(DELEGATION_EVENT, handler);
+  }, [sessions, resolveLayout]);
+
   return (
     <div className="cli-tab">
+      {delegationToast && (
+        <div className="delegation-toast" aria-live="polite">
+          Task routed {delegationToast}
+        </div>
+      )}
       <ClaudeSidebar
         sessions={sessions}
         groups={groups}
@@ -91,6 +134,7 @@ export default function ClaudeTab({ cli }: Props) {
           onSetSplitRatio={setSplitRatio}
           onPaneStarted={markPaneStarted}
           onAssignPaneProfile={assignPaneProfile}
+          onRespawnPane={respawnPane}
         />
       </div>
     </div>

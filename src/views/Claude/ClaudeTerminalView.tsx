@@ -40,6 +40,7 @@ export default function ClaudeTerminalView({
   onSetSplitRatio,
   onPaneStarted,
   onAssignPaneProfile,
+  onRespawnPane,
 }: {
   profileId: string;
   activeId: string | null;
@@ -48,11 +49,12 @@ export default function ClaudeTerminalView({
    *  session has never been split). */
   layout: LayoutNode | null;
   cli?: string;
-  onSplitPane: (sessionId: string, paneId: string, dir: "row" | "col") => void;
+  onSplitPane: (sessionId: string, paneId: string, dir: "row" | "col", forkConvId?: string) => void;
   onClosePane: (sessionId: string, paneId: string) => void;
   onSetSplitRatio: (sessionId: string, splitId: string, ratio: number) => void;
   onPaneStarted: (sessionId: string, paneId: string) => void;
   onAssignPaneProfile: (sessionId: string, paneId: string, profileId: string, cli: string) => void;
+  onRespawnPane: (sessionId: string, paneId: string) => void;
 }) {
   const termRef = useRef<ClaudeTerminalHandle | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
@@ -152,13 +154,14 @@ export default function ClaudeTerminalView({
             defaultCwd={cwd}
             reloadKey={reloadKey}
             mini={mini}
-            onSplit={(paneId, dir) => onSplitPane(active.id, paneId, dir)}
+            onSplit={(paneId, dir, forkConvId) => onSplitPane(active.id, paneId, dir, forkConvId)}
             onClose={(paneId) => onClosePane(active.id, paneId)}
             onSetRatio={(splitId, ratio) => onSetSplitRatio(active.id, splitId, ratio)}
             onPaneStarted={(paneId) => onPaneStarted(active.id, paneId)}
             onAssignPaneProfile={(paneId, profileId, cli) =>
               onAssignPaneProfile(active.id, paneId, profileId, cli)
             }
+            onRespawn={(paneId) => onRespawnPane(active.id, paneId)}
             onMissingCli={setMissing}
           />
         )}
