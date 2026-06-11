@@ -6,11 +6,18 @@
  *   task description here
  *   [/TASK]
  *
- * This module watches all `terminal://data` Tauri events, strips ANSI codes,
- * and fires `terminus:delegation` on `window` when a block is detected.
+ * Sub-agents report back by emitting a result block:
  *
- * `ClaudeTab` handles the event and dispatches `terminus:inject-to-pane` to
- * route the task text into the correct pane's PTY stdin. */
+ *   [RESULT_BACK]
+ *   result text here
+ *   [/RESULT_BACK]
+ *
+ * This module watches all `terminal://data` Tauri events, strips ANSI codes,
+ * and fires `terminus:delegation` / `terminus:delegation-result` on `window`
+ * when blocks are detected.
+ *
+ * `ClaudeTab` handles both events and dispatches `terminus:inject-to-pane` to
+ * route text into the correct pane's PTY stdin. */
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 // ─── Public event names & types ──────────────────────────────────────────────
@@ -35,6 +42,16 @@ export interface InjectPaneDetail {
   text: string;
 }
 
+/** Fired on `window` when a result block is detected in any PTY output. */
+export const DELEGATION_RESULT_EVENT = "terminus:delegation-result";
+
+export interface DelegationResultDetail {
+  /** Full result body (trimmed). */
+  result: string;
+  /** PTY session ID of the terminal that emitted the result. */
+  fromSessionId: string;
+}
+
 // ─── Internal singleton state ─────────────────────────────────────────────────
 
 interface DataEvent {
@@ -49,6 +66,8 @@ let refCount = 0;
 
 const PATTERN = /\[TASK→(\w+)\]\n([\s\S]*?)\[\/TASK\]/g;
 const CLEAR_PATTERN = /\[TASK→\w+\][\s\S]*?\[\/TASK\]/g;
+const RESULT_PATTERN = /\[RESULT_BACK\]\n([\s\S]*?)\[\/RESULT_BACK\]/g;
+const CLEAR_RESULT_PATTERN = /\[RESULT_BACK\][\s\S]*?\[\/RESULT_BACK\]/g;
 const ANSI_RE =
   /\x1b\[[0-9;]*[mGKHFJA-Za-z]|\x1b\][^\x07]*\x07|\x1b[^[\]]/g;
 
@@ -81,9 +100,20 @@ export async function startDelegationMonitor(): Promise<void> {
       window.dispatchEvent(new CustomEvent(DELEGATION_EVENT, { detail }));
     }
 
-    // Remove matched blocks so they don't re-fire on the next chunk.
+    // Remove matched delegation blocks so they don't re-fire on the next chunk.
     const cleared = combined.replace(CLEAR_PATTERN, "");
-    if (cleared !== combined) buffers.set(id, cleared);
+
+    // Second pass: detect result-back blocks emitted by sub-agents.
+    RESULT_PATTERN.lastIndex = 0;
+    while ((match = RESULT_PATTERN.exec(combined)) !== null) {
+      const detail: DelegationResultDetail = { result: match[1].trim(), fromSessionId: id };
+      window.dispatchEvent(new CustomEvent(DELEGATION_RESULT_EVENT, { detail }));
+    }
+    const clearedResult = cleared.replace(CLEAR_RESULT_PATTERN, "");
+
+    // Write the fully-cleared buffer back once.
+    if (clearedResult !== combined) buffers.set(id, clearedResult);
+    else if (cleared !== combined) buffers.set(id, cleared);
   });
 }
 

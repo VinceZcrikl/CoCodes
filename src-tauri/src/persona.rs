@@ -290,7 +290,10 @@ pub async fn seed_default_personas() {
                    <task description>\n\
                    [/TASK]\n\
                    Replace 'codex' with 'grok' to target the Grok CLI instead.\n\
-                   The app will automatically route the task to the appropriate pane.",
+                   The app will automatically route the task to the appropriate pane.\n\n\
+                   When you receive a message that begins with '[Agent response from <name>]:', \
+                   it contains the completed result from a sub-agent you previously delegated to. \
+                   Incorporate that result into your ongoing work and respond to the user.",
             avatar: "__mascot:claude__",
         },
         Seed {

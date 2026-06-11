@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useClaudeSessions, forEachPane } from "../../hooks/useClaudeSessions";
 import { useProfileStore } from "../../state/profileStore";
 import ClaudeSidebar from "./ClaudeSidebar";
@@ -8,8 +8,10 @@ import {
   startDelegationMonitor,
   stopDelegationMonitor,
   DELEGATION_EVENT,
+  DELEGATION_RESULT_EVENT,
   INJECT_PANE_EVENT,
   type DelegationDetail,
+  type DelegationResultDetail,
   type InjectPaneDetail,
 } from "../../state/delegationMonitor";
 
@@ -24,6 +26,8 @@ interface Props {
 export default function ClaudeTab({ cli }: Props) {
   const profileId = useProfileStore((s) => s.activeProfileId);
   const [delegationToast, setDelegationToast] = useState<string | null>(null);
+  // Tracks the last CLI we delegated to so the return toast can name it.
+  const lastDelegatedCliRef = useRef<string>("agent");
 
   const {
     sessions,
@@ -92,13 +96,42 @@ export default function ClaudeTab({ cli }: Props) {
         if (targetPaneId) break;
       }
       if (!targetPaneId) return;
-      const detail: InjectPaneDetail = { paneId: targetPaneId, text: task };
+      // Append return-protocol instructions so the sub-agent knows to emit a
+      // structured result block that the delegation monitor will route back.
+      const textWithReturn =
+        `${task}\n\nAfter completing this task, output your findings between these exact markers (each on its own line):\n[RESULT_BACK]\n<your result here>\n[/RESULT_BACK]`;
+      lastDelegatedCliRef.current = targetCli;
+      const detail: InjectPaneDetail = { paneId: targetPaneId, text: textWithReturn };
       window.dispatchEvent(new CustomEvent(INJECT_PANE_EVENT, { detail }));
       setDelegationToast(`→ ${targetCli}`);
       window.setTimeout(() => setDelegationToast(null), 2800);
     };
     window.addEventListener(DELEGATION_EVENT, handler);
     return () => window.removeEventListener(DELEGATION_EVENT, handler);
+  }, [sessions, resolveLayout]);
+
+  // Route sub-agent result blocks back into the first Claude pane found.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { result } = (e as CustomEvent<DelegationResultDetail>).detail;
+      // V1 heuristic: find the first pane with cli === "claude" across all sessions.
+      let claudePaneId: string | null = null;
+      for (const s of sessions) {
+        forEachPane(resolveLayout(s), (p) => {
+          if (!claudePaneId && p.cli === "claude") claudePaneId = p.paneId;
+        });
+        if (claudePaneId) break;
+      }
+      if (!claudePaneId) return;
+      const fromCli = lastDelegatedCliRef.current;
+      const message = `[Agent response from ${fromCli}]:\n${result}`;
+      const detail: InjectPaneDetail = { paneId: claudePaneId, text: message };
+      window.dispatchEvent(new CustomEvent(INJECT_PANE_EVENT, { detail }));
+      setDelegationToast(`← ${fromCli}`);
+      window.setTimeout(() => setDelegationToast(null), 2800);
+    };
+    window.addEventListener(DELEGATION_RESULT_EVENT, handler);
+    return () => window.removeEventListener(DELEGATION_RESULT_EVENT, handler);
   }, [sessions, resolveLayout]);
 
   return (

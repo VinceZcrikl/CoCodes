@@ -136,11 +136,21 @@ fn find_claude() -> Option<PathBuf> {
     }
     #[cfg(windows)]
     if let Ok(appdata) = std::env::var("APPDATA") {
-        extras.push(PathBuf::from(&appdata).join("npm"));
+        let npm = PathBuf::from(&appdata).join("npm");
+        // Search the native binary directly before falling back to the .cmd
+        // wrapper. npm-generated .cmd scripts use %~dp0 which expands to the
+        // directory with a trailing backslash, giving npm\\node_modules (double
+        // backslash) that Windows cannot resolve when quoted.
+        extras.push(npm.join("node_modules").join("@anthropic-ai").join("claude-code").join("bin"));
+        extras.push(npm);
     }
 
+    // Windows candidates: only real Win32 executables.
+    // - Bare name ("claude") is a Unix shebang script in APPDATA\npm — not a
+    //   valid Win32 application (os error 193).
+    // - .cmd wrappers are handled below in terminal_open via cmd.exe /D /C.
     #[cfg(windows)]
-    let candidates = ["claude.cmd", "claude.exe", "claude"];
+    let candidates = ["claude.exe", "claude.cmd"];
     #[cfg(not(windows))]
     let candidates = ["claude"];
 
@@ -162,17 +172,15 @@ fn find_codex() -> Option<PathBuf> {
         extras.push(h.join(".local/bin"));
         extras.push(h.join(".bun/bin"));
     }
-    // Windows: npm global bin is %APPDATA%\npm (not ~/.npm-global/bin).
-    // Also try %APPDATA%\npm for npm-installed packages.
     #[cfg(windows)]
     if let Ok(appdata) = std::env::var("APPDATA") {
-        extras.push(PathBuf::from(&appdata).join("npm"));
+        let npm = PathBuf::from(&appdata).join("npm");
+        extras.push(npm.join("node_modules").join("@openai").join("codex").join("bin"));
+        extras.push(npm);
     }
 
-    // On Windows try .cmd first (npm shim), then .exe (standalone installer),
-    // then bare name. On Unix just the bare name.
     #[cfg(windows)]
-    let candidates = ["codex.cmd", "codex.exe", "codex"];
+    let candidates = ["codex.exe", "codex.cmd"];
     #[cfg(not(windows))]
     let candidates = ["codex"];
 
@@ -209,7 +217,7 @@ fn find_grok() -> Option<PathBuf> {
     }
 
     #[cfg(windows)]
-    let candidates = ["grok.cmd", "grok.exe", "grok"];
+    let candidates = ["grok.exe", "grok.cmd"];
     #[cfg(not(windows))]
     let candidates = ["grok"];
 
@@ -319,7 +327,25 @@ pub async fn terminal_open(
         .openpty(size)
         .map_err(TerminalError::internal)?;
 
-    let mut cmd = CommandBuilder::new(binary.as_os_str());
+    // On Windows, CreateProcessW cannot directly execute .cmd batch scripts —
+    // they require cmd.exe /D /C as a launcher. Detect and wrap here so the
+    // rest of the arg-building code is unchanged.
+    #[cfg(windows)]
+    let is_cmd_script = binary
+        .extension()
+        .map_or(false, |e| e.eq_ignore_ascii_case("cmd"));
+    #[cfg(not(windows))]
+    let is_cmd_script = false;
+
+    let mut cmd = if is_cmd_script {
+        let mut c = CommandBuilder::new("cmd.exe");
+        c.arg("/D");
+        c.arg("/C");
+        c.arg(binary.as_os_str());
+        c
+    } else {
+        CommandBuilder::new(binary.as_os_str())
+    };
 
     if cli_name == "claude" {
         if let Some(file) = persona_file.as_ref() {
