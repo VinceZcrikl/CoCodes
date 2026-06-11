@@ -321,15 +321,20 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       cleanup.push(() => onData.dispose());
 
       // Subscribe to PTY output before opening so we don't drop the banner.
-      // Also scan for "already in use" to auto-recover from stale session locks.
+      // Also scan for Claude Code's session-lock error to auto-recover from stale locks.
+      // Pattern is intentionally narrow: Node.js EADDRINUSE also contains "is already in use"
+      // (e.g. "address already in use :::3000") and would fire false positives. We require
+      // the word "Session" or "session-id" nearby so only Claude Code's own conflict message
+      // triggers a respawn. The null guard prevents the ~300ms startup window (before
+      // terminal_open resolves and sessionIdRef is set) from processing other terminals' data.
       let conflictFired = false;
       void listen<DataEvent>("terminal://data", (ev) => {
-        if (ev.payload.id !== sessionIdRef.current) return;
+        if (!sessionIdRef.current || ev.payload.id !== sessionIdRef.current) return;
         const bytes = decodeBase64(ev.payload.data);
         term.write(bytes);
         if (!conflictFired) {
           const text = new TextDecoder().decode(bytes);
-          if (text.includes("is already in use")) {
+          if (/[Ss]ession.*is already in use|is already in use.*session/i.test(text)) {
             conflictFired = true;
             onSessionConflictRef.current?.();
           }
