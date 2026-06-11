@@ -1533,7 +1533,9 @@ body {
 
 /* Claude mascot (default persona) — clay creature on a dark warm disc. */
 .persona-avatar.persona-avatar-mascot {
-  background: #1a0f0b;
+  /* Neutral near-black so monochrome marks (Grok) and the warm creatures
+   * (Claude/Codex) all read cleanly on the same disc. */
+  background: #15151b;
 }
 
 .persona-mascot-svg {
