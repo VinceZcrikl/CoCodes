@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
-import { SplitSquareHorizontal, SplitSquareVertical, X, Send } from "lucide-react";
+import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2 } from "lucide-react";
 import { INJECT_PANE_EVENT, type InjectPaneDetail } from "../../state/delegationMonitor";
 import {
   findPane,
@@ -41,6 +41,12 @@ interface PaneCtx {
   onRelay: (fromPaneId: string) => boolean;
   /** Generate a new convId for `paneId` to recover from a session lock conflict. */
   onRespawn: (paneId: string) => void;
+  /** Expand `paneId` to a centered overlay. */
+  onZoom: (paneId: string) => void;
+  /** Collapse the currently zoomed pane back into the layout. */
+  onUnzoom: () => void;
+  zoomedPaneId: string | null;
+  zoomExiting: boolean;
   makeKeyHandler: (paneId: string) => (e: KeyboardEvent) => boolean;
   /** >1 pane in the tree → show per-pane close buttons. */
   multi: boolean;
@@ -85,18 +91,30 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   const [dropOver, setDropOver] = useState(false);
   const [relayMiss, setRelayMiss] = useState(false);
 
+  const isZoomed = ctx.zoomedPaneId === node.paneId;
+  const isExiting = isZoomed && ctx.zoomExiting;
+
   // Per-pane profile override: if this pane was assigned a persona directly,
   // use its own profileId; otherwise fall back to the session-level one.
   const effectiveProfileId = node.profileId ?? ctx.profileId;
 
+  // Build CSS class string.
+  let cls = "pane-leaf";
+  if (active) cls += " active";
+  if (dropOver) cls += " pane-drop-over";
+  if (isZoomed && !isExiting) cls += " pane-zoomed";
+  if (isExiting) cls += " pane-zoom-exiting";
+
+  // Drop accent + zoom origin stored as CSS custom properties.
+  const style: React.CSSProperties = {};
+  if (dropOver && draggingPersona) {
+    (style as Record<string, string>)["--drop-accent"] = personaColor(draggingPersona.id);
+  }
+
   return (
     <div
-      className={`pane-leaf${active ? " active" : ""}${dropOver ? " pane-drop-over" : ""}`}
-      style={
-        dropOver && draggingPersona
-          ? ({ "--drop-accent": personaColor(draggingPersona.id) } as React.CSSProperties)
-          : undefined
-      }
+      className={cls}
+      style={Object.keys(style).length ? style : undefined}
       data-pane-id={node.paneId}
       ref={(el) => {
         if (el) ctx.leafEls.current.set(node.paneId, el);
@@ -109,7 +127,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
       <div className="pane-header">
         <span className="pane-header-cli">{node.cli}</span>
         <span className="pane-header-spacer" />
-        {ctx.multi && (
+        {ctx.multi && !isZoomed && (
           <button
             type="button"
             className={`pane-header-btn${relayMiss ? " relay-miss" : ""}`}
@@ -125,23 +143,37 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
             <Send size={12} strokeWidth={1.75} />
           </button>
         )}
+        {!isZoomed && (
+          <>
+            <button
+              type="button"
+              className="pane-header-btn"
+              title="Split right (Ctrl+B %) · Shift+click to fork conversation"
+              onClick={(e) => ctx.onSplit(node.paneId, "row", e.shiftKey ? node.convId : undefined)}
+            >
+              <SplitSquareHorizontal size={13} strokeWidth={1.75} />
+            </button>
+            <button
+              type="button"
+              className="pane-header-btn"
+              title='Split down (Ctrl+B ") · Shift+click to fork conversation'
+              onClick={(e) => ctx.onSplit(node.paneId, "col", e.shiftKey ? node.convId : undefined)}
+            >
+              <SplitSquareVertical size={13} strokeWidth={1.75} />
+            </button>
+          </>
+        )}
         <button
           type="button"
           className="pane-header-btn"
-          title="Split right (Ctrl+B %) · Shift+click to fork conversation"
-          onClick={(e) => ctx.onSplit(node.paneId, "row", e.shiftKey ? node.convId : undefined)}
+          title={isZoomed ? "Collapse pane (Esc)" : "Zoom pane"}
+          onClick={() => isZoomed ? ctx.onUnzoom() : ctx.onZoom(node.paneId)}
         >
-          <SplitSquareHorizontal size={13} strokeWidth={1.75} />
+          {isZoomed
+            ? <Minimize2 size={13} strokeWidth={1.75} />
+            : <Maximize2 size={13} strokeWidth={1.75} />}
         </button>
-        <button
-          type="button"
-          className="pane-header-btn"
-          title='Split down (Ctrl+B ") · Shift+click to fork conversation'
-          onClick={(e) => ctx.onSplit(node.paneId, "col", e.shiftKey ? node.convId : undefined)}
-        >
-          <SplitSquareVertical size={13} strokeWidth={1.75} />
-        </button>
-        {ctx.multi && (
+        {ctx.multi && !isZoomed && (
           <button
             type="button"
             className="pane-header-btn close"
@@ -249,6 +281,46 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
   const leafEls = useRef<Map<string, HTMLElement>>(new Map());
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const armedRef = useRef(false);
+
+  // Pane zoom state — purely visual, doesn't affect stored layout.
+  const [zoomedPaneId, setZoomedPaneId] = useState<string | null>(null);
+  const [zoomExiting, setZoomExiting] = useState(false);
+  const zoomExitTimer = useRef<number>(0);
+
+  const onZoom = (paneId: string) => {
+    window.clearTimeout(zoomExitTimer.current);
+    setZoomExiting(false);
+    setZoomedPaneId(paneId);
+    setActivePaneId(paneId);
+    // Block intermediate ResizeObserver fits while the animation is running,
+    // then do one clean refit + focus once the card-in animation settles.
+    window.dispatchEvent(new Event("terminus:geometry-start"));
+    window.setTimeout(() => {
+      handles.current.get(paneId)?.focus();
+      window.dispatchEvent(new Event("terminus:refit"));
+    }, 290);
+  };
+
+  const onUnzoom = () => {
+    setZoomExiting(true);
+    window.dispatchEvent(new Event("terminus:geometry-start"));
+    zoomExitTimer.current = window.setTimeout(() => {
+      setZoomedPaneId(null);
+      setZoomExiting(false);
+      window.dispatchEvent(new Event("terminus:refit"));
+    }, 210);
+  };
+
+  // Collapse zoom on Escape.
+  useEffect(() => {
+    if (!zoomedPaneId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); onUnzoom(); }
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoomedPaneId]);
 
   const order = paneOrder(layout);
   const orderKey = order.join(",");
@@ -411,6 +483,9 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     },
   }));
 
+  // Shared zoom props injected into every ctx.
+  const zoomCtx = { zoomedPaneId, zoomExiting, onZoom, onUnzoom };
+
   // Mini mode: a split layout is unusable at 460px — render the active pane only.
   if (mini) {
     let pane: PaneNode | null = null;
@@ -419,24 +494,12 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     });
     if (!pane) forEachPane(layout, (p) => (pane ??= p));
     const ctx: PaneCtx = {
-      sessionId,
-      profileId,
-      defaultCwd,
-      reloadKey,
-      activePaneId,
-      handles,
-      leafEls,
-      setActive: setActivePaneId,
-      onSplit,
-      onClose,
-      onSetRatio,
-      onPaneStarted,
-      onMissingCli,
-      onAssignPaneProfile,
-      onRelay,
-      onRespawn,
-      makeKeyHandler,
-      multi: false,
+      sessionId, profileId, defaultCwd, reloadKey, activePaneId,
+      handles, leafEls, setActive: setActivePaneId,
+      onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
+      onAssignPaneProfile, onRelay, onRespawn,
+      ...zoomCtx,
+      makeKeyHandler, multi: false,
     };
     return (
       <div className="pane-root">{pane ? <PaneLeaf node={pane} ctx={ctx} /> : null}</div>
@@ -444,27 +507,30 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
   }
 
   const ctx: PaneCtx = {
-    sessionId,
-    profileId,
-    defaultCwd,
-    reloadKey,
-    activePaneId,
-    handles,
-    leafEls,
-    setActive: setActivePaneId,
-    onSplit,
-    onClose,
-    onSetRatio,
-    onPaneStarted,
-    onMissingCli,
-    onAssignPaneProfile,
-    onRelay,
-    onRespawn,
-    makeKeyHandler,
-    multi: order.length > 1,
+    sessionId, profileId, defaultCwd, reloadKey, activePaneId,
+    handles, leafEls, setActive: setActivePaneId,
+    onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
+    onAssignPaneProfile, onRelay, onRespawn,
+    ...zoomCtx,
+    makeKeyHandler, multi: order.length > 1,
   };
 
-  return <div className="pane-root">{renderNode(layout, ctx)}</div>;
+  // The backdrop is rendered inline (NOT portaled) so it shares the same
+  // stacking context as the zoomed pane. cockpit-frame's backdrop-filter makes
+  // it the containing block for position:fixed, so both elements are positioned
+  // relative to that frame. z-index 901 (pane) > 900 (backdrop) works correctly.
+  return (
+    <>
+      {zoomedPaneId && (
+        <div
+          className={`pane-zoom-backdrop${zoomExiting ? " exiting" : ""}`}
+          onClick={onUnzoom}
+          aria-hidden="true"
+        />
+      )}
+      <div className="pane-root">{renderNode(layout, ctx)}</div>
+    </>
+  );
 });
 
 export default PaneLayout;

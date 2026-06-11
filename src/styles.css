@@ -819,6 +819,73 @@ body {
   z-index: 10;
 }
 
+/* ── Pane zoom — card-style overlay ───────────────────────────────── */
+/* Semi-transparent backdrop that sits below the zoomed pane. Clicking it
+ * collapses the pane back into the split layout. */
+.pane-zoom-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(0, 0, 0, 0.5);
+  cursor: default;
+  animation: pane-backdrop-in 0.22s ease both;
+}
+.pane-zoom-backdrop.exiting {
+  animation: pane-backdrop-out 0.21s ease both;
+}
+@keyframes pane-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pane-backdrop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* Zoomed pane: fixed-position centered card. */
+.pane-leaf.pane-zoomed {
+  position: fixed !important;
+  inset: 28px !important;
+  z-index: 901;
+  border-radius: 12px !important;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.08),
+    0 40px 120px rgba(0, 0, 0, 0.75);
+  margin: 0 !important;
+  animation: pane-zoom-in 0.26s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+.pane-leaf.pane-zoom-exiting {
+  position: fixed !important;
+  inset: 28px !important;
+  z-index: 901;
+  border-radius: 12px !important;
+  margin: 0 !important;
+  animation: pane-zoom-out 0.21s cubic-bezier(0.4, 0, 1, 1) both;
+}
+@keyframes pane-zoom-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) translateY(20px);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pane-zoom-out {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.93) translateY(12px);
+  }
+}
+
 /* ── Directory picker chip ─────────────────────────────────────────── */
 .dir-picker {
   position: relative;
