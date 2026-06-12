@@ -10,6 +10,28 @@ pub mod providers;
 pub mod screenshot;
 pub mod terminal;
 
+/// Set the dock icon from the embedded app icon. Needed because `tauri dev`
+/// runs an unbundled binary (no `.icns` applied), so the dock would otherwise
+/// show a default icon. Runs on the main thread during setup.
+#[cfg(target_os = "macos")]
+fn set_macos_dock_icon() {
+    use objc2::{AnyThread, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
+
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    // Embedded at compile time so it works in dev and prod alike.
+    let bytes: &[u8] = include_bytes!("../icons/icon.png");
+    let data = NSData::with_bytes(bytes);
+    let image = NSImage::initWithData(NSImage::alloc(), &data);
+    if let Some(image) = image {
+        let app = NSApplication::sharedApplication(mtm);
+        unsafe { app.setApplicationIconImage(Some(&image)) };
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
@@ -21,6 +43,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .setup(|_app| {
+            #[cfg(target_os = "macos")]
+            set_macos_dock_icon();
             tauri::async_runtime::spawn(persona::seed_default_personas());
             Ok(())
         })

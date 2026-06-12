@@ -49,3 +49,8 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # Window enumeration for the overlay's window-capture mode
 # (CGWindowListCopyWindowInfo). Already in the tree via Tauri.
 core-foundation = "0.10"
+# Set the dock icon at runtime — `tauri dev` runs an unbundled binary, so the
+# bundle .icns isn't applied and the dock would show a default icon otherwise.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSImage", "NSResponder"] }
+objc2-foundation = { version = "0.3", features = ["NSData"] }
