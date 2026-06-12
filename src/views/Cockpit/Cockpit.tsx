@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import ClaudeTab from "../Claude/ClaudeTab";
 import WindowControls from "./WindowControls";
 import AppLogo from "./AppLogo";
@@ -61,14 +62,30 @@ export default function Cockpit() {
     };
   }, [profileId, personas, get]);
 
+  // The real model the subscription `claude` CLI runs, read from
+  // ~/.claude/settings.json. null when no model is pinned there (Claude Code
+  // then picks one dynamically — no static answer), so we fall back to a label.
+  const [claudeModel, setClaudeModel] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void invoke<string | null>("claude_default_model").then((m) => {
+      if (!cancelled) setClaudeModel(m);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // The real model the active persona runs: its base-model preset's model name
-  // when set, otherwise the CLI's actual default model.
+  // when set; otherwise, for the subscription claude CLI, the model pinned in
+  // ~/.claude/settings.json; otherwise the CLI's labelled default.
   const activeCliId = activeDoc?.cli ?? activePersona?.cli ?? "claude";
   const provider = activeDoc?.base_model
     ? providers.find((p) => p.id === activeDoc.base_model)
     : undefined;
   const modelLabel =
     provider?.model ||
+    (activeCliId === "claude" ? claudeModel : null) ||
     CLIS.find((c) => c.id === activeCliId)?.defaultModel ||
     "ready";
 

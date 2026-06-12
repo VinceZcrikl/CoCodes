@@ -326,6 +326,19 @@ pub async fn provider_delete(id: String) -> Result<(), String> {
     delete(&id)
 }
 
+/// The real default model the subscription `claude` CLI runs, read from the
+/// user's `~/.claude/settings.json` `model` field. Returns `None` when no model
+/// is pinned there — Claude Code then picks one dynamically and there is no
+/// static answer to show. Used by the cockpit to label a persona that has no
+/// base-model provider preset, instead of hardcoding a model name.
+#[tauri::command]
+pub async fn claude_default_model() -> Option<String> {
+    let path = dirs::home_dir()?.join(".claude").join("settings.json");
+    let raw = std::fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    json.get("model")?.as_str().map(str::to_owned)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
