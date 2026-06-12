@@ -3,9 +3,8 @@ import ClaudeTab from "../Claude/ClaudeTab";
 import WindowControls from "./WindowControls";
 import AppLogo from "./AppLogo";
 import ProfileConstellation from "../Persona/ProfileConstellation";
-import PersonaAvatar from "../Persona/PersonaAvatar";
-import PersonaManager from "../Persona/PersonaManager";
-import { usePersonas } from "../../hooks/usePersonas";
+import PersonaEditor from "../Persona/PersonaEditor";
+import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
 import { useThemeStore, installThemeSync } from "../../state/themeStore";
 import { ORB_THEMES } from "../../state/orbThemes";
@@ -16,14 +15,17 @@ interface CliDef {
   id: string;
   label: string;
   ready: boolean;
+  /** The real model a fresh session of this CLI runs by default, shown in the
+   *  brand status when the persona has no base-model preset override. */
+  defaultModel: string;
 }
 
 const CLIS: CliDef[] = [
-  { id: "claude", label: "Claude", ready: true },
-  { id: "codex",  label: "Codex",  ready: true },
-  { id: "gemini", label: "Gemini", ready: false },
-  { id: "grok",   label: "Grok",   ready: true },
-  { id: "kimi",   label: "Kimi",   ready: false },
+  { id: "claude", label: "Claude", ready: true,  defaultModel: "Opus 4.8" },
+  { id: "codex",  label: "Codex",  ready: true,  defaultModel: "GPT-5.5" },
+  { id: "gemini", label: "Gemini", ready: false, defaultModel: "Gemini 2.5 Pro" },
+  { id: "grok",   label: "Grok",   ready: true,  defaultModel: "Grok 4" },
+  { id: "kimi",   label: "Kimi",   ready: false, defaultModel: "Kimi K2" },
 ];
 
 const CLI_STORAGE_KEY = "openterminus:active-cli";
@@ -38,11 +40,37 @@ export default function Cockpit() {
   const mini = useWindowStore((s) => s.mini);
 
   const profileId = useProfileStore((s) => s.activeProfileId);
-  const { personas } = usePersonas();
-  const [personaOpen, setPersonaOpen] = useState(false);
+  const setActiveProfile = useProfileStore((s) => s.setActiveProfile);
+  const { personas, get, save } = usePersonas();
+  const { providers } = useProviders();
+  // undefined = editor closed, null = creating, string = editing that persona.
+  const [editorFor, setEditorFor] = useState<string | null | undefined>(undefined);
   const activePersona = personas.find((p) => p.id === profileId);
   const activeName = activePersona?.name ?? profileId;
-  const activeAvatar = activePersona?.avatar ?? "";
+
+  // Full doc for the active persona — gives us its base-model for the model
+  // label. Refetched when the persona changes or the library is edited.
+  const [activeDoc, setActiveDoc] = useState<PersonaDoc | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void get(profileId).then((doc) => {
+      if (!cancelled) setActiveDoc(doc);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, personas, get]);
+
+  // The real model the active persona runs: its base-model preset's model name
+  // when set, otherwise the CLI's actual default model.
+  const activeCliId = activeDoc?.cli ?? activePersona?.cli ?? "claude";
+  const provider = activeDoc?.base_model
+    ? providers.find((p) => p.id === activeDoc.base_model)
+    : undefined;
+  const modelLabel =
+    provider?.model ||
+    CLIS.find((c) => c.id === activeCliId)?.defaultModel ||
+    "ready";
 
   // Keep a ClaudeTab alive for every persona we've visited (not just the
   // active one), so switching persona toggles visibility instead of tearing
@@ -92,26 +120,11 @@ export default function Cockpit() {
                 constellation (avatars + add) · theme + window controls (right).
                 The active persona drives which CLI is shown. */}
             <nav className="cockpit-header" data-tauri-drag-region>
-              <AppLogo className="cockpit-header-logo" />
-              <button
-                type="button"
-                className="cockpit-persona-brand"
-                onClick={() => setPersonaOpen(true)}
-                title="Manage personas"
-              >
-                <PersonaAvatar
-                  id={profileId}
-                  name={activeName}
-                  avatar={activeAvatar}
-                  className="cockpit-persona-brand-avatar"
-                />
-                <span className="cockpit-persona-brand-meta">
-                  <span className="cockpit-persona-brand-name">{activeName}</span>
-                  <span className="cockpit-persona-brand-status">ready</span>
-                </span>
-              </button>
-
-              <ProfileConstellation onManage={() => setPersonaOpen(true)} />
+              <ProfileConstellation
+                activeModel={modelLabel}
+                onEdit={(id) => setEditorFor(id)}
+                onNew={() => setEditorFor(null)}
+              />
 
               <div className="cockpit-header-right">
                 <button
@@ -149,7 +162,15 @@ export default function Cockpit() {
         </main>
       </div>
 
-      {personaOpen && <PersonaManager onClose={() => setPersonaOpen(false)} />}
+      {editorFor !== undefined && (
+        <PersonaEditor
+          editId={editorFor}
+          load={get}
+          save={save}
+          onClose={() => setEditorFor(undefined)}
+          onSaved={(id) => setActiveProfile(id)}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 import { usePersonas } from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
 import PersonaAvatar, { personaColor } from "./PersonaAvatar";
@@ -12,8 +12,12 @@ import {
 import type { PersonaSummary } from "../../hooks/usePersonas";
 
 interface Props {
-  /** Opens the persona library (create / edit / delete). */
-  onManage: () => void;
+  /** Model label of the active persona, shown in its brand-style pill. */
+  activeModel?: string;
+  /** Open the editor for an existing persona (clicking the active one). */
+  onEdit: (id: string) => void;
+  /** Open the editor to create a new persona (the trailing "+"). */
+  onNew: () => void;
 }
 
 interface HoverState {
@@ -34,7 +38,7 @@ interface GhostState {
  *
  *  Avatars can be dragged (pointer events, not HTML5 DnD) onto split panes to
  *  rebind that pane to the persona's preferred CLI and profile. */
-export default function ProfileConstellation({ onManage }: Props) {
+export default function ProfileConstellation({ activeModel, onEdit, onNew }: Props) {
   const { personas } = usePersonas();
   const activeId = useProfileStore((s) => s.activeProfileId);
   const setActive = useProfileStore((s) => s.setActiveProfile);
@@ -107,10 +111,13 @@ export default function ProfileConstellation({ onManage }: Props) {
             <button
               key={p.id}
               type="button"
-              className={`window-chat-constellation-cell${active ? " active" : ""}`}
+              className={`window-chat-constellation-cell${active ? " active brand" : ""}`}
               style={{ ["--cell-accent" as string]: personaColor(p.id) }}
+              title={active ? "Edit this persona" : undefined}
               onClick={() => {
-                if (!didDragRef.current) setActive(p.id);
+                if (didDragRef.current) return;
+                if (active) onEdit(p.id);
+                else setActive(p.id);
               }}
               onMouseEnter={(e) => {
                 if (dragRef.current) return;
@@ -134,8 +141,22 @@ export default function ProfileConstellation({ onManage }: Props) {
                   avatar={p.avatar}
                   className="window-chat-constellation-avatar"
                 />
+                {active && (
+                  <span className="window-chat-constellation-edit" aria-hidden="true">
+                    <Pencil size={9} strokeWidth={2.5} />
+                  </span>
+                )}
               </span>
-              <span className="window-chat-constellation-label">{p.name}</span>
+              {active ? (
+                <span className="window-chat-constellation-brandmeta">
+                  <span className="window-chat-constellation-brandname">{p.name}</span>
+                  {activeModel && (
+                    <span className="window-chat-constellation-brandmodel">{activeModel}</span>
+                  )}
+                </span>
+              ) : (
+                <span className="window-chat-constellation-label">{p.name}</span>
+              )}
             </button>
           );
         })}
@@ -143,9 +164,9 @@ export default function ProfileConstellation({ onManage }: Props) {
         <button
           type="button"
           className="window-chat-constellation-cell window-chat-constellation-add"
-          onClick={onManage}
-          title="Manage personas"
-          aria-label="Manage personas"
+          onClick={onNew}
+          title="New persona"
+          aria-label="New persona"
         >
           <span className="window-chat-constellation-avatar-wrap">
             <span className="window-chat-constellation-add-icon">
