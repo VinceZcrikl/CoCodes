@@ -7,7 +7,7 @@ import {
 } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
-import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2 } from "lucide-react";
+import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2, Palette } from "lucide-react";
 import { INJECT_PANE_EVENT, type InjectPaneDetail } from "../../state/delegationMonitor";
 import {
   findPane,
@@ -18,6 +18,15 @@ import {
 } from "../../hooks/useClaudeSessions";
 import { draggingPersona } from "../../state/dragState";
 import { personaColor } from "../Persona/PersonaAvatar";
+import PalettePanel from "../Cockpit/PalettePanel";
+import { usePaletteStore } from "../../state/paletteStore";
+import { cssVarsForPalette } from "../../state/uiPalette";
+import {
+  PANEL_PALETTES,
+  resolveAccentColor,
+  type PanelPaletteName,
+  type AccentName,
+} from "../../state/panelPalettes";
 
 /** Ctrl+B — the tmux-style prefix. Sent to the PTY as 0x02 when the follow-up
  *  key isn't a pane command, so a real readline Ctrl+B still works. */
@@ -44,6 +53,8 @@ interface PaneCtx {
   onRespawn: (paneId: string) => void;
   /** Persist a pane's custom header title (empty string clears it). */
   onRename: (paneId: string, title: string) => void;
+  /** Recolour a single pane; pass both undefined to clear the override. */
+  onSetPanePalette: (paneId: string, palette?: string, accent?: string) => void;
   /** Pane ID currently hovered by an OS file drag, or null. */
   fileDragOverPaneId: string | null;
   /** Expand `paneId` to a centered overlay. */
@@ -77,6 +88,8 @@ interface Props {
   onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
   onRespawn: (paneId: string) => void;
   onRename: (paneId: string, title: string) => void;
+  /** Recolour a single pane; pass both undefined to clear the override. */
+  onSetPanePalette: (paneId: string, palette?: string, accent?: string) => void;
 }
 
 /** Ordered list of pane ids as they appear left-to-right / top-to-bottom. */
@@ -100,6 +113,16 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   const [dropOver, setDropOver] = useState(false);
   const [relayMiss, setRelayMiss] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // This pane's effective palette: its own override when set, else the global
+  // panel scheme. A set override also re-skins the pane chrome via inline vars.
+  const gName = usePaletteStore((s) => s.name);
+  const gAccent = usePaletteStore((s) => s.accent);
+  const hasOverride = node.palette != null || node.accent != null;
+  const effPalette = (node.palette ?? gName) as PanelPaletteName;
+  const effAccent = (node.accent ?? gAccent) as AccentName;
+  const paneDotColor = resolveAccentColor(PANEL_PALETTES[effPalette], effAccent);
 
   // Custom title when set, otherwise the CLI name as the default placeholder.
   const displayTitle = node.title ?? node.cli;
@@ -125,11 +148,19 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   if (isFileDragOver) cls += " pane-file-drop-over";
   if (isZoomed && !isExiting) cls += " pane-zoomed";
   if (isExiting) cls += " pane-zoom-exiting";
+  // The recolour popover drops past the header into the body; let it escape the
+  // pane's clip while it's open.
+  if (paletteOpen) cls += " pane-palette-open";
 
   // Drop accent + zoom origin stored as CSS custom properties.
   const style: React.CSSProperties = {};
   if (dropOver && draggingPersona) {
     (style as Record<string, string>)["--drop-accent"] = personaColor(draggingPersona.id);
+  }
+  // A per-pane palette override scopes the panel CSS vars to this leaf only,
+  // so just this terminal's chrome + xterm theme change.
+  if (hasOverride) {
+    Object.assign(style, cssVarsForPalette(effPalette, effAccent));
   }
 
   return (
@@ -209,6 +240,31 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
             </button>
           </>
         )}
+        {!isZoomed && (
+          <div className="pane-palette-wrap">
+            <button
+              type="button"
+              className={`pane-header-btn${hasOverride ? " has-override" : ""}`}
+              title="Recolour this terminal"
+              onClick={(e) => { e.stopPropagation(); setPaletteOpen((v) => !v); }}
+            >
+              <Palette size={13} strokeWidth={1.75} />
+              <span className="pane-palette-dot" style={{ background: paneDotColor }} />
+            </button>
+            {paletteOpen && (
+              <PalettePanel
+                onClose={() => setPaletteOpen(false)}
+                value={{ name: effPalette, accent: effAccent }}
+                onPalette={(name) => ctx.onSetPanePalette(node.paneId, name, node.accent)}
+                onAccent={(accent) => ctx.onSetPanePalette(node.paneId, node.palette, accent)}
+                onReset={hasOverride ? () => {
+                  ctx.onSetPanePalette(node.paneId, undefined, undefined);
+                  setPaletteOpen(false);
+                } : undefined}
+              />
+            )}
+          </div>
+        )}
         <button
           type="button"
           className="pane-header-btn"
@@ -240,6 +296,8 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         claudeSessionId={node.convId}
         forkFromSessionId={node.started ? undefined : node.forkFromConvId}
         resume={node.started}
+        terminalKey={`${node.paneId}:${node.convId}`}
+        paletteOverride={hasOverride ? { name: effPalette, accent: effAccent } : undefined}
         cwd={node.cwd ?? ctx.defaultCwd}
         cli={node.cli}
         onMissingCli={ctx.onMissingCli}
@@ -323,6 +381,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     onAssignPaneProfile,
     onRespawn,
     onRename,
+    onSetPanePalette,
   },
   ref,
 ) {
@@ -596,7 +655,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
       sessionId, profileId, defaultCwd, reloadKey, activePaneId,
       handles, leafEls, setActive: setActivePaneId,
       onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
-      onAssignPaneProfile, onRelay, onRespawn, onRename,
+      onAssignPaneProfile, onRelay, onRespawn, onRename, onSetPanePalette,
       ...zoomCtx,
       makeKeyHandler, multi: false,
     };
@@ -609,7 +668,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     sessionId, profileId, defaultCwd, reloadKey, activePaneId,
     handles, leafEls, setActive: setActivePaneId,
     onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
-    onAssignPaneProfile, onRelay, onRespawn, onRename,
+    onAssignPaneProfile, onRelay, onRespawn, onRename, onSetPanePalette,
     ...zoomCtx,
     makeKeyHandler, multi: order.length > 1,
   };

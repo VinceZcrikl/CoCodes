@@ -148,6 +148,10 @@ body {
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
   flex: none;
+  /* Sit above the terminal body so the palette popover (which drops below the
+   * header) isn't covered by the panes' absolutely-positioned slots. */
+  position: relative;
+  z-index: 30;
 }
 
 /* Left: current persona avatar + name + status. */
@@ -809,6 +813,61 @@ body {
 .pane-header-btn.relay-miss {
   color: var(--accent-gold);
   animation: relay-miss-shake 0.45s ease;
+}
+
+/* Per-pane palette button: a swatch dot rides the bottom-right of the icon to
+   signal an active override, and anchors the recolour popover for this pane. */
+.pane-palette-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.pane-palette-wrap .pane-header-btn {
+  position: relative;
+}
+.pane-header-btn.has-override {
+  color: var(--accent-gold);
+}
+.pane-palette-dot {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--panel, #000);
+  pointer-events: none;
+}
+.pane-palette-wrap .palette-popover {
+  z-index: 200;
+}
+.pane-leaf.pane-palette-open {
+  overflow: visible;
+}
+/* The popover drops out of the header into the terminal area. The header uses
+   opacity (which both dims and traps a stacking context the xterm paints over),
+   so while the picker is open restore full opacity and lift the header above
+   the terminal sibling. */
+.pane-leaf.pane-palette-open .pane-header {
+  position: relative;
+  z-index: 10;
+  opacity: 1;
+}
+
+.palette-reset {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-soft, var(--text-main));
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.palette-reset:hover {
+  border-color: var(--accent-gold);
+  color: var(--text-main);
 }
 
 /* The lone-pane case keeps no active border (nothing to disambiguate) but still
@@ -1516,6 +1575,187 @@ body {
   transition:
     transform 120ms ease,
     box-shadow 120ms ease;
+}
+
+/* ── Palette popover ───────────────────────────────────────────────── */
+.cockpit-palette-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.palette-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 80;
+  width: 264px;
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.palette-popover .palette-swatch {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.palette-popover-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+.palette-popover-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+.palette-popover-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.palette-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+.palette-swatch:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.palette-swatch.active {
+  border-color: var(--sw-accent);
+}
+
+.palette-swatch-preview {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  border-radius: 7px;
+  border: 1px solid var(--sw-border);
+  background: var(--sw-canvas);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.palette-swatch-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sw-text);
+  opacity: 0.85;
+}
+.palette-swatch-bar-wide {
+  width: 70%;
+}
+.palette-swatch-bar-narrow {
+  width: 45%;
+  background: var(--sw-muted);
+  opacity: 0.75;
+}
+.palette-swatch-dot {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sw-accent);
+}
+.palette-swatch-check {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--sw-accent);
+  color: #0a0a0a;
+}
+.palette-swatch-label {
+  max-width: 100%;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Accent picker — a row of colour dots, independent of the base palette. */
+.palette-popover-head-accent {
+  margin-top: 12px;
+}
+
+.palette-accents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.palette-accent {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--ac);
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+.palette-accent:hover {
+  transform: scale(1.12);
+}
+.palette-accent.active {
+  box-shadow:
+    0 0 0 2px var(--panel),
+    0 0 0 3px var(--ac);
+}
+/* "Auto" reads as a soft conic so it's distinct from a fixed hue. */
+.palette-accent.is-auto {
+  background:
+    radial-gradient(circle at 50% 50%, var(--panel-deep) 0 38%, transparent 40%),
+    conic-gradient(from 0deg, #d0a76f, #5dd6c5, #9aa6f5, #e29ab0, #d0a76f);
+}
+.palette-accent-check {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0a0a0a;
 }
 
 .cockpit-theme-dot:hover {

@@ -11,8 +11,9 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import "@xterm/xterm/css/xterm.css";
-import { useThemeStore } from "../../state/themeStore";
-import { xtermThemeForTheme } from "../../state/uiPalette";
+import { usePaletteStore } from "../../state/paletteStore";
+import { xtermThemeForPalette } from "../../state/uiPalette";
+import type { PanelPaletteName, AccentName } from "../../state/panelPalettes";
 
 /** Imperative handle the parent view uses to drive the terminal — composer
  *  injection calls `writeLine`. */
@@ -47,6 +48,13 @@ interface Props {
    *  being restored) — spawn with `--resume` instead of `--session-id` so the
    *  history comes back instead of erroring "already in use". Read once at mount. */
   resume?: boolean;
+  /** Stable session key (pane id + conversation id). Lets the PTY survive a
+   *  view remount (reload / HMR / reloadKey): on remount we reconnect to the
+   *  still-running process and replay its output instead of killing + respawning. */
+  terminalKey: string;
+  /** Per-pane colour override. When set, this terminal's xterm theme uses it
+   *  instead of the global palette. */
+  paletteOverride?: { name: string; accent: string };
   /** Raised when the backend can't find the `cli` binary. */
   onMissingCli?: (message: string) => void;
   /** Raised after the PTY successfully spawns the CLI. */
@@ -78,18 +86,48 @@ function decodeBase64(b64: string): Uint8Array {
   return out;
 }
 
+/** PTYs outlive a view remount. On unmount we schedule a close after a grace
+ *  window; a remount with the same key cancels it (and reconnects via the
+ *  backend's replay buffer), so a reload / HMR / reloadKey bump keeps the
+ *  running task alive. A genuine pane close has no remount, so the close fires. */
+const TERMINAL_CLOSE_GRACE_MS = 1500;
+const pendingClose = new Map<string, number>();
+
+function scheduleTerminalClose(key: string, id: string) {
+  const existing = pendingClose.get(key);
+  if (existing !== undefined) window.clearTimeout(existing);
+  const t = window.setTimeout(() => {
+    pendingClose.delete(key);
+    void invoke("terminal_close", { id });
+  }, TERMINAL_CLOSE_GRACE_MS);
+  pendingClose.set(key, t);
+}
+
+function cancelTerminalClose(key: string) {
+  const t = pendingClose.get(key);
+  if (t !== undefined) {
+    window.clearTimeout(t);
+    pendingClose.delete(key);
+  }
+}
+
 /** xterm.js surface bound to a Rust PTY running `claude`. The parent keys this
  *  component on profileId + session so switching tears down and respawns. */
 const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
   function ClaudeTerminal(
     { profileId, claudeSessionId, forkFromSessionId, cwd, cli = "claude", resume,
+      terminalKey, paletteOverride,
       onMissingCli, onOpened, onExit, onFocus, onKeyEvent, onSessionConflict },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
     const termRef = useRef<Terminal | null>(null);
     const sessionIdRef = useRef<string | null>(null);
-    const themeName = useThemeStore((s) => s.name);
+    const paletteName = usePaletteStore((s) => s.name);
+    const accentName = usePaletteStore((s) => s.accent);
+    // Per-pane override wins over the global palette for this terminal.
+    const effPalette = (paletteOverride?.name ?? paletteName) as PanelPaletteName;
+    const effAccent = (paletteOverride?.accent ?? accentName) as AccentName;
 
     // Keep the latest focus/key/conflict callbacks in refs so the mount-time
     // effect always calls the current version without being in its deps.
@@ -100,12 +138,12 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
     const onSessionConflictRef = useRef(onSessionConflict);
     onSessionConflictRef.current = onSessionConflict;
 
-    // Re-theme the live terminal when the cockpit theme changes (no remount).
+    // Re-theme the live terminal when the palette / accent changes (no remount).
     useEffect(() => {
       if (termRef.current) {
-        termRef.current.options.theme = xtermThemeForTheme(themeName);
+        termRef.current.options.theme = xtermThemeForPalette(effPalette, effAccent);
       }
-    }, [themeName]);
+    }, [effPalette, effAccent]);
 
     useImperativeHandle(ref, () => ({
       writeLine: (text: string) => {
@@ -138,6 +176,10 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       const host = hostRef.current;
       if (!host) return;
 
+      // A remount within the grace window: cancel the pending close so the
+      // backend keeps the live PTY and we reconnect to it below.
+      cancelTerminalClose(terminalKey);
+
       let disposed = false;
       const cleanup: Array<() => void> = [];
 
@@ -152,7 +194,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         // (e.g. 1.15) make glyphs blurry on HiDPI WKWebView.
         lineHeight: 1,
         scrollback: 4000,
-        theme: xtermThemeForTheme(useThemeStore.getState().name),
+        theme: xtermThemeForPalette(effPalette, effAccent),
       });
       termRef.current = term;
 
@@ -247,7 +289,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
             // For a fork pane (not yet started), use the source session ID so
             // the fork inherits conversation history on its very first run.
             const spawnSessionId = forkFromSessionId ?? claudeSessionId;
-            void invoke<string>("terminal_open", {
+            void invoke<{ id: string; replay: string | null }>("terminal_open", {
               profileId,
               cols: term.cols,
               rows: term.rows,
@@ -257,13 +299,20 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
               resume: forkFromSessionId ? false : !!resume,
               cwd: cwd ?? null,
               cli,
+              // Stable key → reconnect to a still-running PTY across remounts.
+              key: terminalKey,
             })
-              .then((id) => {
+              .then(({ id, replay }) => {
                 if (disposed) {
-                  void invoke("terminal_close", { id });
+                  // Unmounted mid-open: schedule a graced close (a remount
+                  // cancels it). Don't kill outright — the task may continue.
+                  scheduleTerminalClose(terminalKey, id);
                   return;
                 }
                 sessionIdRef.current = id;
+                // Reconnecting to a live session: replay its buffered output so
+                // the running task is visible instead of a blank terminal.
+                if (replay) term.write(decodeBase64(replay));
                 spawnedAt = Date.now();
                 // After the grace window expires, run one final fit. By then
                 // the welcome banner has rendered and any layout drift accumulated
@@ -380,7 +429,9 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         cleanup.forEach((run) => run());
         const id = sessionIdRef.current;
         sessionIdRef.current = null;
-        if (id) void invoke("terminal_close", { id });
+        // Schedule, don't kill: a remount within the grace window cancels this
+        // and reconnects, so reloads/HMR keep the running task alive.
+        if (id) scheduleTerminalClose(terminalKey, id);
         term.dispose();
         termRef.current = null;
       };

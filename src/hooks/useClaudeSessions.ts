@@ -30,6 +30,11 @@ export interface PaneNode {
    *  This field is never the same as `convId`, avoiding the "already in use"
    *  conflict that arises when two panes share the same `--session-id`. */
   forkFromConvId?: string;
+  /** Per-pane colour override — a base panel-palette name. Absent → follow the
+   *  global palette. Set from the pane header's palette button. */
+  palette?: string;
+  /** Per-pane accent override (an AccentName). Absent → follow global. */
+  accent?: string;
 }
 
 /** An internal split: two children divided horizontally or vertically. */
@@ -500,6 +505,35 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     [update, cli],
   );
 
+  /** Set (or clear) a pane's per-pane colour override. Pass both undefined to
+   *  clear it (the pane reverts to following the global palette). */
+  const setPanePalette = useCallback(
+    (sessionId: string, paneId: string, palette?: string, accent?: string) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          const layout = sess.layout ?? defaultLayout(sess, cli);
+          const patch = (node: LayoutNode): LayoutNode => {
+            if (node.type === "pane") {
+              if (node.paneId !== paneId) return node;
+              const { palette: _p, accent: _a, ...rest } = node;
+              if (!palette && !accent) return rest;
+              return {
+                ...rest,
+                ...(palette ? { palette } : {}),
+                ...(accent ? { accent } : {}),
+              };
+            }
+            return { ...node, children: [patch(node.children[0]), patch(node.children[1])] };
+          };
+          return { ...sess, layout: patch(layout) };
+        }),
+      }));
+    },
+    [update, cli],
+  );
+
   const togglePin = useCallback(
     (id: string) =>
       update((s) => ({
@@ -573,6 +607,7 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     assignPaneProfile,
     respawnPane,
     renamePane,
+    setPanePalette,
     togglePin,
     setGroup,
     newGroup,

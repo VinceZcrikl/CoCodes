@@ -5,11 +5,12 @@ import WindowControls from "./WindowControls";
 import AppLogo from "./AppLogo";
 import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaEditor from "../Persona/PersonaEditor";
+import PalettePanel from "./PalettePanel";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
-import { useThemeStore, installThemeSync } from "../../state/themeStore";
-import { ORB_THEMES } from "../../state/orbThemes";
-import { applyThemeVars } from "../../state/uiPalette";
+import { usePaletteStore, installPaletteSync } from "../../state/paletteStore";
+import { PANEL_PALETTES, resolveAccentColor } from "../../state/panelPalettes";
+import { applyPaletteVars } from "../../state/uiPalette";
 import { useWindowStore } from "../../state/windowStore";
 
 interface CliDef {
@@ -36,8 +37,10 @@ export default function Cockpit() {
     () => localStorage.getItem(CLI_STORAGE_KEY) ?? "claude",
   );
 
-  const themeName = useThemeStore((s) => s.name);
-  const cycleTheme = useThemeStore((s) => s.cycleTheme);
+  const paletteName = usePaletteStore((s) => s.name);
+  const accent = usePaletteStore((s) => s.accent);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const accentColor = resolveAccentColor(PANEL_PALETTES[paletteName], accent);
   const mini = useWindowStore((s) => s.mini);
 
   const profileId = useProfileStore((s) => s.activeProfileId);
@@ -118,8 +121,8 @@ export default function Cockpit() {
     try { localStorage.setItem(CLI_STORAGE_KEY, activeCli); } catch { /* ignore */ }
   }, [activeCli]);
 
-  useEffect(() => applyThemeVars(themeName), [themeName]);
-  useEffect(() => installThemeSync(), []);
+  useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
+  useEffect(() => installPaletteSync(), []);
 
   return (
     <div className={`cockpit${mini ? " mini" : ""}`}>
@@ -144,14 +147,20 @@ export default function Cockpit() {
               />
 
               <div className="cockpit-header-right">
-                <button
-                  type="button"
-                  className="cockpit-theme-dot"
-                  onClick={cycleTheme}
-                  title={`Theme: ${ORB_THEMES[themeName].label} — click to cycle`}
-                  aria-label="Cycle theme"
-                  style={{ background: ORB_THEMES[themeName].accent }}
-                />
+                <div className="cockpit-palette-wrap">
+                  <button
+                    type="button"
+                    className="cockpit-theme-dot"
+                    onClick={() => setPaletteOpen((v) => !v)}
+                    title={`Palette: ${PANEL_PALETTES[paletteName].label}`}
+                    aria-label="Choose panel palette"
+                    aria-expanded={paletteOpen}
+                    style={{ background: accentColor }}
+                  />
+                  {paletteOpen && (
+                    <PalettePanel onClose={() => setPaletteOpen(false)} />
+                  )}
+                </div>
                 <WindowControls />
               </div>
             </nav>

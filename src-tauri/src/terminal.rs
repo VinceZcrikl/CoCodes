@@ -18,7 +18,12 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+
+/// Cap on the per-session replay buffer (most-recent bytes kept). A TUI like
+/// Claude Code repaints the whole screen, so the recent tail reconstructs the
+/// current view on reconnect.
+const REPLAY_BUFFER_MAX: usize = 256 * 1024;
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
@@ -35,6 +40,9 @@ struct TerminalSession {
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     persona_file: Option<PathBuf>,
+    /// Most-recent PTY output, replayed when an xterm view reconnects to this
+    /// still-running session (after a reload / remount).
+    buffer: Arc<Mutex<Vec<u8>>>,
 }
 
 /// App-managed table of live terminal sessions keyed by the id we hand the
@@ -57,6 +65,15 @@ struct DataEvent {
 struct ExitEvent {
     id: String,
     code: Option<i32>,
+}
+
+/// Result of opening a terminal. `replay` is set only when reconnecting to an
+/// already-running session — base64 of its buffered output so the new xterm
+/// view shows the live task instead of a blank screen.
+#[derive(Serialize)]
+pub struct OpenResult {
+    id: String,
+    replay: Option<String>,
 }
 
 /// Structured failure the frontend can branch on. `CliNotFound` drives the
@@ -284,9 +301,33 @@ pub async fn terminal_open(
     resume: Option<bool>,
     cwd: Option<String>,
     cli: Option<String>,
+    // Stable session key (the pane's id + conversation id). When a view
+    // remounts with the same key and the PTY is still alive, we reconnect to it
+    // rather than spawning a new process — so the running task keeps going.
+    key: Option<String>,
     app: AppHandle,
     reg: State<'_, TerminalRegistry>,
-) -> Result<String, TerminalError> {
+) -> Result<OpenResult, TerminalError> {
+    let key = key.filter(|s| !s.trim().is_empty());
+
+    // Reconnect to an already-running session with this key, replaying its
+    // buffered output so the new xterm shows the live task.
+    if let Some(ref k) = key {
+        let sessions = reg.sessions.lock().unwrap();
+        if let Some(session) = sessions.get(k) {
+            let buf = session.buffer.lock().unwrap();
+            let replay = if buf.is_empty() {
+                None
+            } else {
+                Some(STANDARD.encode(&buf[..]))
+            };
+            return Ok(OpenResult {
+                id: k.clone(),
+                replay,
+            });
+        }
+    }
+
     let cli_name = cli.as_deref().unwrap_or("claude");
 
     let binary = match cli_name {
@@ -309,7 +350,9 @@ pub async fn terminal_open(
         })?,
     };
 
-    let id = gen_id();
+    // Use the stable key as the session id (so reconnect finds it); fall back
+    // to a random id when no key was given.
+    let id = key.unwrap_or_else(gen_id);
 
     // Persona injection is Claude Code-specific (--append-system-prompt-file).
     // For other CLIs we skip it entirely.
@@ -457,6 +500,7 @@ pub async fn terminal_open(
     // this the read thread would block forever after the child is gone.
     drop(pair.slave);
 
+    let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     reg.sessions.lock().unwrap().insert(
         id.clone(),
         TerminalSession {
@@ -464,10 +508,12 @@ pub async fn terminal_open(
             master: pair.master,
             child,
             persona_file,
+            buffer: buffer.clone(),
         },
     );
 
-    // Pump PTY output → frontend. Runs until EOF (claude exited) or read error.
+    // Pump PTY output → frontend, also appending to the replay buffer so a
+    // reconnecting view can catch up. Runs until EOF (claude exited) or error.
     let app_for_thread = app.clone();
     let id_for_thread = id.clone();
     std::thread::spawn(move || {
@@ -476,6 +522,14 @@ pub async fn terminal_open(
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
+                    {
+                        let mut b = buffer.lock().unwrap();
+                        b.extend_from_slice(&buf[..n]);
+                        if b.len() > REPLAY_BUFFER_MAX {
+                            let excess = b.len() - REPLAY_BUFFER_MAX;
+                            b.drain(0..excess);
+                        }
+                    }
                     let payload = DataEvent {
                         id: id_for_thread.clone(),
                         data: STANDARD.encode(&buf[..n]),
@@ -504,7 +558,7 @@ pub async fn terminal_open(
         );
     });
 
-    Ok(id)
+    Ok(OpenResult { id, replay: None })
 }
 
 /// Write bytes to the PTY stdin. Shared by keystroke relay and composer

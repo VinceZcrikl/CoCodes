@@ -1,56 +1,70 @@
-import { ORB_THEMES, type OrbThemeName } from "./orbThemes";
+import {
+  PANEL_PALETTES,
+  resolveAccentColor,
+  type PanelPaletteName,
+  type AccentName,
+} from "./panelPalettes";
 
 /**
  * Cockpit UI palette.
  *
- * Orb keeps a **constant** dark teal/green base for the panel and only swaps the
- * accent (`--orb-accent`) per theme — the WebGL orb changes colour, the chat
- * surface does not. We mirror that exactly: the base below is fixed (orb's own
- * values) and theme switching changes only the accent-driven tokens.
+ * The panel chrome is driven by two independent axes chosen from the top-right
+ * palette popover: a **base palette** (canvas / surface / borders / neutral
+ * text) and an **accent** (the "点缀" colour tinting dividers, links, cursor and
+ * HUD pills). `accent = "auto"` keeps the base palette's own coordinated accent;
+ * any other accent recombines freely with the base. Switching either re-skins
+ * every chrome surface at once.
  */
 
-// Orb's constant base — the green/teal panel that never changes with theme.
-const BASE: Record<string, string> = {
-  "--bg-canvas": "#041c1c",
-  "--panel": "#0d2626",
-  "--panel-deep": "#082222",
-  "--panel-soft": "rgba(13, 38, 38, 0.78)",
-  "--border": "rgba(240, 230, 210, 0.16)",
-  "--teal-line": "rgba(93, 214, 197, 0.34)",
-  "--text-main": "#f0e6d2",
-  "--text-soft": "rgba(240, 230, 210, 0.78)",
-  "--text-muted": "rgba(240, 230, 210, 0.58)",
-  "--danger": "#ff8a7a",
-};
-
-/** The full CSS custom-property set: constant base + this theme's accent. */
-export function cssVarsForTheme(name: OrbThemeName): Record<string, string> {
-  const accent = ORB_THEMES[name].accent;
+/** The full CSS custom-property set for a base palette + accent. */
+export function cssVarsForPalette(
+  name: PanelPaletteName,
+  accent: AccentName = "auto",
+): Record<string, string> {
+  const p = PANEL_PALETTES[name] ?? PANEL_PALETTES["deep-teal"];
+  const a = resolveAccentColor(p, accent);
+  // With a custom accent, derive the accent hairline from it; with "auto" keep
+  // the palette's own (hand-tuned) accent line.
+  const accentLine =
+    accent === "auto" ? p.accentLine : `color-mix(in srgb, ${a} 34%, transparent)`;
   return {
-    ...BASE,
-    "--accent-gold": accent,
-    "--orb-accent": accent,
-    "--shot-accent": accent,
-    "--gold-soft": `color-mix(in srgb, ${accent} 72%, #000000)`,
+    "--bg-canvas": p.bgCanvas,
+    "--panel": p.panel,
+    "--panel-deep": p.panelDeep,
+    "--panel-soft": p.panelSoft,
+    "--border": p.border,
+    "--teal-line": accentLine,
+    "--text-main": p.textMain,
+    "--text-soft": p.textSoft,
+    "--text-muted": p.textMuted,
+    "--danger": p.danger,
+    "--accent-gold": a,
+    "--orb-accent": a,
+    "--shot-accent": a,
+    "--gold-soft": `color-mix(in srgb, ${a} 72%, ${p.bgCanvas})`,
   };
 }
 
-/** xterm.js palette — orb's constant teal base, cursor/yellow tinted by accent. */
-export function xtermThemeForTheme(name: OrbThemeName) {
-  const accent = ORB_THEMES[name].accent;
+/** xterm.js palette — surface from the base, cursor/yellow from the accent. */
+export function xtermThemeForPalette(
+  name: PanelPaletteName,
+  accent: AccentName = "auto",
+) {
+  const p = PANEL_PALETTES[name] ?? PANEL_PALETTES["deep-teal"];
+  const a = resolveAccentColor(p, accent);
   return {
-    background: "#041c1c",
-    foreground: "#e8ddc6",
-    cursor: accent,
-    cursorAccent: "#041c1c",
-    selectionBackground: `color-mix(in srgb, ${accent} 24%, transparent)`,
-    black: "#0a2624",
+    background: p.bgCanvas,
+    foreground: p.textMain,
+    cursor: a,
+    cursorAccent: p.bgCanvas,
+    selectionBackground: `color-mix(in srgb, ${a} 24%, transparent)`,
+    black: p.panelDeep,
     brightBlack: "#3a564f",
     red: "#e06c75",
     brightRed: "#ff7b86",
     green: "#7fd1a6",
     brightGreen: "#9fe6bf",
-    yellow: accent,
+    yellow: a,
     brightYellow: "#ffe45e",
     blue: "#6fb3d2",
     brightBlue: "#8fcde8",
@@ -58,16 +72,24 @@ export function xtermThemeForTheme(name: OrbThemeName) {
     brightMagenta: "#d9b3df",
     cyan: "#5fc9c0",
     brightCyan: "#86e2da",
-    white: "#e8ddc6",
+    white: p.textMain,
     brightWhite: "#f7f0e0",
   };
 }
 
-/** Apply a theme's CSS variables to the document root. */
-export function applyThemeVars(name: OrbThemeName) {
+/** Apply a base palette + accent's CSS variables to the document root. */
+export function applyPaletteVars(
+  name: PanelPaletteName,
+  accent: AccentName = "auto",
+) {
   if (typeof document === "undefined") return;
-  const vars = cssVarsForTheme(name);
+  const vars = cssVarsForPalette(name, accent);
   const root = document.documentElement;
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
-  root.setAttribute("data-theme", name);
+  root.setAttribute("data-palette", name);
+  root.setAttribute("data-accent", accent);
+  root.setAttribute(
+    "data-palette-mode",
+    PANEL_PALETTES[name]?.light ? "light" : "dark",
+  );
 }
