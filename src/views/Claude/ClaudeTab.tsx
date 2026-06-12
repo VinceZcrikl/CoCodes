@@ -60,6 +60,7 @@ export default function ClaudeTab({ cli, profileId, visible }: Props) {
     markPaneStarted,
     assignPaneProfile,
     respawnPane,
+    renamePane,
     togglePin,
     setGroup,
     newGroup,
@@ -194,6 +195,7 @@ export default function ClaudeTab({ cli, profileId, visible }: Props) {
             onPaneStarted={markPaneStarted}
             onAssignPaneProfile={assignPaneProfile}
             onRespawnPane={respawnPane}
+            onRenamePane={renamePane}
           />
         )}
       </div>

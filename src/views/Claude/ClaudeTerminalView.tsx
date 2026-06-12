@@ -44,6 +44,7 @@ export default function ClaudeTerminalView({
   onPaneStarted,
   onAssignPaneProfile,
   onRespawnPane,
+  onRenamePane,
 }: {
   profileId: string;
   activeId: string | null;
@@ -61,6 +62,7 @@ export default function ClaudeTerminalView({
   onPaneStarted: (sessionId: string, paneId: string) => void;
   onAssignPaneProfile: (sessionId: string, paneId: string, profileId: string, cli: string) => void;
   onRespawnPane: (sessionId: string, paneId: string) => void;
+  onRenamePane: (sessionId: string, paneId: string, title: string) => void;
 }) {
   // One PaneLayout handle per session; the toolbar drives the active one.
   const paneRefs = useRef<Map<string, ClaudeTerminalHandle>>(new Map());
@@ -215,6 +217,7 @@ export default function ClaudeTerminalView({
                   onAssignPaneProfile(s.id, paneId, profileId, cli)
                 }
                 onRespawn={(paneId) => onRespawnPane(s.id, paneId)}
+                onRename={(paneId, title) => onRenamePane(s.id, paneId, title)}
                 onMissingCli={setMissing}
               />
             </div>

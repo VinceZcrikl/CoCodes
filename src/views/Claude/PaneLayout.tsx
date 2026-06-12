@@ -42,6 +42,8 @@ interface PaneCtx {
   onRelay: (fromPaneId: string) => boolean;
   /** Generate a new convId for `paneId` to recover from a session lock conflict. */
   onRespawn: (paneId: string) => void;
+  /** Persist a pane's custom header title (empty string clears it). */
+  onRename: (paneId: string, title: string) => void;
   /** Pane ID currently hovered by an OS file drag, or null. */
   fileDragOverPaneId: string | null;
   /** Expand `paneId` to a centered overlay. */
@@ -74,6 +76,7 @@ interface Props {
   onMissingCli?: (message: string) => void;
   onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
   onRespawn: (paneId: string) => void;
+  onRename: (paneId: string, title: string) => void;
 }
 
 /** Ordered list of pane ids as they appear left-to-right / top-to-bottom. */
@@ -96,6 +99,16 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   const active = ctx.activePaneId === node.paneId;
   const [dropOver, setDropOver] = useState(false);
   const [relayMiss, setRelayMiss] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  // Custom title when set, otherwise the CLI name as the default placeholder.
+  const displayTitle = node.title ?? node.cli;
+  const commitTitle = (value: string) => {
+    setEditing(false);
+    // Clearing the field reverts to the default (cli); an unchanged custom
+    // title is a no-op write that resolveLayout/save absorb harmlessly.
+    if (value.trim() !== (node.title ?? "")) ctx.onRename(node.paneId, value);
+  };
 
   const isZoomed = ctx.zoomedPaneId === node.paneId;
   const isExiting = isZoomed && ctx.zoomExiting;
@@ -133,7 +146,32 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
       onPointerLeave={() => setDropOver(false)}
     >
       <div className="pane-header">
-        <span className="pane-header-cli">{node.cli}</span>
+        {editing ? (
+          <input
+            className="pane-header-title-input"
+            defaultValue={node.title ?? ""}
+            placeholder={node.cli}
+            autoFocus
+            spellCheck={false}
+            onFocus={(e) => e.currentTarget.select()}
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onBlur={(e) => commitTitle(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") commitTitle(e.currentTarget.value);
+              else if (e.key === "Escape") setEditing(false);
+            }}
+          />
+        ) : (
+          <span
+            className="pane-header-cli"
+            title="Click to rename"
+            onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+          >
+            {displayTitle}
+          </span>
+        )}
         <span className="pane-header-spacer" />
         {ctx.multi && !isZoomed && (
           <button
@@ -284,6 +322,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     onMissingCli,
     onAssignPaneProfile,
     onRespawn,
+    onRename,
   },
   ref,
 ) {
@@ -557,7 +596,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
       sessionId, profileId, defaultCwd, reloadKey, activePaneId,
       handles, leafEls, setActive: setActivePaneId,
       onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
-      onAssignPaneProfile, onRelay, onRespawn,
+      onAssignPaneProfile, onRelay, onRespawn, onRename,
       ...zoomCtx,
       makeKeyHandler, multi: false,
     };
@@ -570,7 +609,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     sessionId, profileId, defaultCwd, reloadKey, activePaneId,
     handles, leafEls, setActive: setActivePaneId,
     onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
-    onAssignPaneProfile, onRelay, onRespawn,
+    onAssignPaneProfile, onRelay, onRespawn, onRename,
     ...zoomCtx,
     makeKeyHandler, multi: order.length > 1,
   };

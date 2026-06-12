@@ -759,6 +759,32 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted, rgba(255, 255, 255, 0.6));
+  cursor: text;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  border-radius: 3px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-header-cli:hover {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+  color: var(--text-primary, #fff);
+}
+.pane-header-title-input {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-family: inherit;
+  color: var(--text-primary, #fff);
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 45%, transparent);
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin: 0 -1px;
+  width: 160px;
+  outline: none;
 }
 .pane-header-btn {
   display: inline-flex;

@@ -13,6 +13,8 @@ export interface PaneNode {
   /** Which CLI binary this pane runs ("claude" | "codex" | "grok"). Panes in
    *  one session can run different CLIs. */
   cli: string;
+  /** User-set custom header title. Absent → the header shows the CLI name. */
+  title?: string;
   /** True once the PTY has spawned this pane at least once. Per-pane (not
    *  per-session) so restoration resumes each conversation idempotently. */
   started: boolean;
@@ -469,6 +471,35 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     [update, cli],
   );
 
+  /** Set (or clear, with an empty string) a pane's custom header title. The
+   *  default unsplit pane has no persisted layout, so renaming it synthesizes
+   *  one bound to the session id. */
+  const renamePane = useCallback(
+    (sessionId: string, paneId: string, title: string) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          const layout = sess.layout ?? defaultLayout(sess, cli);
+          const patch = (node: LayoutNode): LayoutNode => {
+            if (node.type === "pane") {
+              if (node.paneId !== paneId) return node;
+              const trimmed = title.trim();
+              if (!trimmed) {
+                const { title: _drop, ...rest } = node;
+                return rest;
+              }
+              return { ...node, title: trimmed };
+            }
+            return { ...node, children: [patch(node.children[0]), patch(node.children[1])] };
+          };
+          return { ...sess, layout: patch(layout) };
+        }),
+      }));
+    },
+    [update, cli],
+  );
+
   const togglePin = useCallback(
     (id: string) =>
       update((s) => ({
@@ -541,6 +572,7 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     markPaneStarted,
     assignPaneProfile,
     respawnPane,
+    renamePane,
     togglePin,
     setGroup,
     newGroup,
