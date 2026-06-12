@@ -6,6 +6,7 @@
 
 pub mod directory;
 pub mod persona;
+pub mod providers;
 pub mod screenshot;
 pub mod terminal;
 
@@ -35,6 +36,9 @@ pub fn run() {
             persona::persona_get,
             persona::persona_save,
             persona::persona_delete,
+            providers::provider_list,
+            providers::provider_save,
+            providers::provider_delete,
             screenshot::screenshot_open,
             screenshot::screenshot_cancel,
             screenshot::screenshot_grab,

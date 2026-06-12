@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Upload } from "lucide-react";
-import type { PersonaDoc } from "../../hooks/usePersonas";
+import { useProviders, type PersonaDoc } from "../../hooks/usePersonas";
+import ProviderManager from "./ProviderManager";
 import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
 import ClaudeMascot from "./ClaudeMascot";
 import CodexMascot from "./CodexMascot";
@@ -43,12 +44,15 @@ export default function PersonaEditor({
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState("");
   const [cli, setCli] = useState("claude");
+  const [baseModel, setBaseModel] = useState("");
   const [soul, setSoul] = useState("");
   const [memory, setMemory] = useState("");
   const [user, setUser] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [providerMgrOpen, setProviderMgrOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { providers } = useProviders();
 
   useEffect(() => {
     if (!isEdit || editId === null) return;
@@ -58,6 +62,7 @@ export default function PersonaEditor({
       setName(doc.name);
       setAvatar(doc.avatar);
       setCli(doc.cli || "claude");
+      setBaseModel(doc.base_model ?? "");
       setSoul(doc.soul);
       setMemory(doc.memory);
       setUser(doc.user);
@@ -93,6 +98,8 @@ export default function PersonaEditor({
         name: name.trim(),
         avatar: avatar.trim(),
         cli,
+        // base_model only applies to the claude CLI; clear it for codex/grok.
+        base_model: cli === "claude" ? baseModel || null : null,
         soul: soul.trim(),
         memory: memory.trim(),
         user: user.trim(),
@@ -209,6 +216,37 @@ export default function PersonaEditor({
             </div>
           </div>
 
+          {cli === "claude" && (
+            <div className="agent-editor-label">
+              <span>Base model</span>
+              <select
+                className="agent-editor-input"
+                value={baseModel}
+                onChange={(e) => setBaseModel(e.target.value)}
+              >
+                <option value="">Default — Claude subscription</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                    {p.has_token ? "" : " (needs key)"}
+                  </option>
+                ))}
+              </select>
+              <p className="agent-editor-hint">
+                Routes this persona's <code>claude</code> at a third-party
+                Anthropic-compatible endpoint. Other personas — and the default —
+                stay on your Claude subscription.{" "}
+                <button
+                  type="button"
+                  className="agent-editor-link"
+                  onClick={() => setProviderMgrOpen(true)}
+                >
+                  Manage providers…
+                </button>
+              </p>
+            </div>
+          )}
+
           <label className="agent-editor-label">
             <span>Name</span>
             <input
@@ -286,6 +324,10 @@ export default function PersonaEditor({
           </div>
         </footer>
       </div>
+
+      {providerMgrOpen && (
+        <ProviderManager onClose={() => setProviderMgrOpen(false)} />
+      )}
     </div>
   );
 }

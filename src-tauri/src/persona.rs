@@ -48,6 +48,10 @@ pub struct PersonaDoc {
     /// Defaults to "claude" for existing personas that pre-date this field.
     #[serde(default = "default_cli")]
     pub cli: String,
+    /// Base-model provider preset id (see [`crate::providers`]). Empty / `None`
+    /// → this persona's `claude` runs on the default Claude subscription.
+    #[serde(default)]
+    pub base_model: Option<String>,
 }
 
 /// A persona list-row summary (id, display name, avatar, short SOUL preview).
@@ -73,6 +77,9 @@ struct Meta {
     /// Preferred CLI for this persona. Missing in legacy meta.json → "claude".
     #[serde(default = "default_cli")]
     cli: String,
+    /// Base-model provider preset id; missing in legacy meta.json → `None`.
+    #[serde(default)]
+    base_model: Option<String>,
 }
 
 /// The OpenTerminus data home — `~/.openterminus`.
@@ -152,6 +159,19 @@ fn load(profile_id: Option<String>) -> PersonaContext {
     }
 }
 
+/// The base-model provider preset id selected for `profile_id`, if any. Read by
+/// the terminal spawn path to decide whether to inject a third-party endpoint
+/// for this persona's `claude` process. `None` → default Claude subscription.
+pub fn base_model_for(profile_id: Option<&str>) -> Option<String> {
+    let pid = profile_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_PROFILE);
+    read_meta(&persona_dir(&sanitize_id(pid)))
+        .base_model
+        .filter(|s| !s.trim().is_empty())
+}
+
 /// List all personas. Always includes a synthetic "default" first even if it
 /// has no directory yet, so the cockpit always has a selectable persona.
 #[tauri::command]
@@ -213,6 +233,7 @@ pub async fn persona_get(id: String) -> Result<PersonaDoc, String> {
         name: if meta.name.trim().is_empty() { pid.clone() } else { meta.name },
         avatar: meta.avatar,
         cli: meta.cli,
+        base_model: meta.base_model,
         soul: read("SOUL.md"),
         memory: read("MEMORY.md"),
         user: read("USER.md"),
@@ -238,10 +259,18 @@ pub async fn persona_save(doc: PersonaDoc) -> Result<String, String> {
         doc.name.trim().to_string()
     };
     let cli = if doc.cli.trim().is_empty() { default_cli() } else { doc.cli.trim().to_string() };
+    // Normalize the base-model reference: blank → None (default subscription).
+    let base_model = doc
+        .base_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     let meta = serde_json::to_string_pretty(&Meta {
         name,
         avatar: doc.avatar,
         cli,
+        base_model,
     })
     .map_err(|e| e.to_string())?;
     std::fs::write(dir.join("meta.json"), meta).map_err(|e| e.to_string())?;
@@ -326,6 +355,7 @@ pub async fn seed_default_personas() {
                 name: s.name.to_string(),
                 avatar: s.avatar.to_string(),
                 cli: s.cli.to_string(),
+                base_model: None,
             };
             if let Ok(json) = serde_json::to_string_pretty(&meta) {
                 let _ = std::fs::write(&meta_path, json);
@@ -366,5 +396,26 @@ mod tests {
         assert_eq!(sanitize_id("Dev Bot 2!"), "dev-bot-2");
         assert_eq!(sanitize_id("  "), "claude");
         assert_eq!(sanitize_id("../etc/passwd"), "etc-passwd");
+    }
+
+    #[test]
+    fn read_meta_parses_base_model_and_legacy_default() {
+        let dir = std::env::temp_dir().join(format!("ot-persona-meta-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+
+        std::fs::write(
+            dir.join("meta.json"),
+            r#"{"name":"Dev","avatar":"","cli":"claude","base_model":"deepseek"}"#,
+        )
+        .unwrap();
+        let meta = read_meta(&dir);
+        assert_eq!(meta.name, "Dev");
+        assert_eq!(meta.base_model.as_deref(), Some("deepseek"));
+
+        // Legacy meta.json without the field deserializes to None.
+        std::fs::write(dir.join("meta.json"), r#"{"name":"Old"}"#).unwrap();
+        assert_eq!(read_meta(&dir).base_model, None);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

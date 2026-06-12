@@ -392,6 +392,44 @@ pub async fn terminal_open(
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
 
+    // Per-persona base-model substitution (Claude CLI only — `ANTHROPIC_*` is
+    // Claude Code-specific). If this persona selected a provider preset whose
+    // token resolves, point its `claude` process at that third-party
+    // Anthropic-compatible endpoint. No preset / unresolved token → inject
+    // nothing → claude falls back to subscription OAuth, exactly as before.
+    // This touches only the spawned process's env — never a global file — so
+    // other personas and the system Claude install are unaffected.
+    if cli_name == "claude" {
+        if let Some(preset_id) = crate::persona::base_model_for(profile_id.as_deref()) {
+            match crate::providers::resolve(&preset_id) {
+                Ok(Some(p)) => {
+                    cmd.env("ANTHROPIC_BASE_URL", &p.base_url);
+                    cmd.env("ANTHROPIC_AUTH_TOKEN", &p.auth_token);
+                    cmd.env("ANTHROPIC_MODEL", &p.model);
+                    if let Some(small) = p.small_fast_model.as_deref() {
+                        cmd.env("ANTHROPIC_SMALL_FAST_MODEL", small);
+                    }
+                    // Keep AUTH_TOKEN the sole Bearer source: a stale
+                    // ANTHROPIC_API_KEY inherited from the parent shell would
+                    // otherwise compete with the provider token.
+                    cmd.env_remove("ANTHROPIC_API_KEY");
+                    tracing::info!(
+                        "terminal: persona base-model '{preset_id}' → {}",
+                        p.base_url
+                    );
+                }
+                Ok(None) => tracing::warn!(
+                    "terminal: base-model preset '{preset_id}' is unconfigured \
+                     (missing or no token); using subscription Claude"
+                ),
+                Err(e) => tracing::warn!(
+                    "terminal: base-model resolve '{preset_id}' failed: {e}; \
+                     using subscription Claude"
+                ),
+            }
+        }
+    }
+
     let writer = pair
         .master
         .take_writer()
