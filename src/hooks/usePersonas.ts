@@ -25,6 +25,9 @@ export interface PersonaDoc {
   /** Base-model provider preset id, or null → default Claude subscription.
    *  Only meaningful for the "claude" CLI. */
   base_model?: string | null;
+  /** SOUL application: "replace" swaps Claude Code's system prompt entirely;
+   *  anything else (default) appends. Only meaningful for the "claude" CLI. */
+  prompt_mode?: string | null;
 }
 
 /** A base-model provider preset (Anthropic-compatible endpoint). Mirrors the

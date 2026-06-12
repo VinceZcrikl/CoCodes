@@ -45,6 +45,7 @@ export default function PersonaEditor({
   const [avatar, setAvatar] = useState("");
   const [cli, setCli] = useState("claude");
   const [baseModel, setBaseModel] = useState("");
+  const [promptMode, setPromptMode] = useState("append");
   const [soul, setSoul] = useState("");
   const [memory, setMemory] = useState("");
   const [user, setUser] = useState("");
@@ -63,6 +64,7 @@ export default function PersonaEditor({
       setAvatar(doc.avatar);
       setCli(doc.cli || "claude");
       setBaseModel(doc.base_model ?? "");
+      setPromptMode(doc.prompt_mode === "replace" ? "replace" : "append");
       setSoul(doc.soul);
       setMemory(doc.memory);
       setUser(doc.user);
@@ -98,8 +100,9 @@ export default function PersonaEditor({
         name: name.trim(),
         avatar: avatar.trim(),
         cli,
-        // base_model only applies to the claude CLI; clear it for codex/grok.
+        // base_model / prompt_mode only apply to the claude CLI.
         base_model: cli === "claude" ? baseModel || null : null,
+        prompt_mode: cli === "claude" ? promptMode : null,
         soul: soul.trim(),
         memory: memory.trim(),
         user: user.trim(),
@@ -243,6 +246,36 @@ export default function PersonaEditor({
                 >
                   Manage providers…
                 </button>
+              </p>
+            </div>
+          )}
+
+          {cli === "claude" && (
+            <div className="agent-editor-label">
+              <span>Identity</span>
+              <div className="cli-picker">
+                <button
+                  type="button"
+                  className={`cli-picker-btn${promptMode !== "replace" ? " active" : ""}`}
+                  onClick={() => setPromptMode("append")}
+                >
+                  <span className="cli-picker-label">Augment</span>
+                  <span className="cli-picker-hint">Claude Code + SOUL</span>
+                </button>
+                <button
+                  type="button"
+                  className={`cli-picker-btn${promptMode === "replace" ? " active" : ""}`}
+                  onClick={() => setPromptMode("replace")}
+                >
+                  <span className="cli-picker-label">Replace</span>
+                  <span className="cli-picker-hint">SOUL only · pure persona</span>
+                </button>
+              </div>
+              <p className="agent-editor-hint">
+                <strong>Replace</strong> makes the SOUL the entire system prompt —
+                best for writing / character personas and third-party models that
+                ignore an appended persona. <strong>Augment</strong> keeps Claude
+                Code's coding identity and appends the SOUL.
               </p>
             </div>
           )}

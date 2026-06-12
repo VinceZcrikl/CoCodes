@@ -319,6 +319,12 @@ pub async fn terminal_open(
     } else {
         None
     };
+    // Whether the SOUL replaces Claude Code's default system prompt
+    // (`--system-prompt-file`) or appends to it (`--append-system-prompt-file`,
+    // the default). Replace lets the persona fully dominate on third-party
+    // models that otherwise ignore an appended persona.
+    let replace_prompt =
+        cli_name == "claude" && crate::persona::wants_replace_prompt(profile_id.as_deref());
 
     let size = PtySize {
         cols: cols.unwrap_or(80).max(2),
@@ -353,7 +359,11 @@ pub async fn terminal_open(
 
     if cli_name == "claude" {
         if let Some(file) = persona_file.as_ref() {
-            cmd.arg("--append-system-prompt-file");
+            cmd.arg(if replace_prompt {
+                "--system-prompt-file"
+            } else {
+                "--append-system-prompt-file"
+            });
             cmd.arg(file.as_os_str());
         }
         // Bind to a conversation UUID so the sidebar manages independent,

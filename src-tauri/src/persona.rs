@@ -52,6 +52,11 @@ pub struct PersonaDoc {
     /// → this persona's `claude` runs on the default Claude subscription.
     #[serde(default)]
     pub base_model: Option<String>,
+    /// How the SOUL is applied: `Some("replace")` swaps Claude Code's default
+    /// system prompt entirely (`--system-prompt-file`); otherwise it is appended
+    /// (`--append-system-prompt-file`, the default).
+    #[serde(default)]
+    pub prompt_mode: Option<String>,
 }
 
 /// A persona list-row summary (id, display name, avatar, short SOUL preview).
@@ -80,6 +85,9 @@ struct Meta {
     /// Base-model provider preset id; missing in legacy meta.json → `None`.
     #[serde(default)]
     base_model: Option<String>,
+    /// SOUL application mode: `Some("replace")` or `None`/append (default).
+    #[serde(default)]
+    prompt_mode: Option<String>,
 }
 
 /// The OpenTerminus data home — `~/.openterminus`.
@@ -172,6 +180,22 @@ pub fn base_model_for(profile_id: Option<&str>) -> Option<String> {
         .filter(|s| !s.trim().is_empty())
 }
 
+/// Whether `profile_id` wants its SOUL to REPLACE Claude Code's default system
+/// prompt (`--system-prompt-file`) instead of appending to it
+/// (`--append-system-prompt-file`, the default). Replace lets the persona fully
+/// dominate — useful for writing/character personas and for third-party models
+/// that otherwise stay anchored to Claude Code's base coding identity.
+pub fn wants_replace_prompt(profile_id: Option<&str>) -> bool {
+    let pid = profile_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_PROFILE);
+    read_meta(&persona_dir(&sanitize_id(pid)))
+        .prompt_mode
+        .as_deref()
+        == Some("replace")
+}
+
 /// List all personas. Always includes a synthetic "default" first even if it
 /// has no directory yet, so the cockpit always has a selectable persona.
 #[tauri::command]
@@ -234,6 +258,7 @@ pub async fn persona_get(id: String) -> Result<PersonaDoc, String> {
         avatar: meta.avatar,
         cli: meta.cli,
         base_model: meta.base_model,
+        prompt_mode: meta.prompt_mode,
         soul: read("SOUL.md"),
         memory: read("MEMORY.md"),
         user: read("USER.md"),
@@ -266,11 +291,17 @@ pub async fn persona_save(doc: PersonaDoc) -> Result<String, String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    // Only "replace" is stored; anything else means the default append mode.
+    let prompt_mode = match doc.prompt_mode.as_deref().map(str::trim) {
+        Some("replace") => Some("replace".to_string()),
+        _ => None,
+    };
     let meta = serde_json::to_string_pretty(&Meta {
         name,
         avatar: doc.avatar,
         cli,
         base_model,
+        prompt_mode,
     })
     .map_err(|e| e.to_string())?;
     std::fs::write(dir.join("meta.json"), meta).map_err(|e| e.to_string())?;
@@ -356,6 +387,7 @@ pub async fn seed_default_personas() {
                 avatar: s.avatar.to_string(),
                 cli: s.cli.to_string(),
                 base_model: None,
+                prompt_mode: None,
             };
             if let Ok(json) = serde_json::to_string_pretty(&meta) {
                 let _ = std::fs::write(&meta_path, json);
@@ -405,16 +437,19 @@ mod tests {
 
         std::fs::write(
             dir.join("meta.json"),
-            r#"{"name":"Dev","avatar":"","cli":"claude","base_model":"deepseek"}"#,
+            r#"{"name":"Dev","avatar":"","cli":"claude","base_model":"deepseek","prompt_mode":"replace"}"#,
         )
         .unwrap();
         let meta = read_meta(&dir);
         assert_eq!(meta.name, "Dev");
         assert_eq!(meta.base_model.as_deref(), Some("deepseek"));
+        assert_eq!(meta.prompt_mode.as_deref(), Some("replace"));
 
-        // Legacy meta.json without the field deserializes to None.
+        // Legacy meta.json without the fields deserializes to None.
         std::fs::write(dir.join("meta.json"), r#"{"name":"Old"}"#).unwrap();
-        assert_eq!(read_meta(&dir).base_model, None);
+        let legacy = read_meta(&dir);
+        assert_eq!(legacy.base_model, None);
+        assert_eq!(legacy.prompt_mode, None);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
