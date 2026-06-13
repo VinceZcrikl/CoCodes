@@ -637,6 +637,202 @@ body {
   flex-direction: column;
 }
 
+/* ── Headless structured chat view ─────────────────────────────────── */
+.chat-headless {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
+}
+.chat-headless-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 18px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chat-headless-empty {
+  margin: auto;
+  max-width: 380px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 760px;
+  width: 100%;
+  align-self: center;
+}
+.chat-msg-role {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.chat-msg-user .chat-msg-role {
+  color: color-mix(in srgb, var(--accent-gold) 80%, var(--text-muted));
+}
+.chat-msg-body {
+  border-radius: 12px;
+  padding: 10px 13px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+}
+.chat-msg-user .chat-msg-body {
+  background: color-mix(in srgb, var(--accent-gold) 9%, var(--panel-deep));
+  border-color: color-mix(in srgb, var(--accent-gold) 28%, transparent);
+}
+.chat-user-text {
+  white-space: pre-wrap;
+}
+.chat-md > :first-child {
+  margin-top: 0;
+}
+.chat-md > :last-child {
+  margin-bottom: 0;
+}
+.chat-md p {
+  margin: 0 0 8px;
+}
+.chat-md pre {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12.5px;
+}
+.chat-md code {
+  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-size: 0.92em;
+}
+.chat-md :not(pre) > code {
+  background: color-mix(in srgb, var(--text-main) 10%, transparent);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+.chat-md a {
+  color: var(--accent-gold);
+}
+.chat-cursor {
+  color: var(--text-muted);
+  animation: chat-blink 1s steps(2) infinite;
+}
+@keyframes chat-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.chat-tool {
+  margin-top: 8px;
+  border: 1px solid var(--teal-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.chat-tool-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  background: color-mix(in srgb, var(--teal-line) 18%, transparent);
+  color: var(--text-soft);
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+}
+.chat-tool-name {
+  font-weight: 600;
+}
+.chat-tool-body {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+.chat-tool-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 4px 0 2px;
+}
+.chat-tool-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-soft);
+}
+.chat-msg-error {
+  margin-top: 6px;
+  color: var(--danger);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+.chat-msg-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.chat-composer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-deep);
+}
+.chat-composer-input {
+  flex: 1;
+  resize: none;
+  max-height: 160px;
+  min-height: 22px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-canvas);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.chat-composer-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent-gold) 50%, transparent);
+}
+.chat-composer-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
+  color: var(--text-main);
+  cursor: pointer;
+}
+.chat-composer-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.chat-composer-btn.stop {
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+}
+
 /* Keep-alive session stack: every session's panes stay mounted; only the
  * active slot is visible. Slots are stacked (absolute) and retain their size
  * while hidden, so a hidden terminal stays fitted — switching is instant and

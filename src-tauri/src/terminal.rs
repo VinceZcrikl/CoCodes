@@ -139,7 +139,7 @@ fn where_exe(name: &str) -> Option<PathBuf> {
         .filter(|p| p.is_file())
 }
 
-fn find_claude() -> Option<PathBuf> {
+pub(crate) fn find_claude() -> Option<PathBuf> {
     let home = dirs::home_dir();
     let mut extras = vec![
         PathBuf::from("/usr/local/bin"),
@@ -282,6 +282,54 @@ fn write_persona_file(id: &str, ctx: &PersonaContext) -> Option<PathBuf> {
             None
         }
     }
+}
+
+/// Build the persona system-prompt-file argument for a claude run (PTY or
+/// headless). Returns the file path plus whether it should REPLACE (`true`) or
+/// APPEND (`false`) Claude Code's default system prompt. `None` when the
+/// profile has nothing to inject.
+pub(crate) async fn claude_persona_args(
+    id: &str,
+    profile_id: Option<String>,
+) -> Option<(PathBuf, bool)> {
+    let ctx = crate::persona::load_persona_context(profile_id.clone()).await;
+    let file = write_persona_file(id, &ctx)?;
+    Some((file, crate::persona::wants_replace_prompt(profile_id.as_deref())))
+}
+
+/// The Claude-specific environment overrides for a profile, returned as data so
+/// both the PTY and headless spawn paths apply them identically (the two use
+/// different command types). A `None` value means "remove this variable".
+///
+/// With no provider preset this is empty → claude uses the subscription OAuth
+/// login in `~/.claude` (we never set `ANTHROPIC_API_KEY`). A preset routes the
+/// run to a third-party Anthropic-compatible endpoint via `ANTHROPIC_AUTH_TOKEN`
+/// and strips any inherited `ANTHROPIC_API_KEY` so it can't compete. This is the
+/// single source of truth for headless/PTY auth — do not hand-roll it elsewhere.
+pub(crate) fn claude_env_overrides(profile_id: Option<&str>) -> Vec<(String, Option<String>)> {
+    let mut out: Vec<(String, Option<String>)> = Vec::new();
+    let Some(preset_id) = crate::persona::base_model_for(profile_id) else {
+        return out;
+    };
+    match crate::providers::resolve(&preset_id) {
+        Ok(Some(p)) => {
+            out.push(("ANTHROPIC_BASE_URL".into(), Some(p.base_url)));
+            out.push(("ANTHROPIC_AUTH_TOKEN".into(), Some(p.auth_token)));
+            out.push(("ANTHROPIC_MODEL".into(), Some(p.model)));
+            if let Some(small) = p.small_fast_model {
+                out.push(("ANTHROPIC_SMALL_FAST_MODEL".into(), Some(small)));
+            }
+            out.push(("ANTHROPIC_API_KEY".into(), None));
+            tracing::info!("claude: persona base-model '{preset_id}' → third-party endpoint");
+        }
+        Ok(None) => tracing::warn!(
+            "claude: base-model preset '{preset_id}' unconfigured; using subscription"
+        ),
+        Err(e) => tracing::warn!(
+            "claude: base-model resolve '{preset_id}' failed: {e}; using subscription"
+        ),
+    }
+    out
 }
 
 /// Open a PTY, spawn the requested CLI tool with the active profile's
@@ -452,33 +500,18 @@ pub async fn terminal_open(
     // nothing → claude falls back to subscription OAuth, exactly as before.
     // This touches only the spawned process's env — never a global file — so
     // other personas and the system Claude install are unaffected.
+    // Per-persona base-model substitution (Claude CLI only). Shared with the
+    // headless path via `claude_env_overrides` so auth behaviour can't drift:
+    // no preset → subscription OAuth (no API key); a preset → third-party token.
     if cli_name == "claude" {
-        if let Some(preset_id) = crate::persona::base_model_for(profile_id.as_deref()) {
-            match crate::providers::resolve(&preset_id) {
-                Ok(Some(p)) => {
-                    cmd.env("ANTHROPIC_BASE_URL", &p.base_url);
-                    cmd.env("ANTHROPIC_AUTH_TOKEN", &p.auth_token);
-                    cmd.env("ANTHROPIC_MODEL", &p.model);
-                    if let Some(small) = p.small_fast_model.as_deref() {
-                        cmd.env("ANTHROPIC_SMALL_FAST_MODEL", small);
-                    }
-                    // Keep AUTH_TOKEN the sole Bearer source: a stale
-                    // ANTHROPIC_API_KEY inherited from the parent shell would
-                    // otherwise compete with the provider token.
-                    cmd.env_remove("ANTHROPIC_API_KEY");
-                    tracing::info!(
-                        "terminal: persona base-model '{preset_id}' → {}",
-                        p.base_url
-                    );
+        for (k, v) in claude_env_overrides(profile_id.as_deref()) {
+            match v {
+                Some(val) => {
+                    cmd.env(&k, &val);
                 }
-                Ok(None) => tracing::warn!(
-                    "terminal: base-model preset '{preset_id}' is unconfigured \
-                     (missing or no token); using subscription Claude"
-                ),
-                Err(e) => tracing::warn!(
-                    "terminal: base-model resolve '{preset_id}' failed: {e}; \
-                     using subscription Claude"
-                ),
+                None => {
+                    cmd.env_remove(&k);
+                }
             }
         }
     }
@@ -635,7 +668,7 @@ fn cleanup_persona(persona_file: &Option<PathBuf>) {
 ///
 /// This is the atomic, preserve-the-rest config-edit pattern the roadmap
 /// generalizes into `config_edit` for per-CLI provider switching (§8).
-fn ensure_claude_trusts(dir: &std::path::Path) {
+pub(crate) fn ensure_claude_trusts(dir: &std::path::Path) {
     let Some(home) = dirs::home_dir() else {
         return;
     };

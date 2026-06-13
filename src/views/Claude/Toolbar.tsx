@@ -7,6 +7,8 @@ import {
   Clock,
   PanelLeftClose,
   PanelLeftOpen,
+  TerminalSquare,
+  MessageSquare,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
@@ -20,9 +22,21 @@ interface Props {
   busy?: boolean;
   /** "claude" | "codex" | "grok" — hides Claude-specific controls for other CLIs. */
   cli?: string;
+  /** Current render mode for this view, when a chat/terminal toggle applies. */
+  mode?: "terminal" | "chat";
+  /** Toggle between the raw terminal and the structured chat view (Claude only). */
+  onToggleMode?: () => void;
 }
 
-export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cli = "claude" }: Props) {
+export default function Toolbar({
+  onScreenshot,
+  onCwdChange,
+  onCommand,
+  busy,
+  cli = "claude",
+  mode = "terminal",
+  onToggleMode,
+}: Props) {
   const { cwd, recent, setCwd } = useDirectoryStore();
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
@@ -196,7 +210,24 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
         </button>
       </div>
 
-      <div className="cli-toolbar-right" />
+      <div className="cli-toolbar-right">
+        {cli === "claude" && onToggleMode && (
+          <button
+            type="button"
+            className={`cli-tool-btn${mode === "chat" ? " active" : ""}`}
+            onClick={onToggleMode}
+            title={mode === "chat" ? "Switch to terminal" : "Switch to chat"}
+            aria-label={mode === "chat" ? "Switch to terminal" : "Switch to chat"}
+            aria-pressed={mode === "chat"}
+          >
+            {mode === "chat" ? (
+              <TerminalSquare size={15} strokeWidth={1.75} />
+            ) : (
+              <MessageSquare size={15} strokeWidth={1.75} />
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

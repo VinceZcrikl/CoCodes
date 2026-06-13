@@ -5,6 +5,7 @@
 //! later phases; the PTY engine here is already generic enough to drive them.
 
 pub mod directory;
+pub mod headless;
 pub mod persona;
 pub mod providers;
 pub mod screenshot;
@@ -49,12 +50,15 @@ pub fn run() {
             Ok(())
         })
         .manage(terminal::TerminalRegistry::default())
+        .manage(headless::RunRegistry::default())
         .invoke_handler(tauri::generate_handler![
             directory::pick_directory,
             terminal::terminal_open,
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_close,
+            headless::claude_run,
+            headless::claude_run_cancel,
             persona::load_persona_context,
             persona::persona_list,
             persona::persona_get,

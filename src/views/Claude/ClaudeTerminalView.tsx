@@ -5,6 +5,7 @@ import { Copy, Check, RefreshCw } from "lucide-react";
 import Toolbar from "./Toolbar";
 import { type ClaudeTerminalHandle } from "./ClaudeTerminal";
 import PaneLayout from "./PaneLayout";
+import ChatView from "../Chat/ChatView";
 import type { ClaudeSession, LayoutNode } from "../../hooks/useClaudeSessions";
 import { useDirectoryStore } from "../../state/directoryStore";
 import { useWindowStore } from "../../state/windowStore";
@@ -104,6 +105,11 @@ export default function ClaudeTerminalView({
   const { cwd } = useDirectoryStore();
   const mini = useWindowStore((s) => s.mini);
 
+  // Structured chat vs raw terminal (Claude only). The terminal panes stay
+  // mounted (just hidden) while in chat mode so PTYs/scrollback survive toggles.
+  const [mode, setMode] = useState<"terminal" | "chat">("terminal");
+  useEffect(() => { if (cli !== "claude") setMode("terminal"); }, [cli]);
+
   const onScreenshot = useCallback(() => {
     void invoke("screenshot_open");
   }, []);
@@ -191,7 +197,10 @@ export default function ClaudeTerminalView({
 
   return (
     <div className="chat-view">
-      <section className="chat-transcript-wrap claude-transcript-wrap">
+      <section
+        className="chat-transcript-wrap claude-transcript-wrap"
+        style={mode === "chat" ? { display: "none" } : undefined}
+      >
         {sessions
           .filter((s) => mounted.has(s.id) || s.id === activeId)
           .map((s) => {
@@ -227,11 +236,16 @@ export default function ClaudeTerminalView({
           );
         })}
       </section>
+      {mode === "chat" && (
+        <ChatView key={activeId ?? "none"} profileId={profileId} cwd={cwd} />
+      )}
       <Toolbar
         onScreenshot={onScreenshot}
         onCwdChange={onCwdChange}
         onCommand={onCommand}
         cli={cli}
+        mode={mode}
+        onToggleMode={() => setMode((m) => (m === "chat" ? "terminal" : "chat"))}
       />
     </div>
   );
