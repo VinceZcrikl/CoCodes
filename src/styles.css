@@ -1150,6 +1150,16 @@ body {
   gap: 6px;
 }
 
+/* Persona status orb — WebGL indicator. Fills its (sized, clipped) host and
+   never intercepts clicks, so it can sit inside a button/avatar. */
+.persona-orb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 .cli-tool-btn {
   display: inline-flex;
   align-items: center;
@@ -1565,16 +1575,16 @@ body {
 
 /* ── Theme switcher (orb dot) ──────────────────────────────────────── */
 .cockpit-theme-dot {
-  width: 16px;
-  height: 16px;
+  position: relative;
+  width: 22px;
+  height: 22px;
   flex: none;
+  padding: 0;
+  overflow: hidden;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: none;
   cursor: pointer;
-  box-shadow: 0 0 10px -2px currentColor;
-  transition:
-    transform 120ms ease,
-    box-shadow 120ms ease;
+  transition: transform 120ms ease;
 }
 
 /* ── Palette popover ───────────────────────────────────────────────── */
@@ -1759,7 +1769,7 @@ body {
 }
 
 .cockpit-theme-dot:hover {
-  transform: scale(1.12);
+  transform: scale(1.22);
 }
 
 /* ── Persona avatar (tinted disc + initial) ────────────────────────── */
@@ -1903,6 +1913,53 @@ body {
 .window-chat-constellation-cell.active .window-chat-constellation-avatar-wrap {
   border-color: var(--cell-accent, var(--accent-gold));
   box-shadow: 0 0 14px -3px var(--cell-accent, var(--accent-gold));
+  /* Breathing glow — the halo pulses in and out. */
+  animation: persona-halo-breathe 3s ease-in-out infinite;
+}
+
+/* Rotating halo ring just outside the avatar disc (active persona only). */
+.window-chat-constellation-cell.active .window-chat-constellation-avatar-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    var(--cell-accent, var(--accent-gold)) 55deg,
+    transparent 150deg,
+    transparent 235deg,
+    color-mix(in srgb, var(--cell-accent, var(--accent-gold)) 65%, transparent) 305deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(closest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  animation: persona-halo-spin 3.6s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes persona-halo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes persona-halo-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 9px -4px var(--cell-accent, var(--accent-gold));
+  }
+  50% {
+    box-shadow: 0 0 18px -1px var(--cell-accent, var(--accent-gold));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .window-chat-constellation-cell.active .window-chat-constellation-avatar-wrap,
+  .window-chat-constellation-cell.active .window-chat-constellation-avatar-wrap::before {
+    animation: none;
+  }
 }
 
 .window-chat-constellation-cell.active .persona-avatar {

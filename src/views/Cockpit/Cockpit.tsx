@@ -12,6 +12,7 @@ import { usePaletteStore, installPaletteSync } from "../../state/paletteStore";
 import { PANEL_PALETTES, resolveAccentColor } from "../../state/panelPalettes";
 import { applyPaletteVars } from "../../state/uiPalette";
 import { useWindowStore } from "../../state/windowStore";
+import PersonaOrb from "../PersonaOrb/PersonaOrb";
 
 interface CliDef {
   id: string;
@@ -155,8 +156,10 @@ export default function Cockpit() {
                     title={`Palette: ${PANEL_PALETTES[paletteName].label}`}
                     aria-label="Choose panel palette"
                     aria-expanded={paletteOpen}
-                    style={{ background: accentColor }}
-                  />
+                    style={{ background: accentColor, color: accentColor }}
+                  >
+                    <PersonaOrb color={accentColor} reactive={false} spin={0.5} />
+                  </button>
                   {paletteOpen && (
                     <PalettePanel onClose={() => setPaletteOpen(false)} />
                   )}
