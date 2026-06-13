@@ -373,6 +373,8 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       const onData = term.onData((data) => {
         const id = sessionIdRef.current;
         if (id) void invoke("terminal_write", { id, data });
+        // Surface keystrokes for the toolbar samurai (it draws on <Enter>).
+        window.dispatchEvent(new CustomEvent("terminus:input", { detail: { id, data } }));
       });
       cleanup.push(() => onData.dispose());
 
