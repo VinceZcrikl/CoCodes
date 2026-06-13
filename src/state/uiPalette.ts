@@ -45,19 +45,50 @@ export function cssVarsForPalette(
   };
 }
 
-/** xterm.js palette — surface from the base, cursor/yellow from the accent. */
+/** xterm.js palette — surface from the base, cursor/yellow from the accent.
+ *  The 16-colour ANSI ramp is contrast-matched to the surface: the default
+ *  dark ramp washes out on a light canvas, so light palettes get a parallel
+ *  dark-on-cream ramp (saturated, low-lightness hues + a readable dim grey). */
 export function xtermThemeForPalette(
   name: PanelPaletteName,
   accent: AccentName = "auto",
 ) {
   const p = PANEL_PALETTES[name] ?? PANEL_PALETTES["deep-teal"];
   const a = resolveAccentColor(p, accent);
-  return {
+  const base = {
     background: p.bgCanvas,
     foreground: p.textMain,
     cursor: a,
     cursorAccent: p.bgCanvas,
     selectionBackground: `color-mix(in srgb, ${a} 24%, transparent)`,
+  };
+  if (p.light) {
+    // Dark, saturated ANSI for a light canvas. `brightBlack` is the dim/faint
+    // grey used by TUIs for de-emphasised lines ("+19 lines…") — kept dark
+    // enough to read on cream. `white`/`brightWhite` stay near the surface so
+    // inverse/selection blocks still look right.
+    return {
+      ...base,
+      black: "#2b2822",
+      brightBlack: "#6b6660",
+      red: "#b4452f",
+      brightRed: "#c8503a",
+      green: "#2f7d52",
+      brightGreen: "#3c9362",
+      yellow: "#9a7320",
+      brightYellow: "#b0852c",
+      blue: "#3a5e88",
+      brightBlue: "#4a72a0",
+      magenta: "#8a4d92",
+      brightMagenta: "#9d5ca5",
+      cyan: "#2a7d78",
+      brightCyan: "#348d88",
+      white: p.panelDeep,
+      brightWhite: p.bgCanvas,
+    };
+  }
+  return {
+    ...base,
     black: p.panelDeep,
     brightBlack: "#3a564f",
     red: "#e06c75",
