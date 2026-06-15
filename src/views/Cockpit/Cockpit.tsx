@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ClaudeTab from "../Claude/ClaudeTab";
 import WindowControls from "./WindowControls";
@@ -6,6 +6,8 @@ import AppLogo from "./AppLogo";
 import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaEditor from "../Persona/PersonaEditor";
 import PalettePanel from "./PalettePanel";
+import TriondaBall from "./TriondaBall";
+import GoalConfetti from "./GoalConfetti";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
 import { usePaletteStore, installPaletteSync } from "../../state/paletteStore";
@@ -43,6 +45,11 @@ export default function Cockpit() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const accentColor = resolveAccentColor(PANEL_PALETTES[paletteName], accent);
   const mini = useWindowStore((s) => s.mini);
+
+  // The World Cup theme swaps the palette dot for the Trionda ball and unlocks
+  // the festive chrome (the rest is CSS, scoped to [data-palette]).
+  const isWorldCup = paletteName === "world-cup-2026";
+  const [celebrate, setCelebrate] = useState(false);
 
   const profileId = useProfileStore((s) => s.activeProfileId);
   const setActiveProfile = useProfileStore((s) => s.setActiveProfile);
@@ -125,6 +132,30 @@ export default function Cockpit() {
   useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
   useEffect(() => installPaletteSync(), []);
 
+  // Goal celebration: fire the confetti when the user *switches into* the World
+  // Cup theme (not on every render, and not on a relaunch that's already in it).
+  const prevPalette = useRef(paletteName);
+  useEffect(() => {
+    if (paletteName === "world-cup-2026" && prevPalette.current !== "world-cup-2026") {
+      setCelebrate(true);
+    }
+    prevPalette.current = paletteName;
+  }, [paletteName]);
+
+  // …and once on the very first launch after the seasonal rollout, so the
+  // auto-activated theme still gets its kickoff (then never again on launch).
+  useEffect(() => {
+    if (paletteName !== "world-cup-2026") return;
+    try {
+      if (!localStorage.getItem("openterminus:wc2026-celebrated")) {
+        localStorage.setItem("openterminus:wc2026-celebrated", "1");
+        setCelebrate(true);
+      }
+    } catch { /* localStorage unavailable; skip the kickoff */ }
+    // Run once on mount — the transition effect above covers later switches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className={`cockpit${mini ? " mini" : ""}`}>
       <div className="cockpit-frame" aria-hidden="true" data-tauri-drag-region />
@@ -156,9 +187,18 @@ export default function Cockpit() {
                     title={`Palette: ${PANEL_PALETTES[paletteName].label}`}
                     aria-label="Choose panel palette"
                     aria-expanded={paletteOpen}
-                    style={{ background: accentColor, color: accentColor }}
+                    style={{
+                      // Multicolor ball wants a neutral disc; the orb keeps the
+                      // accent fill it tints itself from.
+                      background: isWorldCup ? "#15151b" : accentColor,
+                      color: accentColor,
+                    }}
                   >
-                    <PersonaOrb color={accentColor} reactive={false} spin={0.5} />
+                    {isWorldCup ? (
+                      <TriondaBall className="cockpit-theme-ball" />
+                    ) : (
+                      <PersonaOrb color={accentColor} reactive={false} spin={0.5} />
+                    )}
                   </button>
                   {paletteOpen && (
                     <PalettePanel onClose={() => setPaletteOpen(false)} />
@@ -200,6 +240,8 @@ export default function Cockpit() {
           onSaved={(id) => setActiveProfile(id)}
         />
       )}
+
+      {celebrate && <GoalConfetti onDone={() => setCelebrate(false)} />}
     </div>
   );
 }

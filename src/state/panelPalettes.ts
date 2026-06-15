@@ -16,6 +16,7 @@
  */
 
 export type PanelPaletteName =
+  | "world-cup-2026"
   | "deep-teal"
   | "obsidian-gold"
   | "graphite-mono"
@@ -53,6 +54,25 @@ export interface PanelPalette {
 }
 
 export const PANEL_PALETTES: Record<PanelPaletteName, PanelPalette> = {
+  /** World Cup 26 — "Trionda Night": a midnight-navy stadium with trophy-gold
+   *  as the accent and the Trionda tri-color (red/green/blue host nations) used
+   *  for the festive chrome scoped under [data-palette="world-cup-2026"]. */
+  "world-cup-2026": {
+    name: "world-cup-2026",
+    label: "World Cup 26",
+    bgCanvas: "#070b1c",
+    panel: "#0e1530",
+    panelDeep: "#090f24",
+    panelSoft: "rgba(14, 21, 48, 0.82)",
+    border: "rgba(232, 200, 120, 0.18)",
+    accentLine: "rgba(232, 178, 58, 0.34)",
+    textMain: "#f4ecd6",
+    textSoft: "rgba(244, 236, 214, 0.78)",
+    textMuted: "rgba(244, 236, 214, 0.55)",
+    accent: "#e8b23a",
+    danger: "#e4322b",
+  },
+
   /** The current/default scheme — orb's constant dark teal-green. */
   "deep-teal": {
     name: "deep-teal",
@@ -199,6 +219,7 @@ export const PANEL_PALETTES: Record<PanelPaletteName, PanelPalette> = {
 };
 
 export const PANEL_PALETTE_ORDER: PanelPaletteName[] = [
+  "world-cup-2026",
   "deep-teal",
   "obsidian-gold",
   "graphite-mono",
@@ -209,7 +230,7 @@ export const PANEL_PALETTE_ORDER: PanelPaletteName[] = [
   "porcelain-ink",
 ];
 
-export const DEFAULT_PANEL_PALETTE: PanelPaletteName = "deep-teal";
+export const DEFAULT_PANEL_PALETTE: PanelPaletteName = "world-cup-2026";
 
 /* ───────────────────────────── Accents ─────────────────────────────
  * The accent ("点缀") is an independent axis: it tints borders/dividers,

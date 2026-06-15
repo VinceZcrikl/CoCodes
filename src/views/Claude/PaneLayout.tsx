@@ -19,6 +19,7 @@ import {
 import { draggingPersona } from "../../state/dragState";
 import { personaColor } from "../Persona/PersonaAvatar";
 import PalettePanel from "../Cockpit/PalettePanel";
+import TriondaBall from "../Cockpit/TriondaBall";
 import { usePaletteStore } from "../../state/paletteStore";
 import { cssVarsForPalette } from "../../state/uiPalette";
 import {
@@ -248,7 +249,11 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
               title="Recolour this terminal"
               onClick={(e) => { e.stopPropagation(); setPaletteOpen((v) => !v); }}
             >
-              <Palette size={13} strokeWidth={1.75} />
+              {effPalette === "world-cup-2026" ? (
+                <TriondaBall className="pane-header-ball" />
+              ) : (
+                <Palette size={13} strokeWidth={1.75} />
+              )}
               <span className="pane-palette-dot" style={{ background: paneDotColor }} />
             </button>
             {paletteOpen && (

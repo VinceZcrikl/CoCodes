@@ -3017,3 +3017,172 @@ select.agent-editor-input {
   .cli-tool-btn { width: 28px; height: 28px; }
   .cli-toolbar { padding: 0 6px; gap: 4px; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   "Trionda Night" — 2026 FIFA World Cup theme.
+   The Trionda ball fills the palette buttons (rendered only when the palette
+   is active). Everything else is scoped under [data-palette="world-cup-2026"]
+   so it is fully isolated from the other palettes and trivially reversible.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Ball sizing (the element only exists while the WC palette is active). */
+.cockpit-theme-ball { width: 100%; height: 100%; display: block; }
+.pane-header-ball { width: 15px; height: 15px; display: block; }
+
+/* ── Goal-celebration confetti (self-removing overlay; global) ──────────── */
+.wc-confetti {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+.wc-confetti-piece {
+  position: absolute;
+  top: -16px;
+  border-radius: 1px;
+  will-change: transform, opacity;
+  animation: wc-confetti-fall var(--dur, 1300ms) cubic-bezier(0.2, 0.7, 0.3, 1)
+    var(--delay, 0ms) both;
+}
+.wc-confetti-piece.is-emoji {
+  font-size: var(--sz, 14px);
+  line-height: 1;
+  border-radius: 0;
+}
+@keyframes wc-confetti-fall {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
+  8% { opacity: 1; }
+  100% { transform: translate(var(--dx, 0), 110vh) rotate(var(--rot, 540deg)); opacity: 0; }
+}
+/* a Trionda ball rolling across the top on the kickoff */
+.wc-confetti-ball {
+  position: absolute;
+  top: 12px;
+  left: -32px;
+  width: 26px;
+  height: 26px;
+  animation: wc-ball-roll 1.4s cubic-bezier(0.3, 0, 0.5, 1) both;
+}
+.wc-confetti-ball svg { width: 100%; height: 100%; display: block; }
+@keyframes wc-ball-roll {
+  from { left: -32px; transform: rotate(0deg); }
+  to { left: 100%; transform: rotate(1080deg); }
+}
+
+/* ── Ball motion: idle bob (header) + a quick spin on hover (both) ──────── */
+@keyframes wc-ball-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+@keyframes wc-ball-spin { to { transform: rotate(360deg); } }
+[data-palette="world-cup-2026"] .cockpit-theme-ball {
+  animation: wc-ball-bob 3.2s ease-in-out infinite;
+}
+.cockpit-theme-dot:hover .cockpit-theme-ball,
+.pane-header-btn:hover .pane-header-ball {
+  animation: wc-ball-spin 1.1s linear;
+}
+
+/* ── Festive chrome, scoped to the World Cup palette ────────────────────── */
+
+/* Trophy-gold ring + cool bloom around the header ball button. */
+[data-palette="world-cup-2026"] .cockpit-theme-dot {
+  box-shadow: 0 0 0 1.5px rgba(232, 178, 58, 0.5),
+    0 0 11px -1px rgba(47, 107, 216, 0.45);
+}
+
+/* Tri-color host-nation "three waves" ribbon under the header. */
+[data-palette="world-cup-2026"] .cockpit-header { border-bottom-color: transparent; }
+[data-palette="world-cup-2026"] .cockpit-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    #e4322b 0%, #e4322b 26%,
+    #1fa35a 34%, #1fa35a 60%,
+    #2f6bd8 68%, #2f6bd8 92%,
+    #e8b23a 100%
+  );
+  box-shadow: 0 1px 10px -2px rgba(232, 178, 58, 0.55);
+  pointer-events: none;
+}
+
+/* Stadium floodlight sweeping along the frame's top edge. */
+[data-palette="world-cup-2026"] .cockpit-frame::before {
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--orb-accent) 85%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 38% 100%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--orb-accent) 55%, transparent));
+  animation: wc-floodlight-sweep 9s ease-in-out infinite;
+}
+@keyframes wc-floodlight-sweep {
+  0% { background-position: -45% 0; opacity: 0; }
+  15% { opacity: 0.75; }
+  85% { opacity: 0.75; }
+  100% { background-position: 145% 0; opacity: 0; }
+}
+/* Warm gold corner glow (the stadium lights wash). */
+[data-palette="world-cup-2026"] .cockpit-frame::after {
+  background: radial-gradient(
+    560px 380px at 6% 0%,
+    color-mix(in srgb, var(--orb-accent) 16%, transparent) 0%,
+    transparent 64%
+  );
+  opacity: 0.62;
+}
+
+/* Faint chalk pitch — center circle + halfway line — floating over the body.
+   pointer-events:none so the terminal underneath stays fully interactive; the
+   terminal background is opaque, so this rides above it at very low opacity. */
+[data-palette="world-cup-2026"] .cockpit-body { position: relative; }
+[data-palette="world-cup-2026"] .cockpit-body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.5;
+  background:
+    radial-gradient(
+      circle 86px at 50% 50%,
+      transparent 0 83px,
+      rgba(244, 236, 214, 0.1) 84px 85px,
+      transparent 86px
+    ),
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 0.5px),
+      rgba(244, 236, 214, 0.09) 50%,
+      transparent calc(50% + 0.5px)
+    );
+}
+
+/* Respect reduced-motion: kill every festive animation, keep static chrome.
+   (The confetti component also renders nothing under reduced-motion.) */
+@media (prefers-reduced-motion: reduce) {
+  [data-palette="world-cup-2026"] .cockpit-theme-ball,
+  [data-palette="world-cup-2026"] .cockpit-frame::before,
+  .cockpit-theme-dot:hover .cockpit-theme-ball,
+  .pane-header-btn:hover .pane-header-ball,
+  .wc-confetti-piece,
+  .wc-confetti-ball {
+    animation: none !important;
+  }
+  [data-palette="world-cup-2026"] .cockpit-frame::before {
+    background-position: 50% 0;
+    opacity: 0.4;
+  }
+}

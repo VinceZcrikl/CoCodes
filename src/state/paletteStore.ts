@@ -11,13 +11,16 @@ import {
 
 const STORAGE_KEY = "openterminus:palette";
 const PALETTE_EVENT = "palette:changed";
+/** One-shot flag: the seasonal World Cup theme is force-activated once. */
+const SEASONAL_KEY = "openterminus:wc2026-seasonal";
 
 interface Persisted {
   name: PanelPaletteName;
   accent: AccentName;
 }
 
-function loadInitial(): Persisted {
+/** Parse whatever is persisted (or the default) — no seasonal logic. */
+function readPersisted(): Persisted {
   const fallback: Persisted = { name: DEFAULT_PANEL_PALETTE, accent: DEFAULT_ACCENT };
   if (typeof localStorage === "undefined") return fallback;
   try {
@@ -37,6 +40,26 @@ function loadInitial(): Persisted {
   } catch {
     return fallback;
   }
+}
+
+function loadInitial(): Persisted {
+  const persisted = readPersisted();
+  if (typeof localStorage === "undefined") return persisted;
+  // One-time seasonal activation: switch existing users (who already saved a
+  // different palette) onto the World Cup theme once, on the first launch after
+  // this update. Their accent is preserved and the new choice is persisted, so
+  // every later palette they pick sticks normally — this never runs again.
+  try {
+    if (!localStorage.getItem(SEASONAL_KEY)) {
+      localStorage.setItem(SEASONAL_KEY, "1");
+      const seasonal: Persisted = { name: "world-cup-2026", accent: persisted.accent };
+      persist(seasonal.name, seasonal.accent);
+      return seasonal;
+    }
+  } catch {
+    // localStorage may be unavailable (private mode); fall through.
+  }
+  return persisted;
 }
 
 function persist(name: PanelPaletteName, accent: AccentName) {
