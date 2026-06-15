@@ -753,16 +753,16 @@ body {
   height: 22px;
   padding: 0 6px;
   flex: 0 0 auto;
-  opacity: 0.55;
+  opacity: 0.72;
   transition: opacity 0.12s ease;
 }
-.pane-leaf.active .pane-header { opacity: 0.9; }
+.pane-leaf.active .pane-header { opacity: 1; }
 .pane-header-spacer { flex: 1; }
 .pane-header-cli {
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+  color: var(--text-soft, rgba(255, 255, 255, 0.78));
   cursor: text;
   padding: 1px 4px;
   margin: 0 -4px;
@@ -799,7 +799,7 @@ body {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+  color: var(--text-soft, rgba(255, 255, 255, 0.78));
   cursor: pointer;
 }
 .pane-header-btn:hover {
