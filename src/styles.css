@@ -279,6 +279,8 @@ body {
   flex: 1;
   min-height: 0;
   display: flex;
+  /* Positioning context for the floating shell window. */
+  position: relative;
 }
 
 /* ── CLI tab (sidebar + terminal pane) ─────────────────────────────── */
@@ -1186,6 +1188,117 @@ body {
 .cli-tool-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Pressed/active state — e.g. the `>_` shell toggle while the shell is showing. */
+.cli-tool-btn.active {
+  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 55%, transparent);
+  color: var(--accent-gold);
+}
+
+/* ── Floating shell window ───────────────────────────────────────────────
+   Hovers over the active panel (above the 44px toolbar) without replacing the
+   CLI terminal. Themed to match the panel chrome; `.max` fills the body. */
+.shell-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100% - 32px));
+  height: min(420px, calc(100% - 92px));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow:
+    0 -4px 16px rgba(0, 0, 0, 0.30),
+    0 18px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  animation: shell-overlay-pop 140ms ease;
+}
+
+.shell-overlay.max {
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  bottom: 56px;
+  width: auto;
+  height: auto;
+  transform: none;
+}
+
+@keyframes shell-overlay-pop {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.shell-overlay-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 6px 0 12px;
+  background: var(--panel-deep);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.shell-overlay-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.shell-overlay-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.shell-overlay-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.shell-overlay-btn:hover {
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 40%, transparent);
+  color: var(--accent-gold);
+}
+
+.shell-overlay-close:hover {
+  background: color-mix(in srgb, #ff5f57 22%, transparent);
+  border-color: color-mix(in srgb, #ff5f57 55%, transparent);
+  color: #ff8a84;
+}
+
+.shell-overlay-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-canvas);
 }
 
 /* ── Command palette trigger button ────────────────────────────────── */

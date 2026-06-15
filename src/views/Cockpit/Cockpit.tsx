@@ -14,6 +14,8 @@ import { usePaletteStore, installPaletteSync } from "../../state/paletteStore";
 import { PANEL_PALETTES, resolveAccentColor } from "../../state/panelPalettes";
 import { applyPaletteVars } from "../../state/uiPalette";
 import { useWindowStore } from "../../state/windowStore";
+import { useShellStore } from "../../state/shellStore";
+import ShellOverlay from "../Claude/ShellOverlay";
 import PersonaOrb from "../PersonaOrb/PersonaOrb";
 
 interface CliDef {
@@ -129,6 +131,14 @@ export default function Cockpit() {
     try { localStorage.setItem(CLI_STORAGE_KEY, activeCli); } catch { /* ignore */ }
   }, [activeCli]);
 
+  // Floating shell window state (toolbar `>_`): a window over the panel, not a
+  // CLI tab swap — so the assistant terminal stays put underneath.
+  const shellEverOpened = useShellStore((s) => s.everOpened);
+  const shellOpen = useShellStore((s) => s.open);
+  const shellMaximized = useShellStore((s) => s.maximized);
+  const closeShell = useShellStore((s) => s.close);
+  const toggleShellMax = useShellStore((s) => s.toggleMax);
+
   useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
   useEffect(() => installPaletteSync(), []);
 
@@ -227,6 +237,18 @@ export default function Cockpit() {
                 </div>
               );
             }),
+          )}
+
+          {/* Floating shell window — hovers over the active panel, kept mounted
+              once opened so its history survives hide/show. Suppressed in the
+              mini window. */}
+          {!mini && shellEverOpened && (
+            <ShellOverlay
+              open={shellOpen}
+              maximized={shellMaximized}
+              onToggleMax={toggleShellMax}
+              onClose={closeShell}
+            />
           )}
         </main>
       </div>

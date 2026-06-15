@@ -7,7 +7,9 @@ import {
   Clock,
   PanelLeftClose,
   PanelLeftOpen,
+  Terminal,
 } from "lucide-react";
+import { useShellStore } from "../../state/shellStore";
 import { invoke } from "@tauri-apps/api/core";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
 import { useSidebarStore } from "../../state/sidebarStore";
@@ -24,6 +26,8 @@ interface Props {
 
 export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cli = "claude" }: Props) {
   const { cwd, recent, setCwd } = useDirectoryStore();
+  const shellOpen = useShellStore((s) => s.open);
+  const toggleShell = useShellStore((s) => s.toggle);
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
   const [dropOpen, setDropOpen] = useState(false);
@@ -193,6 +197,19 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
           aria-label="Screenshot"
         >
           <Camera size={15} strokeWidth={1.75} />
+        </button>
+
+        {/* ── Shell toggle ── opens a floating shell window over the panel
+            (does not replace the CLI terminal); active while it's showing. */}
+        <button
+          type="button"
+          className={`cli-tool-btn${shellOpen ? " active" : ""}`}
+          onClick={toggleShell}
+          title={shellOpen ? "Hide shell" : "Open shell"}
+          aria-label={shellOpen ? "Hide shell" : "Open shell"}
+          aria-pressed={shellOpen}
+        >
+          <Terminal size={15} strokeWidth={1.75} />
         </button>
       </div>
 

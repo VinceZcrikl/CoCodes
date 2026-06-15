@@ -277,6 +277,37 @@ fn find_kimi() -> Option<PathBuf> {
         })
 }
 
+/// Resolve the user's interactive login shell for a plain terminal tab (the
+/// "shell" CLI). Unlike the AI CLIs this is never persona/session-aware — it's
+/// just a real shell in the cockpit for git, dev servers, and scratch commands.
+///
+/// Unix: honour `$SHELL`, then fall back to the common login shells. Windows:
+/// prefer PowerShell 7 (`pwsh`), then Windows PowerShell, then `cmd.exe`.
+fn find_shell() -> Option<PathBuf> {
+    #[cfg(not(windows))]
+    {
+        if let Some(sh) = std::env::var_os("SHELL")
+            .map(PathBuf::from)
+            .filter(|p| p.is_file())
+        {
+            return Some(sh);
+        }
+        ["/bin/zsh", "/bin/bash", "/usr/bin/fish", "/bin/sh"]
+            .iter()
+            .map(PathBuf::from)
+            .find(|p| p.is_file())
+    }
+    #[cfg(windows)]
+    {
+        let extras: Vec<PathBuf> = Vec::new();
+        find_in_path("pwsh.exe", &extras)
+            .or_else(|| where_exe("pwsh"))
+            .or_else(|| find_in_path("powershell.exe", &extras))
+            .or_else(|| find_in_path("cmd.exe", &extras))
+            .or_else(|| std::env::var_os("ComSpec").map(PathBuf::from))
+    }
+}
+
 /// Fold the profile's persona + memory into the file we pass to
 /// `--append-system-prompt-file`. Returns `None` when there's nothing to say,
 /// so claude keeps its own default identity rather than getting an empty
@@ -363,6 +394,11 @@ pub async fn terminal_open(
     let cli_name = cli.as_deref().unwrap_or("claude");
 
     let binary = match cli_name {
+        "shell" => find_shell().ok_or_else(|| {
+            TerminalError::CliNotFound(
+                "No shell found. Set $SHELL or install zsh/bash (Windows: pwsh/cmd).".into(),
+            )
+        })?,
         "codex" => find_codex().ok_or_else(|| {
             TerminalError::CliNotFound(
                 "`codex` not found on PATH. Install: npm install -g @openai/codex".into(),

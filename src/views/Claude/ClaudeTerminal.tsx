@@ -10,6 +10,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
+import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { usePaletteStore } from "../../state/paletteStore";
 import { xtermThemeForPalette } from "../../state/uiPalette";
@@ -211,9 +212,21 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         onKeyEventRef.current ? onKeyEventRef.current(e) : true,
       );
 
-      // DOM renderer only (no WebGL): the WebGL addon ghosts/flickers under
-      // macOS WKWebView, which is what we're rendering inside.
       term.open(host);
+
+      // GPU-accelerated rendering via the WebGL addon — must load *after*
+      // open() so it can attach to the live canvas. If the WebView ever drops
+      // the GL context (the WKWebView failure mode), onContextLoss disposes the
+      // addon and xterm transparently falls back to its DOM renderer, so a lost
+      // context degrades instead of leaving a frozen/ghosted surface. A throw at
+      // construction (no GL support at all) lands in the same DOM fallback.
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => webgl.dispose());
+        term.loadAddon(webgl);
+      } catch {
+        /* WebGL unavailable — DOM renderer stays active. */
+      }
 
       // Report focus so the layout can mark this the active pane. xterm's
       // textarea is the real focus target.
@@ -410,7 +423,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
 
       void listen<ExitEvent>("terminal://exit", (ev) => {
         if (ev.payload.id !== sessionIdRef.current) return;
-        term.write("\r\n\x1b[2m[claude exited]\x1b[0m\r\n");
+        term.write(`\r\n\x1b[2m[${cli} exited]\x1b[0m\r\n`);
         onExit?.(ev.payload.code);
       }).then((un) => {
         if (disposed) un();
