@@ -6,6 +6,7 @@ import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
 import ClaudeMascot from "./ClaudeMascot";
 import CodexMascot from "./CodexMascot";
 import GrokMascot from "./GrokMascot";
+import KimiMascot from "./KimiMascot";
 
 const EMOJI_PRESETS = ["🤖", "🦊", "🧠", "✨", "🐙", "📝", "🎨", "🚀", "🦉", "👾"];
 
@@ -13,12 +14,14 @@ const MASCOT_PRESETS = [
   { sentinel: MASCOT_SENTINEL.claude, label: "Claude", Component: ClaudeMascot },
   { sentinel: MASCOT_SENTINEL.codex,  label: "Codex",  Component: CodexMascot  },
   { sentinel: MASCOT_SENTINEL.grok,   label: "Grok",   Component: GrokMascot   },
+  { sentinel: MASCOT_SENTINEL.kimi,   label: "Kimi",   Component: KimiMascot   },
 ];
 
 const CLI_OPTIONS = [
   { id: "claude", label: "Claude", hint: "Anthropic · Claude Code" },
   { id: "codex",  label: "Codex",  hint: "OpenAI · Codex CLI" },
   { id: "grok",   label: "Grok",   hint: "xAI · Grok Build" },
+  { id: "kimi",   label: "Kimi Code", hint: "Moonshot · Kimi Code CLI" },
 ];
 
 interface Props {

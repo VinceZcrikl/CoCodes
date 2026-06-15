@@ -11,6 +11,80 @@ const BLANK: Provider = {
   has_token: false,
 };
 
+/** A one-click provider preset. Picking one fills every field but the API key
+ *  from the vendor's official Claude-Code / Anthropic-compatible docs, so the
+ *  user only pastes their key. `keyUrl` is where that key is issued. */
+interface ProviderPreset {
+  key: string;
+  label: string;
+  id: string;
+  base_url: string;
+  model: string;
+  small_fast_model: string | null;
+  keyUrl: string;
+}
+
+/** Verified against each vendor's official Claude-Code integration docs
+ *  (2026-06): base URL = the Anthropic-compatible endpoint, model = the
+ *  recommended coding model. */
+const PROVIDER_PRESETS: ProviderPreset[] = [
+  {
+    key: "kimi",
+    label: "Kimi (Kimi Code)",
+    id: "kimi",
+    // kimi.com/code/docs — kimi-for-coding is a stable alias auto-mapped to the
+    // latest Kimi model server-side.
+    base_url: "https://api.kimi.com/coding/",
+    model: "kimi-for-coding",
+    small_fast_model: null,
+    keyUrl: "https://www.kimi.com/code",
+  },
+  {
+    key: "zhipu",
+    label: "Zhipu GLM (Z.ai)",
+    id: "zhipu",
+    // docs.z.ai — Claude Code endpoint; Opus/Sonnet → glm-4.7, Haiku → glm-4.5-air.
+    base_url: "https://api.z.ai/api/anthropic",
+    model: "glm-4.7",
+    small_fast_model: "glm-4.5-air",
+    keyUrl: "https://z.ai/manage-apikey/apikey-list",
+  },
+  {
+    key: "stepfun",
+    label: "StepFun (阶跃星辰)",
+    id: "stepfun",
+    // platform.stepfun.ai — Step Plan Claude Code endpoint; step-3.7-flash is
+    // the latest agentic coding model.
+    base_url: "https://api.stepfun.ai/step_plan",
+    model: "step-3.7-flash",
+    small_fast_model: null,
+    keyUrl: "https://platform.stepfun.ai",
+  },
+  {
+    key: "deepseek",
+    label: "DeepSeek",
+    id: "deepseek",
+    base_url: "https://api.deepseek.com/anthropic",
+    model: "deepseek-chat",
+    small_fast_model: null,
+    keyUrl: "https://platform.deepseek.com/api_keys",
+  },
+];
+
+/** The sentinel dropdown value for "fill nothing, I'll type it myself". */
+const CUSTOM_PRESET = "";
+
+function draftFromPreset(p: ProviderPreset): Provider {
+  return {
+    id: p.id,
+    label: p.label,
+    base_url: p.base_url,
+    model: p.model,
+    small_fast_model: p.small_fast_model,
+    has_token: false,
+  };
+}
+
 /** Manage base-model providers — Anthropic-compatible endpoints (DeepSeek,
  *  Kimi…) a persona's embedded `claude` can use instead of the Claude
  *  subscription. Tokens are write-only: stored in ~/.openterminus/.env, never
@@ -20,19 +94,33 @@ export default function ProviderManager({ onClose }: { onClose: () => void }) {
   // undefined = list view; otherwise the draft being added (isNew) or edited.
   const [draft, setDraft] = useState<Provider | undefined>(undefined);
   const [isNew, setIsNew] = useState(false);
+  // Which preset is selected while adding ("" = Custom). Drives auto-fill.
+  const [presetKey, setPresetKey] = useState<string>(PROVIDER_PRESETS[0].key);
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const activePreset = PROVIDER_PRESETS.find((p) => p.key === presetKey);
+
+  // Adding opens pre-filled with the first preset, so the form is ready and the
+  // user only pastes a key. Switching the dropdown re-fills every field.
   const startAdd = () => {
-    setDraft({ ...BLANK });
+    const first = PROVIDER_PRESETS[0];
+    setPresetKey(first.key);
+    setDraft(draftFromPreset(first));
     setIsNew(true);
     setToken("");
     setError(null);
   };
+  const applyPreset = (key: string) => {
+    setPresetKey(key);
+    const preset = PROVIDER_PRESETS.find((p) => p.key === key);
+    setDraft(preset ? draftFromPreset(preset) : { ...BLANK });
+  };
   const startEdit = (p: Provider) => {
     setDraft({ ...p });
     setIsNew(false);
+    setPresetKey(CUSTOM_PRESET);
     setToken("");
     setError(null);
   };
@@ -138,6 +226,34 @@ export default function ProviderManager({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <div className="provider-form">
+              {isNew && (
+                <label className="agent-editor-label">
+                  <span>Provider</span>
+                  <select
+                    className="agent-editor-input"
+                    value={presetKey}
+                    onChange={(e) => applyPreset(e.target.value)}
+                  >
+                    {PROVIDER_PRESETS.map((p) => (
+                      <option key={p.key} value={p.key}>
+                        {p.label}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_PRESET}>Custom (enter manually)</option>
+                  </select>
+                  <p className="agent-editor-hint">
+                    {activePreset ? (
+                      <>
+                        Endpoint &amp; model pre-filled from {activePreset.label}'s
+                        docs — just paste your API key below. Get a key at{" "}
+                        <span className="provider-key-url">{activePreset.keyUrl}</span>
+                      </>
+                    ) : (
+                      "Enter an Anthropic-compatible endpoint and model by hand."
+                    )}
+                  </p>
+                </label>
+              )}
               <label className="agent-editor-label">
                 <span>Label</span>
                 <input

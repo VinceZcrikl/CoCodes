@@ -28,7 +28,7 @@ const CLIS: CliDef[] = [
   { id: "codex",  label: "Codex",  ready: true,  defaultModel: "GPT-5.5" },
   { id: "gemini", label: "Gemini", ready: false, defaultModel: "Gemini 2.5 Pro" },
   { id: "grok",   label: "Grok",   ready: true,  defaultModel: "Grok 4" },
-  { id: "kimi",   label: "Kimi",   ready: false, defaultModel: "Kimi K2" },
+  { id: "kimi",   label: "Kimi Code", ready: true, defaultModel: "Kimi K2.7" },
 ];
 
 const CLI_STORAGE_KEY = "openterminus:active-cli";

@@ -1,6 +1,7 @@
 import ClaudeMascot from "./ClaudeMascot";
 import CodexMascot from "./CodexMascot";
 import GrokMascot from "./GrokMascot";
+import KimiMascot from "./KimiMascot";
 
 /** Special avatar values that render a built-in mascot SVG rather than an image
  *  or emoji. Stored literally in meta.json as e.g. "__mascot:claude__". */
@@ -8,6 +9,7 @@ export const MASCOT_SENTINEL = {
   claude: "__mascot:claude__",
   codex:  "__mascot:codex__",
   grok:   "__mascot:grok__",
+  kimi:   "__mascot:kimi__",
 } as const;
 
 /** Stable accent palette for persona avatars (mirrors orb's member palette). */
@@ -51,14 +53,19 @@ interface Props {
 }
 
 /** Which built-in mascot (if any) this avatar resolves to. */
-function mascotKind(id: string, v: string): "claude" | "codex" | "grok" | null {
+function mascotKind(
+  id: string,
+  v: string,
+): "claude" | "codex" | "grok" | "kimi" | null {
   if (v === MASCOT_SENTINEL.claude) return "claude";
   if (v === MASCOT_SENTINEL.codex) return "codex";
   if (v === MASCOT_SENTINEL.grok) return "grok";
+  if (v === MASCOT_SENTINEL.kimi) return "kimi";
   if (v) return null; // a custom image/emoji takes precedence
   if (id === "default" || id === "claude") return "claude";
   if (id === "codex") return "codex";
   if (id === "grok") return "grok";
+  if (id === "kimi") return "kimi";
   return null;
 }
 
@@ -66,6 +73,7 @@ const MASCOT_SVG = {
   claude: ClaudeMascot,
   codex: CodexMascot,
   grok: GrokMascot,
+  kimi: KimiMascot,
 } as const;
 
 /** A persona avatar. Renders, in order of preference: a custom image, a custom

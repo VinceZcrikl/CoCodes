@@ -245,6 +245,38 @@ fn find_grok() -> Option<PathBuf> {
         })
 }
 
+fn find_kimi() -> Option<PathBuf> {
+    // Kimi Code CLI's official install.sh drops the `kimi` binary into
+    // ~/.kimi-code/bin (KIMI_INSTALL_DIR); a global npm install puts it on the
+    // usual npm bin dirs.
+    let home = dirs::home_dir();
+    let mut extras = vec![
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/opt/homebrew/bin"),
+    ];
+    if let Some(h) = &home {
+        extras.push(h.join(".kimi-code/bin"));
+        extras.push(h.join(".local/bin"));
+        extras.push(h.join(".npm-global/bin"));
+        extras.push(h.join(".bun/bin"));
+    }
+    #[cfg(windows)]
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        extras.push(PathBuf::from(&appdata).join("npm"));
+    }
+
+    #[cfg(windows)]
+    let candidates = ["kimi.exe", "kimi.cmd"];
+    #[cfg(not(windows))]
+    let candidates = ["kimi"];
+
+    candidates.iter().find_map(|exe| find_in_path(exe, &extras))
+        .or_else(|| {
+            #[cfg(windows)] { where_exe("kimi") }
+            #[cfg(not(windows))] { None }
+        })
+}
+
 /// Fold the profile's persona + memory into the file we pass to
 /// `--append-system-prompt-file`. Returns `None` when there's nothing to say,
 /// so claude keeps its own default identity rather than getting an empty
@@ -339,6 +371,12 @@ pub async fn terminal_open(
         "grok" => find_grok().ok_or_else(|| {
             TerminalError::CliNotFound(
                 "`grok` not found on PATH. Install: https://docs.x.ai/build"
+                    .into(),
+            )
+        })?,
+        "kimi" => find_kimi().ok_or_else(|| {
+            TerminalError::CliNotFound(
+                "`kimi` not found on PATH. Install: curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash"
                     .into(),
             )
         })?,

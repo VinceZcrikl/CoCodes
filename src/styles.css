@@ -2640,6 +2640,14 @@ select.agent-editor-input {
   color: var(--text-muted);
   padding: 6px 0;
 }
+/* The vendor's API-key page, shown as copyable monospace inside the hint. */
+.provider-key-url {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--accent-gold);
+  user-select: all;
+  white-space: nowrap;
+}
 .provider-row {
   display: flex;
   flex-direction: column;

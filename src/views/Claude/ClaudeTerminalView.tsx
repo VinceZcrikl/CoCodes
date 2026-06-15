@@ -25,6 +25,11 @@ const CLI_META: Record<string, { title: string; installCmd: string | null; insta
     installCmd: null,
     installHint: "Install via: https://docs.x.ai/build — see the Grok Build quickstart.",
   },
+  kimi: {
+    title: "Kimi Code CLI isn't installed",
+    installCmd: "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash",
+    installHint: "Install Kimi Code then click Recheck.",
+  },
 };
 
 /** Terminal pane host. Every session in the current persona is rendered and
