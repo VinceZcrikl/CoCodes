@@ -71,6 +71,7 @@ pub fn run() {
             screenshot::screenshot_windows,
             git::git_status,
             git::git_log,
+            git::git_commit_files,
         ])
         .on_window_event(|window, event| {
             // The frameless main window's custom close button calls

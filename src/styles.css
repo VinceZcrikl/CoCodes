@@ -1485,38 +1485,21 @@ body {
 
 .git-commit-row {
   display: flex;
+  align-items: stretch;
   gap: 8px;
-  padding: 2px 14px;
+  padding: 0 14px 0 0;
+  cursor: pointer;
+  outline: none;
 }
 .git-commit-row:hover { background: color-mix(in srgb, var(--accent-gold) 7%, transparent); }
-.git-graph {
-  position: relative;
+.git-commit-row.expanded { background: color-mix(in srgb, var(--accent-gold) 10%, transparent); }
+.git-commit-row:focus-visible { box-shadow: inset 2px 0 0 var(--accent-gold); }
+
+/* SVG lane graph — overflow visible so edge curves aren't clipped. */
+.git-graph-svg {
   flex: none;
-  width: 12px;
-  display: flex;
-  justify-content: center;
-  padding-top: 6px;
-}
-.git-node {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent-gold);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-gold) 22%, transparent);
-  z-index: 1;
-}
-.git-node.merge {
-  background: transparent;
-  border: 2px solid var(--accent-gold);
-}
-.git-graph-line {
-  position: absolute;
-  top: 12px;
-  bottom: -2px;
-  left: 50%;
-  width: 1.5px;
-  transform: translateX(-50%);
-  background: color-mix(in srgb, var(--accent-gold) 32%, transparent);
+  align-self: stretch;
+  overflow: visible;
 }
 
 .git-commit-main {
@@ -1524,8 +1507,15 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  padding: 2px 0 4px;
+  justify-content: center;
+  gap: 2px;
+}
+
+/* Expanded commit's changed-file list. */
+.git-commit-files {
+  padding: 2px 14px 6px 0;
+  background: color-mix(in srgb, var(--accent-gold) 4%, transparent);
+  border-left: 1.5px solid color-mix(in srgb, var(--accent-gold) 24%, transparent);
 }
 .git-commit-top {
   display: flex;

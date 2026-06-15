@@ -22,7 +22,7 @@ pub enum GitError {
 /// One changed path plus its single porcelain status code (`M`, `A`, `D`,
 /// `R`, `?`, …) for the side it appears on (index or worktree).
 #[derive(Serialize)]
-struct FileEntry {
+pub struct FileEntry {
     path: String,
     status: String,
 }
@@ -253,6 +253,51 @@ pub async fn git_log(cwd: String, limit: Option<u32>) -> Result<Vec<Commit>, Git
             });
         }
         Ok(commits)
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// Files changed by a single commit (read-only). `--root` makes the initial
+/// commit list its files as additions. Used when a history row is expanded.
+#[tauri::command]
+pub async fn git_commit_files(cwd: String, hash: String) -> Result<Vec<FileEntry>, GitError> {
+    // The hash comes from our own `git_log` output, but validate anyway: only
+    // hex passes, so nothing odd reaches the arg array.
+    if hash.is_empty() || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(GitError::Failed("invalid commit hash".into()));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let raw = run_git(
+            &cwd,
+            &[
+                "diff-tree", "--no-commit-id", "--name-status", "-r", "--root", "-z", &hash,
+            ],
+        )?;
+
+        // `-z` name-status records: `STATUS\0path\0`, and rename/copy adds a
+        // field — `R<score>\0src\0dst\0` — so we consume the extra and keep dst.
+        let recs: Vec<&str> = raw.split('\0').collect();
+        let mut files = Vec::new();
+        let mut i = 0;
+        while i < recs.len() {
+            let status = recs[i];
+            if status.is_empty() {
+                i += 1;
+                continue;
+            }
+            let code = status.chars().next().unwrap_or('?');
+            if code == 'R' || code == 'C' {
+                let dst = recs.get(i + 2).copied().unwrap_or("");
+                files.push(FileEntry { path: dst.to_string(), status: code.to_string() });
+                i += 3;
+            } else {
+                let path = recs.get(i + 1).copied().unwrap_or("");
+                files.push(FileEntry { path: path.to_string(), status: code.to_string() });
+                i += 2;
+            }
+        }
+        Ok(files)
     })
     .await
     .map_err(|e| GitError::Failed(e.to_string()))?

@@ -74,6 +74,27 @@ export function useGit(active: boolean) {
     }
   }, [cwd]);
 
+  // Per-commit changed-file lists, cached by hash; cleared when cwd changes so
+  // a different repo never serves another's cached files.
+  const filesCache = useRef<Map<string, GitFileEntry[]>>(new Map());
+  useEffect(() => {
+    filesCache.current.clear();
+  }, [cwd]);
+
+  const loadCommitFiles = useCallback(
+    async (hash: string): Promise<GitFileEntry[]> => {
+      const cached = filesCache.current.get(hash);
+      if (cached) return cached;
+      const files = await invoke<GitFileEntry[]>("git_commit_files", {
+        cwd: cwd ?? "",
+        hash,
+      });
+      filesCache.current.set(hash, files);
+      return files;
+    },
+    [cwd],
+  );
+
   // Refresh when the panel becomes active or the working directory changes.
   useEffect(() => {
     if (active) void refresh();
@@ -91,5 +112,5 @@ export function useGit(active: boolean) {
     };
   }, [active, refresh]);
 
-  return { status, commits, error, loading, refresh };
+  return { status, commits, error, loading, refresh, loadCommitFiles };
 }

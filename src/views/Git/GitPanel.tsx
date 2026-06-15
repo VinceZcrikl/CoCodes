@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   GitBranch,
   RefreshCw,
@@ -8,6 +9,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { useGit, type GitFileEntry } from "../../hooks/useGit";
+import { computeGraph, type GraphRow } from "./graph";
 
 interface Props {
   open: boolean;
@@ -15,6 +17,11 @@ interface Props {
   onToggleMax: () => void;
   onClose: () => void;
 }
+
+/** Graph geometry: lane width and fixed commit-row height (px). The row height
+ *  is fixed so each row's SVG aligns with the one above/below into a graph. */
+const LANE_W = 14;
+const ROW_H = 42;
 
 /** Relative "2m / 3h / 4d / 5w" from a unix-seconds timestamp. */
 function relativeTime(ts: number): string {
@@ -34,7 +41,7 @@ function relativeTime(ts: number): string {
   return `${Math.floor(days / 365)}y`;
 }
 
-/** Map a porcelain status letter to a tone class + label. */
+/** Map a porcelain status letter to a tone class. */
 function statusTone(code: string): string {
   switch (code) {
     case "A": return "add";
@@ -43,26 +50,76 @@ function statusTone(code: string): string {
     case "R": return "ren";
     case "C": return "ren";
     case "U": return "conflict";
-    default:  return "untracked"; // "?" and anything else
+    default:  return "untracked";
   }
 }
 
 function FileRow({ entry }: { entry: GitFileEntry }) {
   return (
     <div className="git-file-row" title={entry.path}>
-      <span className={`git-status-badge ${statusTone(entry.status)}`}>
-        {entry.status}
-      </span>
+      <span className={`git-status-badge ${statusTone(entry.status)}`}>{entry.status}</span>
       <span className="git-file-path">{entry.path}</span>
     </div>
   );
 }
 
+/** SVG lane graph for one commit row. Diagonals are smoothed with a vertical
+ *  cubic so branches/merges curve rather than zig-zag. */
+function GraphCell({ row, laneCount }: { row: GraphRow; laneCount: number }) {
+  const width = laneCount * LANE_W;
+  const cx = (x: number) => x * LANE_W + LANE_W / 2;
+  const cy = (y: number) => y * ROW_H;
+  return (
+    <svg className="git-graph-svg" width={width} height={ROW_H} style={{ flex: `0 0 ${width}px` }}>
+      {row.segments.map((s, i) => {
+        const x1 = cx(s.x1), y1 = cy(s.y1), x2 = cx(s.x2), y2 = cy(s.y2);
+        const ym = (y1 + y2) / 2;
+        return (
+          <path
+            key={i}
+            d={`M${x1},${y1} C${x1},${ym} ${x2},${ym} ${x2},${y2}`}
+            fill="none"
+            stroke={s.color}
+            strokeWidth={1.6}
+          />
+        );
+      })}
+      <circle
+        cx={cx(row.col)}
+        cy={ROW_H / 2}
+        r={3.6}
+        fill={row.merge ? "var(--panel)" : row.color}
+        stroke={row.color}
+        strokeWidth={row.merge ? 2 : 0}
+      />
+    </svg>
+  );
+}
+
 /** Floating, read-only Git inspector: branch + ahead/behind, working-tree
- *  status groups, and recent commit history with single-lane graph nodes. Hovers
- *  over the active panel; writes stay the embedded CLI's job. */
+ *  status groups, and a multi-lane commit graph whose rows expand to show the
+ *  files each commit changed. Writes stay the embedded CLI's job. */
 export default function GitPanel({ open, maximized, onToggleMax, onClose }: Props) {
-  const { status, commits, error, loading, refresh } = useGit(open);
+  const { status, commits, error, loading, refresh, loadCommitFiles } = useGit(open);
+
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [files, setFiles] = useState<Record<string, GitFileEntry[] | "loading">>({});
+
+  const graph = useMemo(() => computeGraph(commits), [commits]);
+
+  const toggleCommit = (hash: string) => {
+    if (expanded === hash) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(hash);
+    if (!files[hash]) {
+      setFiles((p) => ({ ...p, [hash]: "loading" }));
+      void loadCommitFiles(hash)
+        .then((f) => setFiles((p) => ({ ...p, [hash]: f })))
+        .catch(() => setFiles((p) => ({ ...p, [hash]: [] })));
+    }
+  };
 
   const dirty =
     status &&
@@ -156,34 +213,64 @@ export default function GitPanel({ open, maximized, onToggleMax, onClose }: Prop
               <div className="git-clean">Working tree clean</div>
             )}
 
-            {/* ── History ── */}
+            {/* ── History (multi-lane graph) ── */}
             <section className="git-section git-history">
               <div className="git-section-head">History</div>
               {commits.length === 0 ? (
                 <div className="git-empty git-empty-sm">No commits yet.</div>
               ) : (
-                commits.map((c, i) => (
-                  <div className="git-commit-row" key={c.hash} title={c.subject}>
-                    <span className="git-graph">
-                      <span className={`git-node${c.parents.length > 1 ? " merge" : ""}`} />
-                      {i < commits.length - 1 && <span className="git-graph-line" />}
-                    </span>
-                    <span className="git-commit-main">
-                      <span className="git-commit-top">
-                        <span className="git-hash">{c.short}</span>
-                        <span className="git-subject">{c.subject}</span>
-                      </span>
-                      <span className="git-commit-meta">
-                        {c.refs.map((r) => (
-                          <span key={r} className="git-ref-chip">{r}</span>
-                        ))}
-                        <span className="git-author">{c.author}</span>
-                        <span className="git-dot">·</span>
-                        <span className="git-time">{relativeTime(c.timestamp)}</span>
-                      </span>
-                    </span>
-                  </div>
-                ))
+                commits.map((c, i) => {
+                  const isOpen = expanded === c.hash;
+                  const f = files[c.hash];
+                  return (
+                    <div className="git-commit" key={c.hash}>
+                      <div
+                        className={`git-commit-row${isOpen ? " expanded" : ""}`}
+                        style={{ height: ROW_H }}
+                        onClick={() => toggleCommit(c.hash)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleCommit(c.hash);
+                          }
+                        }}
+                        title={c.subject}
+                      >
+                        <GraphCell row={graph.rows[i]} laneCount={graph.laneCount} />
+                        <span className="git-commit-main">
+                          <span className="git-commit-top">
+                            <span className="git-hash">{c.short}</span>
+                            <span className="git-subject">{c.subject}</span>
+                          </span>
+                          <span className="git-commit-meta">
+                            {c.refs.map((r) => (
+                              <span key={r} className="git-ref-chip">{r}</span>
+                            ))}
+                            <span className="git-author">{c.author}</span>
+                            <span className="git-dot">·</span>
+                            <span className="git-time">{relativeTime(c.timestamp)}</span>
+                          </span>
+                        </span>
+                      </div>
+                      {isOpen && (
+                        <div
+                          className="git-commit-files"
+                          style={{ paddingLeft: graph.laneCount * LANE_W + 14 }}
+                        >
+                          {f === "loading" || f === undefined ? (
+                            <div className="git-empty-sm">Loading…</div>
+                          ) : f.length === 0 ? (
+                            <div className="git-empty-sm">No file changes.</div>
+                          ) : (
+                            f.map((file) => <FileRow key={file.path} entry={file} />)
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </section>
           </>
