@@ -5,6 +5,7 @@
 //! later phases; the PTY engine here is already generic enough to drive them.
 
 pub mod directory;
+pub mod fs;
 pub mod git;
 pub mod persona;
 pub mod providers;
@@ -72,6 +73,8 @@ pub fn run() {
             git::git_status,
             git::git_log,
             git::git_commit_files,
+            fs::fs_list,
+            fs::fs_walk,
         ])
         .on_window_event(|window, event| {
             // The frameless main window's custom close button calls

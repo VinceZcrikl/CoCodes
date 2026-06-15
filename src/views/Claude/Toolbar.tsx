@@ -3,8 +3,6 @@ import {
   Camera,
   FolderOpen,
   ChevronDown,
-  Home,
-  Clock,
   PanelLeftClose,
   PanelLeftOpen,
   Terminal,
@@ -12,10 +10,10 @@ import {
 } from "lucide-react";
 import { useShellStore } from "../../state/shellStore";
 import { useGitStore } from "../../state/gitStore";
-import { invoke } from "@tauri-apps/api/core";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
 import { useSidebarStore } from "../../state/sidebarStore";
 import CommandPalette from "./CommandPalette";
+import FileFinder from "./FileFinder";
 
 interface Props {
   onScreenshot: () => void;
@@ -26,8 +24,8 @@ interface Props {
   cli?: string;
 }
 
-export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cli = "claude" }: Props) {
-  const { cwd, recent, setCwd } = useDirectoryStore();
+export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" }: Props) {
+  const { cwd, setCwd } = useDirectoryStore();
   const shellOpen = useShellStore((s) => s.open);
   const toggleShell = useShellStore((s) => s.toggle);
   const gitOpen = useGitStore((s) => s.open);
@@ -35,11 +33,10 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
   const [dropOpen, setDropOpen] = useState(false);
-  const [picking, setPicking] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement | null>(null);
 
-  // Close directory dropdown on outside click.
+  // Close the file finder on outside click.
   useEffect(() => {
     if (!dropOpen) return;
     const close = (e: MouseEvent) => {
@@ -49,27 +46,14 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
     return () => document.removeEventListener("mousedown", close);
   }, [dropOpen]);
 
-  const openPicker = useCallback(async () => {
-    setDropOpen(false);
-    setPicking(true);
-    try {
-      const dir = await invoke<string | null>("pick_directory");
-      if (dir) {
-        setCwd(dir);
-        onCwdChange?.(dir);
-      }
-    } finally {
-      setPicking(false);
-    }
-  }, [setCwd, onCwdChange]);
-
-  const selectRecent = useCallback(
-    (path: string | null) => {
-      setCwd(path);
-      onCwdChange?.(path);
+  // Paste a chosen file's path into the terminal (quote if it has spaces).
+  const insertPath = useCallback(
+    (abs: string) => {
+      const p = abs.replace(/\\/g, "/");
+      onCommand?.(/\s/.test(p) ? `"${p}"` : p, false);
       setDropOpen(false);
     },
-    [setCwd, onCwdChange],
+    [onCommand],
   );
 
   const handleCommand = useCallback(
@@ -110,10 +94,9 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
           <button
             type="button"
             className="dir-picker-btn"
-            title={cwd ?? "Home directory (click to change)"}
+            title={cwd ?? "Home directory — click to browse files"}
             onClick={() => setDropOpen((v) => !v)}
-            disabled={picking}
-            aria-haspopup="listbox"
+            aria-haspopup="dialog"
             aria-expanded={dropOpen}
           >
             <FolderOpen size={12} strokeWidth={1.75} />
@@ -126,48 +109,12 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
           </button>
 
           {dropOpen && (
-            <div className="dir-picker-drop" role="listbox">
-              <button
-                type="button"
-                className="dir-picker-item dir-picker-browse"
-                onClick={() => void openPicker()}
-              >
-                <FolderOpen size={12} strokeWidth={1.75} />
-                <span>Browse…</span>
-              </button>
-
-              {recent.length > 0 && (
-                <>
-                  <div className="dir-picker-sep" />
-                  {recent.map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      role="option"
-                      aria-selected={r === cwd}
-                      className={`dir-picker-item${r === cwd ? " active" : ""}`}
-                      title={r}
-                      onClick={() => selectRecent(r)}
-                    >
-                      <Clock size={11} strokeWidth={1.75} />
-                      <span className="dir-picker-item-label">{dirBasename(r)}</span>
-                    </button>
-                  ))}
-                  <div className="dir-picker-sep" />
-                </>
-              )}
-
-              <button
-                type="button"
-                role="option"
-                aria-selected={cwd === null}
-                className={`dir-picker-item${cwd === null ? " active" : ""}`}
-                onClick={() => selectRecent(null)}
-              >
-                <Home size={12} strokeWidth={1.75} />
-                <span>Home directory</span>
-              </button>
-            </div>
+            <FileFinder
+              cwd={cwd}
+              onInsertPath={insertPath}
+              onSetCwd={(dir) => setCwd(dir)}
+              onClose={() => setDropOpen(false)}
+            />
           )}
         </div>
 
