@@ -15,7 +15,9 @@ import { PANEL_PALETTES, resolveAccentColor } from "../../state/panelPalettes";
 import { applyPaletteVars } from "../../state/uiPalette";
 import { useWindowStore } from "../../state/windowStore";
 import { useShellStore } from "../../state/shellStore";
+import { useGitStore } from "../../state/gitStore";
 import ShellOverlay from "../Claude/ShellOverlay";
+import GitPanel from "../Git/GitPanel";
 import PersonaOrb from "../PersonaOrb/PersonaOrb";
 
 interface CliDef {
@@ -139,6 +141,13 @@ export default function Cockpit() {
   const closeShell = useShellStore((s) => s.close);
   const toggleShellMax = useShellStore((s) => s.toggleMax);
 
+  // Floating Git window (toolbar git icon) — read-only source-control inspector.
+  const gitEverOpened = useGitStore((s) => s.everOpened);
+  const gitOpen = useGitStore((s) => s.open);
+  const gitMaximized = useGitStore((s) => s.maximized);
+  const closeGit = useGitStore((s) => s.close);
+  const toggleGitMax = useGitStore((s) => s.toggleMax);
+
   useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
   useEffect(() => installPaletteSync(), []);
 
@@ -248,6 +257,14 @@ export default function Cockpit() {
               maximized={shellMaximized}
               onToggleMax={toggleShellMax}
               onClose={closeShell}
+            />
+          )}
+          {!mini && gitEverOpened && (
+            <GitPanel
+              open={gitOpen}
+              maximized={gitMaximized}
+              onToggleMax={toggleGitMax}
+              onClose={closeGit}
             />
           )}
         </main>

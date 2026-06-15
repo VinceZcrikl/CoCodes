@@ -5,6 +5,7 @@
 //! later phases; the PTY engine here is already generic enough to drive them.
 
 pub mod directory;
+pub mod git;
 pub mod persona;
 pub mod providers;
 pub mod screenshot;
@@ -68,6 +69,8 @@ pub fn run() {
             screenshot::screenshot_cancel,
             screenshot::screenshot_grab,
             screenshot::screenshot_windows,
+            git::git_status,
+            git::git_log,
         ])
         .on_window_event(|window, event| {
             // The frameless main window's custom close button calls

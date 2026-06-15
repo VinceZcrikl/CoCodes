@@ -8,8 +8,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Terminal,
+  GitBranch,
 } from "lucide-react";
 import { useShellStore } from "../../state/shellStore";
+import { useGitStore } from "../../state/gitStore";
 import { invoke } from "@tauri-apps/api/core";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
 import { useSidebarStore } from "../../state/sidebarStore";
@@ -28,6 +30,8 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
   const { cwd, recent, setCwd } = useDirectoryStore();
   const shellOpen = useShellStore((s) => s.open);
   const toggleShell = useShellStore((s) => s.toggle);
+  const gitOpen = useGitStore((s) => s.open);
+  const toggleGit = useGitStore((s) => s.toggle);
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
   const [dropOpen, setDropOpen] = useState(false);
@@ -210,6 +214,18 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
           aria-pressed={shellOpen}
         >
           <Terminal size={15} strokeWidth={1.75} />
+        </button>
+
+        {/* ── Git panel toggle ── floating read-only source-control window. */}
+        <button
+          type="button"
+          className={`cli-tool-btn${gitOpen ? " active" : ""}`}
+          onClick={toggleGit}
+          title={gitOpen ? "Hide Git panel" : "Git panel"}
+          aria-label={gitOpen ? "Hide Git panel" : "Git panel"}
+          aria-pressed={gitOpen}
+        >
+          <GitBranch size={15} strokeWidth={1.75} />
         </button>
       </div>
 

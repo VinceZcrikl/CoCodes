@@ -1301,6 +1301,277 @@ body {
   background: var(--bg-canvas);
 }
 
+/* ── Floating Git window ──────────────────────────────────────────────────
+   Read-only source-control inspector; same floating chrome as the shell, but
+   right-anchored, narrower and taller for status + history. */
+.git-overlay {
+  position: absolute;
+  right: 16px;
+  bottom: 56px;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  width: min(400px, calc(100% - 32px));
+  height: min(580px, calc(100% - 92px));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow:
+    0 -4px 16px rgba(0, 0, 0, 0.30),
+    0 18px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  animation: shell-overlay-pop 140ms ease;
+}
+
+.git-overlay.max {
+  left: 12px;
+  right: 12px;
+  top: 12px;
+  bottom: 56px;
+  width: auto;
+  height: auto;
+}
+
+.git-overlay-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 6px 0 12px;
+  background: var(--panel-deep);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+.git-overlay-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-soft);
+}
+
+.git-overlay-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.git-ab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.git-ab-up,
+.git-ab-down {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+.git-ab-up { color: #3fb950; }
+.git-ab-down { color: #f85149; }
+
+.git-overlay-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.git-overlay-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.git-overlay-btn:hover {
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 40%, transparent);
+  color: var(--accent-gold);
+}
+.git-overlay-close:hover {
+  background: color-mix(in srgb, #ff5f57 22%, transparent);
+  border-color: color-mix(in srgb, #ff5f57 55%, transparent);
+  color: #ff8a84;
+}
+.git-overlay-btn.spinning svg {
+  animation: git-spin 700ms linear infinite;
+}
+@keyframes git-spin {
+  to { transform: rotate(360deg); }
+}
+
+.git-overlay-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-canvas);
+  padding: 6px 0 10px;
+}
+
+.git-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.git-empty-sm { padding: 10px 16px; }
+.git-clean {
+  padding: 10px 16px;
+  font-size: 11.5px;
+  color: var(--text-soft);
+}
+
+.git-section { padding: 4px 0 6px; }
+.git-section-head {
+  padding: 4px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-soft) 78%, transparent);
+}
+.git-history { border-top: 1px solid var(--border); margin-top: 4px; }
+
+.git-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 14px;
+  font-size: 12px;
+  cursor: default;
+}
+.git-file-row:hover { background: color-mix(in srgb, var(--accent-gold) 7%, transparent); }
+.git-status-badge {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+}
+.git-status-badge.add { color: #3fb950; }
+.git-status-badge.mod { color: var(--accent-gold); }
+.git-status-badge.del { color: #f85149; }
+.git-status-badge.ren { color: #58a6ff; }
+.git-status-badge.conflict { color: #db6d28; }
+.git-status-badge.untracked { color: var(--text-soft); }
+.git-file-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-main);
+  direction: rtl;
+  text-align: left;
+}
+
+.git-commit-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 14px;
+}
+.git-commit-row:hover { background: color-mix(in srgb, var(--accent-gold) 7%, transparent); }
+.git-graph {
+  position: relative;
+  flex: none;
+  width: 12px;
+  display: flex;
+  justify-content: center;
+  padding-top: 6px;
+}
+.git-node {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-gold) 22%, transparent);
+  z-index: 1;
+}
+.git-node.merge {
+  background: transparent;
+  border: 2px solid var(--accent-gold);
+}
+.git-graph-line {
+  position: absolute;
+  top: 12px;
+  bottom: -2px;
+  left: 50%;
+  width: 1.5px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--accent-gold) 32%, transparent);
+}
+
+.git-commit-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 4px;
+}
+.git-commit-top {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+.git-hash {
+  flex: none;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: color-mix(in srgb, var(--accent-gold) 80%, var(--text-soft));
+}
+.git-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-main);
+}
+.git-commit-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--text-soft);
+}
+.git-ref-chip {
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 32%, transparent);
+  white-space: nowrap;
+}
+.git-author {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 110px;
+}
+.git-dot { opacity: 0.5; }
+.git-time { flex: none; }
+
 /* ── Command palette trigger button ────────────────────────────────── */
 .cmd-trigger {
   display: inline-flex;

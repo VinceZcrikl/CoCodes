@@ -108,7 +108,7 @@ fn gen_id() -> String {
 /// Search PATH then a list of common global-install dirs for `exe`.
 /// GUI apps on macOS launch with a minimal PATH (no /usr/local/bin, no
 /// node-manager dirs), so the fallback list is necessary.
-fn find_in_path(exe: &str, extra_dirs: &[PathBuf]) -> Option<PathBuf> {
+pub(crate) fn find_in_path(exe: &str, extra_dirs: &[PathBuf]) -> Option<PathBuf> {
     if let Ok(path) = std::env::var("PATH") {
         for dir in std::env::split_paths(&path) {
             let candidate = dir.join(exe);
