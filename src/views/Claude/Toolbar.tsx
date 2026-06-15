@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
 import { useSidebarStore } from "../../state/sidebarStore";
 import CommandPalette from "./CommandPalette";
+import WarriorDojo from "./Warrior/WarriorDojo";
 
 interface Props {
   onScreenshot: () => void;
@@ -196,7 +197,9 @@ export default function Toolbar({ onScreenshot, onCwdChange, onCommand, busy, cl
         </button>
       </div>
 
-      <div className="cli-toolbar-right" />
+      <div className="cli-toolbar-right">
+        <WarriorDojo cli={cli} />
+      </div>
     </div>
   );
 }
