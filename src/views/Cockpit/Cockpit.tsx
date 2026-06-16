@@ -7,7 +7,10 @@ import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaEditor from "../Persona/PersonaEditor";
 import PalettePanel from "./PalettePanel";
 import TriondaBall from "./TriondaBall";
+import LaurelWreath from "./LaurelWreath";
+import TempleFrame from "./TempleFrame";
 import GoalConfetti from "./GoalConfetti";
+import OracleDescent from "./OracleDescent";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
 import { usePaletteStore, installPaletteSync } from "../../state/paletteStore";
@@ -51,8 +54,10 @@ export default function Cockpit() {
   const mini = useWindowStore((s) => s.mini);
 
   // The World Cup theme swaps the palette dot for the Trionda ball and unlocks
-  // the festive chrome (the rest is CSS, scoped to [data-palette]).
+  // the festive chrome (the rest is CSS, scoped to [data-palette]). The Theoi ·
+  // Olympus theme does the same with a laurel-wreathed orb + Greek chrome.
   const isWorldCup = paletteName === "world-cup-2026";
+  const isTheoi = paletteName === "theoi";
   const [celebrate, setCelebrate] = useState(false);
 
   const profileId = useProfileStore((s) => s.activeProfileId);
@@ -151,11 +156,13 @@ export default function Cockpit() {
   useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
   useEffect(() => installPaletteSync(), []);
 
-  // Goal celebration: fire the confetti when the user *switches into* the World
-  // Cup theme (not on every render, and not on a relaunch that's already in it).
+  // Celebration: fire when the user *switches into* a decorated theme (World Cup
+  // → confetti, Theoi → oracle descent) — not on every render, and not on a
+  // relaunch that's already in it. The overlay rendered is chosen by palette.
   const prevPalette = useRef(paletteName);
   useEffect(() => {
-    if (paletteName === "world-cup-2026" && prevPalette.current !== "world-cup-2026") {
+    const decorated = paletteName === "world-cup-2026" || paletteName === "theoi";
+    if (decorated && prevPalette.current !== paletteName) {
       setCelebrate(true);
     }
     prevPalette.current = paletteName;
@@ -178,6 +185,8 @@ export default function Cockpit() {
   return (
     <div className={`cockpit${mini ? " mini" : ""}`}>
       <div className="cockpit-frame" aria-hidden="true" data-tauri-drag-region />
+      {/* Greek-temple facade around the panel (theoi theme only, not in mini). */}
+      {isTheoi && !mini && <TempleFrame />}
       <div className="cockpit-panel">
         {mini ? (
           <div className="cockpit-mini-bar" data-tauri-drag-region>
@@ -207,14 +216,22 @@ export default function Cockpit() {
                     aria-label="Choose panel palette"
                     aria-expanded={paletteOpen}
                     style={{
-                      // Multicolor ball wants a neutral disc; the orb keeps the
-                      // accent fill it tints itself from.
-                      background: isWorldCup ? "#15151b" : accentColor,
+                      // The Trionda ball and laurel-ringed orb both want a
+                      // neutral disc to pop against; plain orb keeps the accent
+                      // fill it tints itself from.
+                      background: isWorldCup || isTheoi ? "#15151b" : accentColor,
                       color: accentColor,
                     }}
                   >
                     {isWorldCup ? (
                       <TriondaBall className="cockpit-theme-ball" />
+                    ) : isTheoi ? (
+                      <span className="cockpit-theme-laurel-wrap">
+                        {/* Cool celestial core so the gold laurel reads against
+                            it (a gold orb + gold laurel would wash out). */}
+                        <PersonaOrb color="#cdd9f2" reactive={false} spin={0.5} />
+                        <LaurelWreath className="cockpit-theme-laurel" />
+                      </span>
                     ) : (
                       <PersonaOrb color={accentColor} reactive={false} spin={0.5} />
                     )}
@@ -284,7 +301,12 @@ export default function Cockpit() {
         />
       )}
 
-      {celebrate && <GoalConfetti onDone={() => setCelebrate(false)} />}
+      {celebrate &&
+        (isWorldCup ? (
+          <GoalConfetti onDone={() => setCelebrate(false)} />
+        ) : isTheoi ? (
+          <OracleDescent onDone={() => setCelebrate(false)} />
+        ) : null)}
     </div>
   );
 }

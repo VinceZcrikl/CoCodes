@@ -20,6 +20,7 @@ import { draggingPersona } from "../../state/dragState";
 import { personaColor } from "../Persona/PersonaAvatar";
 import PalettePanel from "../Cockpit/PalettePanel";
 import TriondaBall from "../Cockpit/TriondaBall";
+import LaurelWreath from "../Cockpit/LaurelWreath";
 import { usePaletteStore } from "../../state/paletteStore";
 import { cssVarsForPalette } from "../../state/uiPalette";
 import {
@@ -251,6 +252,8 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
             >
               {effPalette === "world-cup-2026" ? (
                 <TriondaBall className="pane-header-ball" />
+              ) : effPalette === "theoi" ? (
+                <LaurelWreath className="pane-header-laurel" />
               ) : (
                 <Palette size={13} strokeWidth={1.75} />
               )}

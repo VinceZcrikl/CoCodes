@@ -17,6 +17,7 @@
 
 export type PanelPaletteName =
   | "world-cup-2026"
+  | "theoi"
   | "deep-teal"
   | "obsidian-gold"
   | "graphite-mono"
@@ -71,6 +72,25 @@ export const PANEL_PALETTES: Record<PanelPaletteName, PanelPalette> = {
     textMuted: "rgba(244, 236, 214, 0.55)",
     accent: "#e8b23a",
     danger: "#e4322b",
+  },
+  /** Theoi · Olympus — the app's namesake theme: an Olympus-at-dusk look (deep
+   *  Aegean night + night-marble surfaces + Olympian gold accent, ivory marble
+   *  text, Tyrian "divine wrath" red). Greek-mythology chrome (meander ribbon,
+   *  Apollo sunbeam, constellation, laurel) is scoped under [data-palette="theoi"]. */
+  theoi: {
+    name: "theoi",
+    label: "Theoi · Olympus",
+    bgCanvas: "#0a0e1a",
+    panel: "#121a2e",
+    panelDeep: "#0b1120",
+    panelSoft: "rgba(18, 26, 46, 0.82)",
+    border: "rgba(232, 200, 120, 0.16)",
+    accentLine: "rgba(232, 200, 120, 0.30)",
+    textMain: "#f3ecd9",
+    textSoft: "rgba(243, 236, 217, 0.78)",
+    textMuted: "rgba(243, 236, 217, 0.52)",
+    accent: "#e8c879",
+    danger: "#c0392b",
   },
 
   /** The current/default scheme — orb's constant dark teal-green. */
@@ -219,6 +239,7 @@ export const PANEL_PALETTES: Record<PanelPaletteName, PanelPalette> = {
 };
 
 export const PANEL_PALETTE_ORDER: PanelPaletteName[] = [
+  "theoi",
   "world-cup-2026",
   "deep-teal",
   "obsidian-gold",
@@ -230,7 +251,7 @@ export const PANEL_PALETTE_ORDER: PanelPaletteName[] = [
   "porcelain-ink",
 ];
 
-export const DEFAULT_PANEL_PALETTE: PanelPaletteName = "world-cup-2026";
+export const DEFAULT_PANEL_PALETTE: PanelPaletteName = "theoi";
 
 /* ───────────────────────────── Accents ─────────────────────────────
  * The accent ("点缀") is an independent axis: it tints borders/dividers,

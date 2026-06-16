@@ -11,8 +11,9 @@ import {
 
 const STORAGE_KEY = "theoi:palette";
 const PALETTE_EVENT = "palette:changed";
-/** One-shot flag: the seasonal World Cup theme is force-activated once. */
-const SEASONAL_KEY = "theoi:wc2026-seasonal";
+/** One-shot flag: the namesake Theoi · Olympus theme is force-activated once so
+ *  existing installs adopt the new default (later picks then stick normally). */
+const DEFAULT_THEME_KEY = "theoi:default-olympus";
 
 interface Persisted {
   name: PanelPaletteName;
@@ -45,16 +46,16 @@ function readPersisted(): Persisted {
 function loadInitial(): Persisted {
   const persisted = readPersisted();
   if (typeof localStorage === "undefined") return persisted;
-  // One-time seasonal activation: switch existing users (who already saved a
-  // different palette) onto the World Cup theme once, on the first launch after
-  // this update. Their accent is preserved and the new choice is persisted, so
-  // every later palette they pick sticks normally — this never runs again.
+  // One-time default activation: switch existing users onto the namesake
+  // Theoi · Olympus theme once, on the first launch after this update. Their
+  // accent is preserved and the new choice is persisted, so every later palette
+  // they pick sticks normally — this never runs again.
   try {
-    if (!localStorage.getItem(SEASONAL_KEY)) {
-      localStorage.setItem(SEASONAL_KEY, "1");
-      const seasonal: Persisted = { name: "world-cup-2026", accent: persisted.accent };
-      persist(seasonal.name, seasonal.accent);
-      return seasonal;
+    if (!localStorage.getItem(DEFAULT_THEME_KEY)) {
+      localStorage.setItem(DEFAULT_THEME_KEY, "1");
+      const initial: Persisted = { name: "theoi", accent: persisted.accent };
+      persist(initial.name, initial.accent);
+      return initial;
     }
   } catch {
     // localStorage may be unavailable (private mode); fall through.
