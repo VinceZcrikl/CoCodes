@@ -26,8 +26,11 @@ const CLI_META: Record<string, {
   },
   codex: {
     title: "Codex CLI isn't installed",
-    installCmd: "npm install -g @openai/codex",
+    installCmd: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+    /** Windows has no PS1 installer; fall back to npm which works anywhere Node is present. */
+    installCmdWin: "npm install -g @openai/codex",
     installHint: "Install Codex CLI then click Recheck.",
+    setupEnabled: true,
   },
   grok: {
     title: "Grok CLI isn't installed",
