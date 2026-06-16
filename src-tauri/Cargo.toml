@@ -53,4 +53,4 @@ core-foundation = "0.10"
 # bundle .icns isn't applied and the dock would show a default icon otherwise.
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSImage", "NSResponder"] }
-objc2-foundation = { version = "0.3", features = ["NSData"] }
+objc2-foundation = { version = "0.3", features = ["NSData", "NSProcessInfo", "NSString"] }

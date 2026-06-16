@@ -34,8 +34,21 @@ fn set_macos_dock_icon() {
     }
 }
 
+/// In `tauri dev` the app runs as the unbundled binary `theoi`, so macOS shows
+/// the lowercase executable name in the menu bar and on Dock-icon hover. Override
+/// it to the product name early, before AppKit reads it. (Bundled builds already
+/// use `productName` from tauri.conf.)
+#[cfg(target_os = "macos")]
+fn set_macos_app_name() {
+    use objc2_foundation::{NSProcessInfo, NSString};
+    NSProcessInfo::processInfo().setProcessName(&NSString::from_str("Theoi"));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    set_macos_app_name();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

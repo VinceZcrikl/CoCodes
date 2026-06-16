@@ -1,4 +1,4 @@
-/** Open Terminus logo — the three CLI marks fused: a trefoil of glowing orbs in
+/** Theoi logo — the three CLI marks fused: a trefoil of glowing orbs in
  *  Claude's terracotta, Codex's blue-violet and Grok's silver, converging on a
  *  gold terminal prompt. "Many AI CLIs meeting in one terminal", in the app's
  *  black-gold palette. Doubles as the app avatar.
