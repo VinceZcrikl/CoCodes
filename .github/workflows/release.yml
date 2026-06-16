@@ -1,0 +1,118 @@
+name: Release
+
+# Trigger: push a tag like `v0.2.0`, or run manually from the Actions tab.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.2.0) — must match an existing git tag'
+        required: true
+        type: string
+
+permissions:
+  contents: write   # needed to create / upload GitHub Release assets
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── macOS Apple Silicon (M1/M2) ──────────────────────────────────
+          - platform: macos-latest
+            rust-target: aarch64-apple-darwin
+            tauri-args: '--target aarch64-apple-darwin'
+
+          # ── macOS Intel ──────────────────────────────────────────────────
+          - platform: macos-13
+            rust-target: x86_64-apple-darwin
+            tauri-args: '--target x86_64-apple-darwin'
+
+          # ── Windows x64 ──────────────────────────────────────────────────
+          - platform: windows-latest
+            rust-target: ''
+            tauri-args: ''
+
+          # ── Linux x64 ────────────────────────────────────────────────────
+          - platform: ubuntu-22.04
+            rust-target: ''
+            tauri-args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node.js ────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ── Rust ───────────────────────────────────────────────────────────
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # ── Linux system libs ──────────────────────────────────────────────
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # ── Frontend ───────────────────────────────────────────────────────
+      - name: Install npm dependencies
+        run: npm install
+
+      # ── Build & publish ────────────────────────────────────────────────
+      - name: Build Tauri app and publish release assets
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ── macOS code signing (optional — skip if secrets are absent) ──
+          # Set these secrets in: Settings → Secrets → Actions
+          #   APPLE_CERTIFICATE         base64-encoded .p12 signing cert
+          #   APPLE_CERTIFICATE_PASSWORD .p12 password
+          #   APPLE_ID                  your Apple ID (email)
+          #   APPLE_PASSWORD            app-specific password from appleid.apple.com
+          #   APPLE_TEAM_ID             10-char Team ID from developer.apple.com
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: 'Theoi ${{ inputs.tag || github.ref_name }}'
+          releaseBody: |
+            ## Downloads
+
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `Theoi_*_aarch64.dmg` |
+            | macOS (Intel) | `Theoi_*_x64.dmg` |
+            | Windows | `Theoi_*_x64-setup.exe` · `Theoi_*_x64_en-US.msi` |
+            | Linux (Debian/Ubuntu) | `theoi_*_amd64.deb` |
+            | Linux (Fedora/RHEL) | `theoi_*_x86_64.rpm` |
+            | Linux (AppImage) | `theoi_*_amd64.AppImage` |
+
+            > macOS: if Gatekeeper blocks the app, right-click → Open the first time.
+          releaseDraft: true      # stays hidden until you manually publish it
+          prerelease: false
+          args: ${{ matrix.tauri-args }}
