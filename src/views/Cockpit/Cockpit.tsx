@@ -277,6 +277,10 @@ export default function Cockpit() {
           save={save}
           onClose={() => setEditorFor(undefined)}
           onSaved={(id) => setActiveProfile(id)}
+          onDeleted={(id) => {
+            // If the active persona was deleted, fall back to the default.
+            if (profileId === id) setActiveProfile("claude");
+          }}
         />
       )}
 

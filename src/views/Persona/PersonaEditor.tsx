@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Upload } from "lucide-react";
-import { useProviders, type PersonaDoc } from "../../hooks/usePersonas";
+import { Trash2, Upload } from "lucide-react";
+import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import ProviderManager from "./ProviderManager";
 import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
 import ClaudeMascot from "./ClaudeMascot";
@@ -31,7 +31,13 @@ interface Props {
   save: (doc: PersonaDoc) => Promise<string>;
   onClose: () => void;
   onSaved: (id: string) => void;
+  /** Called after a persona is deleted, so the parent can reset the active
+   *  profile if it was pointing at the now-gone persona. */
+  onDeleted?: (id: string) => void;
 }
+
+/** The default persona is the fallback identity and isn't deletable. */
+const DEFAULT_PERSONA_ID = "claude";
 
 /** Create / edit a persona: name + SOUL (system prompt) + MEMORY + USER. SOUL,
  *  MEMORY and USER are injected into the embedded terminal via
@@ -42,8 +48,10 @@ export default function PersonaEditor({
   save,
   onClose,
   onSaved,
+  onDeleted,
 }: Props) {
   const isEdit = editId !== null && editId !== "";
+  const canDelete = isEdit && editId !== DEFAULT_PERSONA_ID;
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState("");
   const [cli, setCli] = useState("claude");
@@ -57,6 +65,12 @@ export default function PersonaEditor({
   const [providerMgrOpen, setProviderMgrOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const { providers } = useProviders();
+  const { remove } = usePersonas();
+  // Two-step delete: first click arms (auto-disarms after 3s), second confirms.
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const confirmTimer = useRef<number>(0);
+  useEffect(() => () => window.clearTimeout(confirmTimer.current), []);
 
   useEffect(() => {
     if (!isEdit || editId === null) return;
@@ -116,6 +130,29 @@ export default function PersonaEditor({
       setError(String(e));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const onDelete = async () => {
+    if (!canDelete || editId === null) return;
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      window.clearTimeout(confirmTimer.current);
+      confirmTimer.current = window.setTimeout(() => setConfirmDelete(false), 3000);
+      return;
+    }
+    window.clearTimeout(confirmTimer.current);
+    setDeleting(true);
+    setError(null);
+    try {
+      await remove(editId);
+      onDeleted?.(editId);
+      onClose();
+    } catch (e) {
+      setError(String(e));
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -337,9 +374,24 @@ export default function PersonaEditor({
           {error && <div className="modal-status error">{error}</div>}
         </div>
         <footer className="modal-footer">
-          <span className="modal-counter">
-            {isEdit ? "Applies to new sessions" : "Creates a new persona"}
-          </span>
+          {canDelete ? (
+            <button
+              type="button"
+              className={`modal-btn danger${confirmDelete ? " confirming" : ""}`}
+              onClick={onDelete}
+              disabled={submitting || deleting}
+              title="Delete this persona"
+            >
+              <Trash2 size={14} strokeWidth={2} />
+              <span>
+                {deleting ? "Deleting…" : confirmDelete ? "Click to confirm" : "Delete persona"}
+              </span>
+            </button>
+          ) : (
+            <span className="modal-counter">
+              {isEdit ? "Applies to new sessions" : "Creates a new persona"}
+            </span>
+          )}
           <div className="modal-actions">
             <button
               type="button"

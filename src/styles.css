@@ -3053,6 +3053,22 @@ body {
   cursor: not-allowed;
 }
 
+/* Destructive footer button (e.g. delete persona) — armed "confirming" state
+   mirrors the session-row delete pattern. */
+.modal-btn.danger {
+  border-color: color-mix(in srgb, var(--danger) 32%, transparent);
+  color: var(--danger);
+}
+.modal-btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+.modal-btn.danger.confirming {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+  color: var(--danger);
+}
+
 .modal-status.error {
   padding: 9px 12px;
   border-radius: 8px;
