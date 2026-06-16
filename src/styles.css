@@ -24,6 +24,14 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Hard-clip the WebView2 rendering surface to a rounded rectangle.
+   * border-radius+overflow is not reliable on Windows WebView2 for transparent
+   * frameless windows — clip-path is the only way to prevent the rectangular
+   * corner artifacts in the 10px cockpit padding area. */
+  clip-path: inset(0 round 24px);
+}
+
 html,
 body,
 #root {

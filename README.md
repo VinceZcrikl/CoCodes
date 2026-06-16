@@ -29,12 +29,29 @@ the gods convene to do the work.
   editor.
 
 - **tmux-style split panes.** Split any pane horizontally or vertically, zoom one to focus, relay a
-  selection into the next pane, and assign a *different* persona or CLI per pane by drag-and-drop —
-  then delegate work across CLIs, pane to pane.
+  selection into the next pane. Each pane runs its own PTY and can carry a completely different
+  persona and CLI.
 
-- **Per-persona model providers.** Point a persona's Claude at any Anthropic-compatible endpoint with
-  one click — **DeepSeek, Kimi, Zhipu GLM, StepFun** presets are prefilled from each vendor's docs, so
-  you only paste a key. Tokens live in `~/.theoi/.env` and are never echoed back.
+  **Drag a persona avatar onto any pane to hot-swap it.** Grab a persona from the constellation
+  in the title bar and drop it on a terminal — that pane instantly respawns under the new persona's
+  SOUL + the persona's preferred CLI (Claude → Codex → Grok → Kimi Code), while every other pane
+  stays untouched. This makes it trivial to dedicate one pane to code review on Grok, another to
+  implementation on Claude, and switch them around on the fly without touching the session list.
+
+- **Per-persona base model — like `claude model switch`, but per persona.**
+  Claude Code ships a `/model` command and the `claude model switch` flow to change which underlying
+  model the CLI uses globally. Theoi takes this further: every persona stores its own **base-model
+  provider preset**, so the model switch is per-persona rather than global.
+
+  - Switch once per session with `claude model switch` → affects *all* terminals everywhere.
+  - Set it in the persona editor → that persona *always* starts on that model, on any machine,
+    every session — without touching other personas.
+
+  Point a persona at any **Anthropic-compatible endpoint** — **DeepSeek, Kimi, Zhipu GLM, StepFun**
+  presets are prefilled from each vendor's docs, so you only paste a key. One persona can run
+  `claude-opus-4-8` through the default subscription while another runs `deepseek-coder-v3` through
+  a self-hosted proxy, side by side in the same cockpit. Tokens live in `~/.theoi/.env` and are
+  never echoed back.
 
 - **Keep-alive, resumable sessions.** PTYs survive view remounts and reloads (reconnect + replay
   buffer), so a running task is never interrupted by the UI. Each session maps to a distinct
