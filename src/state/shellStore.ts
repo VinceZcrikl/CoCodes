@@ -14,17 +14,25 @@ interface ShellState {
   maximized: boolean;
   /** True once the window has been opened at least once this session. */
   everOpened: boolean;
+  /** A shell command to run automatically on next open (consumed once). */
+  pendingCmd: string | null;
   toggle: () => void;
   close: () => void;
   toggleMax: () => void;
+  /** Open the shell overlay and queue a command to run when the shell is ready. */
+  openWithCmd: (cmd: string) => void;
+  clearPendingCmd: () => void;
 }
 
 export const useShellStore = create<ShellState>((set) => ({
   open: false,
   maximized: false,
   everOpened: false,
+  pendingCmd: null,
   toggle: () =>
     set((s) => ({ open: !s.open, everOpened: s.everOpened || !s.open })),
   close: () => set({ open: false }),
   toggleMax: () => set((s) => ({ maximized: !s.maximized })),
+  openWithCmd: (cmd) => set({ open: true, everOpened: true, pendingCmd: cmd }),
+  clearPendingCmd: () => set({ pendingCmd: null }),
 }));

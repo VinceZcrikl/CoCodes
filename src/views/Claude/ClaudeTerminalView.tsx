@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Copy, Check, RefreshCw } from "lucide-react";
+import { Copy, Check, RefreshCw, Terminal } from "lucide-react";
+import { useShellStore } from "../../state/shellStore";
 import Toolbar from "./Toolbar";
 import { type ClaudeTerminalHandle } from "./ClaudeTerminal";
 import PaneLayout from "./PaneLayout";
@@ -9,7 +10,15 @@ import type { ClaudeSession, LayoutNode } from "../../hooks/useClaudeSessions";
 import { useDirectoryStore } from "../../state/directoryStore";
 import { useWindowStore } from "../../state/windowStore";
 
-const CLI_META: Record<string, { title: string; installCmd: string | null; installHint: string }> = {
+const CLI_META: Record<string, {
+  title: string;
+  installCmd: string | null;
+  /** Windows-specific install command; falls back to installCmd when absent. */
+  installCmdWin?: string | null;
+  installHint: string;
+  /** Show a Setup button that opens the shell overlay and runs the install. */
+  setupEnabled?: boolean;
+}> = {
   claude: {
     title: "Claude Code isn't installed",
     installCmd: "npm i -g @anthropic-ai/claude-code",
@@ -28,9 +37,13 @@ const CLI_META: Record<string, { title: string; installCmd: string | null; insta
   kimi: {
     title: "Kimi Code CLI isn't installed",
     installCmd: "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash",
+    installCmdWin: "irm https://code.kimi.com/kimi-code/install.ps1 | iex",
     installHint: "Install Kimi Code then click Recheck.",
+    setupEnabled: true,
   },
 };
+
+const isWindows = navigator.userAgent.includes("Windows");
 
 /** Terminal pane host. Every session in the current persona is rendered and
  *  kept mounted; only the active session is visible. Hidden sessions keep their
@@ -93,6 +106,7 @@ export default function ClaudeTerminalView({
   const [missing, setMissing] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const openWithCmd = useShellStore((s) => s.openWithCmd);
 
   // Lazy keep-alive: a session's terminal mounts on first activation and then
   // stays alive (hidden) on switch — so we don't spawn every saved session's
@@ -147,17 +161,23 @@ export default function ClaudeTerminalView({
   useEffect(() => { setMissing(null); setReloadKey((k) => k + 1); }, [cli]);
 
   const meta = CLI_META[cli] ?? CLI_META.claude;
+  // Pick the platform-appropriate install command for display and execution.
+  const displayCmd = (isWindows ? (meta.installCmdWin ?? meta.installCmd) : meta.installCmd);
 
   const onCopy = async () => {
-    if (!meta.installCmd) return;
+    if (!displayCmd) return;
     try {
-      await navigator.clipboard.writeText(meta.installCmd);
+      await navigator.clipboard.writeText(displayCmd);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch { /* clipboard unavailable */ }
   };
 
   const onRecheck = () => { setMissing(null); setReloadKey((k) => k + 1); };
+
+  const onSetup = () => {
+    if (displayCmd) openWithCmd(displayCmd);
+  };
 
   if (missing) {
     return (
@@ -166,9 +186,9 @@ export default function ClaudeTerminalView({
           <div className="dashboard-offline-card">
             <h2 className="dashboard-offline-title">{meta.title}</h2>
             <p className="dashboard-offline-body">{missing}</p>
-            {meta.installCmd ? (
+            {displayCmd ? (
               <div className="dashboard-offline-cmd">
-                <code>{meta.installCmd}</code>
+                <code>{displayCmd}</code>
                 <button
                   type="button"
                   className="dashboard-offline-copy"
@@ -183,6 +203,12 @@ export default function ClaudeTerminalView({
               <p className="dashboard-offline-body" style={{ opacity: 0.7 }}>{meta.installHint}</p>
             )}
             <div className="dashboard-offline-actions">
+              {meta.setupEnabled && displayCmd && (
+                <button type="button" className="dashboard-offline-btn" onClick={onSetup}>
+                  <Terminal size={13} strokeWidth={1.75} />
+                  <span>Setup</span>
+                </button>
+              )}
               <button type="button" className="dashboard-offline-btn primary" onClick={onRecheck}>
                 <RefreshCw size={13} strokeWidth={1.75} />
                 <span>Recheck</span>

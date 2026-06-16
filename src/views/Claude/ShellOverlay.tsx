@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal as TerminalIcon, Maximize2, Minimize2, RotateCw, X } from "lucide-react";
-import ClaudeTerminal from "./ClaudeTerminal";
+import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
 import { useDirectoryStore } from "../../state/directoryStore";
+import { useShellStore } from "../../state/shellStore";
 
 /** Stable key for the single global shell PTY. Kept constant so the backend
  *  reconnects to the still-running shell (replaying its buffer) across hide /
@@ -30,8 +31,40 @@ export default function ShellOverlay({ open, maximized, onToggleMax, onClose }: 
   // Bumped to respawn a fresh shell after the previous one exits (`exit`/Ctrl-D).
   const [reloadKey, setReloadKey] = useState(0);
   const [exited, setExited] = useState(false);
+  const terminalRef = useRef<ClaudeTerminalHandle>(null);
+  // True once the underlying PTY has successfully opened (handles both fresh
+  // spawn and reconnect to an already-running session).
+  const terminalReadyRef = useRef(false);
+
+  const pendingCmd = useShellStore((s) => s.pendingCmd);
+  const clearPendingCmd = useShellStore((s) => s.clearPendingCmd);
+
+  const runPending = useCallback(() => {
+    const cmd = useShellStore.getState().pendingCmd;
+    if (!cmd) return;
+    window.setTimeout(() => {
+      terminalRef.current?.writeLine(cmd);
+      clearPendingCmd();
+    }, 80);
+  }, [clearPendingCmd]);
+
+  // Called by ClaudeTerminal when terminal_open resolves (fresh spawn or reconnect).
+  const handleOpened = useCallback(() => {
+    terminalReadyRef.current = true;
+    runPending();
+  }, [runPending]);
+
+  // When a pendingCmd arrives while the shell is already open and ready.
+  useEffect(() => {
+    if (!pendingCmd || !open || !terminalReadyRef.current) return;
+    window.setTimeout(() => {
+      terminalRef.current?.writeLine(pendingCmd);
+      clearPendingCmd();
+    }, 80);
+  }, [pendingCmd, open, clearPendingCmd]);
 
   const restart = () => {
+    terminalReadyRef.current = false;
     setExited(false);
     setReloadKey((k) => k + 1);
   };
@@ -82,11 +115,13 @@ export default function ShellOverlay({ open, maximized, onToggleMax, onClose }: 
       </header>
       <div className="shell-overlay-body">
         <ClaudeTerminal
+          ref={terminalRef}
           key={reloadKey}
           profileId={SHELL_PROFILE_ID}
           cli="shell"
           terminalKey={SHELL_TERMINAL_KEY}
           cwd={cwd ?? null}
+          onOpened={handleOpened}
           onExit={() => setExited(true)}
         />
       </div>
