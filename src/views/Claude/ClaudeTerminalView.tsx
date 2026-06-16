@@ -21,8 +21,10 @@ const CLI_META: Record<string, {
 }> = {
   claude: {
     title: "Claude Code isn't installed",
-    installCmd: "npm i -g @anthropic-ai/claude-code",
+    installCmd: "curl -fsSL https://claude.ai/install.sh | bash",
+    installCmdWin: "irm https://claude.ai/install.ps1 | iex",
     installHint: "Install Claude Code then click Recheck.",
+    setupEnabled: true,
   },
   codex: {
     title: "Codex CLI isn't installed",
