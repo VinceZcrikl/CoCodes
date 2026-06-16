@@ -90,6 +90,7 @@ pub fn run() {
             git::git_commit_files,
             fs::fs_list,
             fs::fs_walk,
+            fs::fs_drives,
         ])
         .on_window_event(|window, event| {
             // The frameless main window's custom close button calls

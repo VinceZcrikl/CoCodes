@@ -391,6 +391,13 @@ pub async fn seed_default_personas() {
             soul: "",
             avatar: "__mascot:grok__",
         },
+        Seed {
+            id: "kimi",
+            name: "Kimi Code",
+            cli: "kimi",
+            soul: "",
+            avatar: "__mascot:kimi__",
+        },
     ];
 
     for s in &seeds {

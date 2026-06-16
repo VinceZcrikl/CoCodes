@@ -1,0 +1,170 @@
+name: Release
+
+# Trigger: push a tag like `v0.2.0`, or run manually from the Actions tab.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.2.0) — must match an existing git tag'
+        required: true
+        type: string
+
+permissions:
+  contents: write   # needed to create / upload GitHub Release assets
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── macOS Apple Silicon (M1/M2) ──────────────────────────────────
+          - platform: macos-latest
+            rust-target: aarch64-apple-darwin
+            tauri-args: '--target aarch64-apple-darwin'
+
+          # ── macOS Intel ──────────────────────────────────────────────────
+          - platform: macos-13
+            rust-target: x86_64-apple-darwin
+            tauri-args: '--target x86_64-apple-darwin'
+
+          # ── Windows x64 ──────────────────────────────────────────────────
+          - platform: windows-latest
+            rust-target: ''
+            tauri-args: ''
+
+          # ── Linux x64 ────────────────────────────────────────────────────
+          - platform: ubuntu-22.04
+            rust-target: ''
+            tauri-args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Node.js ────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ── Rust ───────────────────────────────────────────────────────────
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-target }}
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # ── Linux system libs ──────────────────────────────────────────────
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # ── Frontend ───────────────────────────────────────────────────────
+      - name: Install npm dependencies
+        run: npm install
+
+      # ── Sync version from git tag ──────────────────────────────────────
+      # Strips the leading 'v' and writes the version into the three files
+      # that Tauri reads when naming the bundle. pwsh runs on all platforms.
+      - name: Sync version from tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          $v = $env:RELEASE_TAG -replace '^v'
+
+          # src-tauri/tauri.conf.json
+          $f = 'src-tauri/tauri.conf.json'
+          (Get-Content $f -Raw) `
+            -replace '"version":\s*"[^"]*"', "`"version`": `"$v`"" |
+            Set-Content $f -NoNewline
+
+          # src-tauri/Cargo.toml  (only the [package] line — deps use { version = } syntax)
+          $f = 'src-tauri/Cargo.toml'
+          $txt = (Get-Content $f -Raw) `
+            -replace '(?m)^version = ".*"', "version = `"$v`""
+          Set-Content $f $txt -NoNewline
+
+          # package.json
+          $f = 'package.json'
+          (Get-Content $f -Raw) `
+            -replace '"version":\s*"[^"]*"', "`"version`": `"$v`"" |
+            Set-Content $f -NoNewline
+
+          Write-Host "Version set to $v"
+
+      # ── macOS signing guard ────────────────────────────────────────────
+      # Detect whether valid Apple signing secrets are present.
+      # tauri-action aborts if APPLE_CERTIFICATE is non-empty but invalid,
+      # so we only forward the signing env vars when ALL five are provided.
+      - name: Detect Apple signing secrets
+        id: apple-signing
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if [ -n "$CERT" ] && [ -n "$CERT_PASS" ] && [ -n "$APPLE_ID" ] && \
+             [ -n "$APPLE_PASS" ] && [ -n "$TEAM_ID" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️  Apple signing secrets not set — building unsigned .dmg"
+          fi
+        env:
+          CERT:       ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASS:  ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID:   ${{ secrets.APPLE_ID }}
+          APPLE_PASS: ${{ secrets.APPLE_PASSWORD }}
+          TEAM_ID:    ${{ secrets.APPLE_TEAM_ID }}
+
+      # ── Build & publish ────────────────────────────────────────────────
+      - name: Build Tauri app and publish release assets
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signing vars are only forwarded when the guard step confirmed all
+          # five secrets are present. Empty strings tell tauri-action to skip
+          # signing rather than attempting an import that would fail.
+          APPLE_CERTIFICATE:          ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_CERTIFICATE          || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID:                   ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_ID                   || '' }}
+          APPLE_PASSWORD:             ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_PASSWORD             || '' }}
+          APPLE_TEAM_ID:              ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_TEAM_ID              || '' }}
+        with:
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: 'Theoi ${{ inputs.tag || github.ref_name }}'
+          releaseBody: |
+            ## Downloads
+
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `Theoi_*_aarch64.dmg` |
+            | macOS (Intel) | `Theoi_*_x64.dmg` |
+            | Windows | `Theoi_*_x64-setup.exe` · `Theoi_*_x64_en-US.msi` |
+            | Linux (Debian/Ubuntu) | `theoi_*_amd64.deb` |
+            | Linux (Fedora/RHEL) | `theoi_*_x86_64.rpm` |
+            | Linux (AppImage) | `theoi_*_amd64.AppImage` |
+
+            > macOS: if Gatekeeper blocks the app, right-click → Open the first time.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.tauri-args }}

@@ -33,10 +33,9 @@ interface Props {
 
 const MAX_RESULTS = 300;
 
-/** File browser + fuzzy finder shown in the toolbar's directory dropdown.
- *  Empty query → browse the current directory (folders first, ".." to go up).
- *  Typing → fuzzy-rank a recursive file list. Selecting a folder navigates;
- *  selecting a file pastes its full path into the embedded terminal. */
+/** Sentinel path used to represent the virtual "all drives" root on Windows. */
+const DRIVES_PATH = "__drives__";
+
 export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Props) {
   const [dir, setDir] = useState<string | null>(cwd);
   const [list, setList] = useState<FsList | null>(null);
@@ -45,11 +44,20 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
   const [walking, setWalking] = useState(false);
   const [active, setActive] = useState(0);
   const [savedCwd, setSavedCwd] = useState(false);
+  // Windows drive list; empty on Mac/Linux (no drive concept).
+  const [drives, setDrives] = useState<string[]>([]);
+  // True when showing the virtual "All Drives" root instead of a directory.
+  const [showDrives, setShowDrives] = useState(false);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
+
+  // Fetch the list of available drives once on mount (Windows only).
+  useEffect(() => {
+    void invoke<string[]>("fs_drives").then(setDrives).catch(() => {});
+  }, []);
 
   // Load directory entries whenever the browsed directory changes; invalidate
   // the recursive walk cache for the new root.
@@ -66,7 +74,7 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
   // Lazily fetch the recursive file list the first time the user searches in a
   // directory; cached until they navigate elsewhere.
   useEffect(() => {
-    if (!query.trim() || !list || walkFiles !== null) return;
+    if (!query.trim() || !list || walkFiles !== null || showDrives) return;
     let cancelled = false;
     setWalking(true);
     void invoke<string[]>("fs_walk", { root: list.dir, limit: 8000 })
@@ -74,15 +82,27 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
       .catch(() => { if (!cancelled) setWalkFiles([]); })
       .finally(() => { if (!cancelled) setWalking(false); });
     return () => { cancelled = true; };
-  }, [query, list, walkFiles]);
+  }, [query, list, walkFiles, showDrives]);
 
   useEffect(() => { setActive(0); }, [query]);
 
+  // True when at a filesystem root with no parent (Windows drive root like C:\).
+  const atDriveRoot = !list?.parent && drives.length > 0 && !showDrives;
+
   const items = useMemo<Item[]>(() => {
+    // Drives layer: all available drive roots as navigable folders.
+    if (showDrives) {
+      return drives.map((d) => ({ label: d, path: d, isDir: true }));
+    }
     if (!list) return [];
     if (!query.trim()) {
       const arr: Item[] = [];
-      if (list.parent) arr.push({ label: "..", path: list.parent, isDir: true, isParent: true });
+      if (list.parent) {
+        arr.push({ label: "..", path: list.parent, isDir: true, isParent: true });
+      } else if (atDriveRoot) {
+        // Virtual ".." that opens the drives selector.
+        arr.push({ label: "..", path: DRIVES_PATH, isDir: true, isParent: true });
+      }
       for (const e of list.entries) arr.push({ label: e.name, path: e.path, isDir: e.isDir });
       return arr;
     }
@@ -99,7 +119,7 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
       path: `${list.dir}/${rel}`,
       isDir: false,
     }));
-  }, [list, query, walkFiles]);
+  }, [list, query, walkFiles, showDrives, drives, atDriveRoot]);
 
   // Keep the highlighted row in view.
   useEffect(() => {
@@ -107,10 +127,22 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
     el?.scrollIntoView({ block: "nearest" });
   }, [active, items]);
 
+  const goUp = () => {
+    if (showDrives) return; // drives is the top; nothing above it
+    if (list?.parent) { setDir(list.parent); }
+    else if (atDriveRoot) { setQuery(""); setShowDrives(true); }
+  };
+
   const choose = (item: Item | undefined) => {
     if (!item) return;
+    if (item.path === DRIVES_PATH) {
+      setQuery("");
+      setShowDrives(true);
+      return;
+    }
     if (item.isDir) {
       setQuery("");
+      setShowDrives(false);
       setDir(item.path);
     } else {
       onInsertPath(item.path);
@@ -139,20 +171,23 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
     } else if (e.key === "Escape") {
       e.preventDefault();
       onClose();
-    } else if (e.key === "Backspace" && !query && list?.parent) {
+    } else if (e.key === "Backspace" && !query) {
       e.preventDefault();
-      setDir(list.parent);
+      goUp();
     }
   };
 
   const browseNative = async () => {
     const picked = await invoke<string | null>("pick_directory");
-    if (picked) { setQuery(""); setDir(picked); }
+    if (picked) { setQuery(""); setShowDrives(false); setDir(picked); }
   };
 
   const useAsCwd = () => {
     if (list) { onSetCwd(list.dir); setSavedCwd(true); }
   };
+
+  const canGoUp = showDrives ? false : !!(list?.parent || atDriveRoot);
+  const pathLabel = showDrives ? "Drives" : (list?.dir ?? "…");
 
   return (
     <div className="file-finder" role="dialog" aria-label="File finder">
@@ -180,28 +215,30 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
             <FolderOpen size={13} strokeWidth={1.9} />
           </button>
         </div>
-        <div className="file-finder-path" title={list?.dir ?? ""}>
-          {list?.parent && (
+        <div className="file-finder-path" title={pathLabel}>
+          {canGoUp && (
             <button
               type="button"
               className="file-finder-up"
-              onClick={() => list.parent && setDir(list.parent)}
+              onClick={goUp}
               title="Up one level"
               aria-label="Up one level"
             >
               <ArrowUp size={11} strokeWidth={2.2} />
             </button>
           )}
-          <span className="file-finder-path-text">{list?.dir ?? "…"}</span>
-          <button
-            type="button"
-            className={`file-finder-cwd${savedCwd ? " saved" : ""}`}
-            onClick={useAsCwd}
-            title="Use as working directory"
-            aria-label="Use as working directory"
-          >
-            <Check size={12} strokeWidth={2.2} />
-          </button>
+          <span className="file-finder-path-text">{pathLabel}</span>
+          {!showDrives && (
+            <button
+              type="button"
+              className={`file-finder-cwd${savedCwd ? " saved" : ""}`}
+              onClick={useAsCwd}
+              title="Use as working directory"
+              aria-label="Use as working directory"
+            >
+              <Check size={12} strokeWidth={2.2} />
+            </button>
+          )}
         </div>
       </div>
 
