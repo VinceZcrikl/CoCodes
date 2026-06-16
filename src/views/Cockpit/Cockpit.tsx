@@ -37,7 +37,7 @@ const CLIS: CliDef[] = [
   { id: "kimi",   label: "Kimi Code", ready: true, defaultModel: "Kimi K2.7" },
 ];
 
-const CLI_STORAGE_KEY = "openterminus:active-cli";
+const CLI_STORAGE_KEY = "theoi:active-cli";
 
 export default function Cockpit() {
   const [activeCli, setActiveCli] = useState<string>(
@@ -166,8 +166,8 @@ export default function Cockpit() {
   useEffect(() => {
     if (paletteName !== "world-cup-2026") return;
     try {
-      if (!localStorage.getItem("openterminus:wc2026-celebrated")) {
-        localStorage.setItem("openterminus:wc2026-celebrated", "1");
+      if (!localStorage.getItem("theoi:wc2026-celebrated")) {
+        localStorage.setItem("theoi:wc2026-celebrated", "1");
         setCelebrate(true);
       }
     } catch { /* localStorage unavailable; skip the kickoff */ }
@@ -182,7 +182,7 @@ export default function Cockpit() {
         {mini ? (
           <div className="cockpit-mini-bar" data-tauri-drag-region>
             <AppLogo className="cockpit-mini-logo" />
-            <span className="cockpit-mini-title">Open Terminus · {activeName}</span>
+            <span className="cockpit-mini-title">Theoi · {activeName}</span>
             <WindowControls />
           </div>
         ) : (

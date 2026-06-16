@@ -24,7 +24,7 @@ export const useDirectoryStore = create<DirectoryState>()(
             : s.recent,
         })),
     }),
-    { name: "openterminus-directory" },
+    { name: "theoi-directory" },
   ),
 );
 

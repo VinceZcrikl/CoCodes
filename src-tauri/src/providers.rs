@@ -2,8 +2,8 @@
 //!
 //! A "provider" is an Anthropic-compatible endpoint (DeepSeek, Kimi/Moonshot, …)
 //! that a persona can point its embedded `claude` CLI at, instead of the default
-//! Claude subscription. The registry lives at `~/.openterminus/providers.json`
-//! and is **secret-free**: tokens are stored separately in `~/.openterminus/.env`
+//! Claude subscription. The registry lives at `~/.theoi/providers.json`
+//! and is **secret-free**: tokens are stored separately in `~/.theoi/.env`
 //! under `PROVIDER_TOKEN_<ID>`, and the registry only carries a `has_token` flag.
 //!
 //! [`terminal_open`](crate::terminal) calls [`resolve`] at spawn time and, when
@@ -213,7 +213,7 @@ fn resolve_in(base: &Path, id: &str) -> Result<Option<Resolved>, String> {
     }))
 }
 
-// ---- Minimal `.env` reader/writer (open-terminus has no shared one yet). ----
+// ---- Minimal `.env` reader/writer (theoi has no shared one yet). ----
 
 /// Read `KEY=value` from a `.env`-style file. Returns the trimmed value, or
 /// `None` if the file or key is absent / empty. First match wins.

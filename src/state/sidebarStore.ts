@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 /** Whether the left session sidebar is collapsed. Shared between the toolbar
  *  toggle and the sidebar itself, and persisted so it reopens the same way. */
-const KEY = "openterminus:sidebar-collapsed";
+const KEY = "theoi:sidebar-collapsed";
 
 function loadInitial(): boolean {
   if (typeof localStorage === "undefined") return false;

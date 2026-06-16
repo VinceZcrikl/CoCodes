@@ -151,7 +151,7 @@ pub async fn screenshot_grab(
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    let path = std::env::temp_dir().join(format!("openterminus-shot-{ts}.png"));
+    let path = std::env::temp_dir().join(format!("theoi-shot-{ts}.png"));
     let path_str = path.to_string_lossy().to_string();
     let task_path = path_str.clone();
 

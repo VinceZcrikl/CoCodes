@@ -2971,30 +2971,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "open-terminus"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "base64 0.22.1",
- "core-foundation",
- "dirs 5.0.1",
- "getrandom 0.2.17",
- "image",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "portable-pty",
- "rfd",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tracing",
- "tracing-subscriber",
- "xcap",
-]
-
-[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4607,6 +4583,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5d9cf598a6d7ce700a4e6a9199da127e6819a61e64b68609683cc9a01b5683a"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "theoi"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "base64 0.22.1",
+ "core-foundation",
+ "dirs 5.0.1",
+ "getrandom 0.2.17",
+ "image",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "portable-pty",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tracing",
+ "tracing-subscriber",
+ "xcap",
 ]
 
 [[package]]

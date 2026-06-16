@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Open Terminus",
+  "productName": "Theoi",
   "version": "0.1.0",
-  "identifier": "com.openterminus.app",
+  "identifier": "com.theoi.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1422",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Open Terminus",
+        "title": "Theoi",
         "width": 1180,
         "height": 760,
         "minWidth": 420,

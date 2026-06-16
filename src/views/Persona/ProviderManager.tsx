@@ -87,7 +87,7 @@ function draftFromPreset(p: ProviderPreset): Provider {
 
 /** Manage base-model providers — Anthropic-compatible endpoints (DeepSeek,
  *  Kimi…) a persona's embedded `claude` can use instead of the Claude
- *  subscription. Tokens are write-only: stored in ~/.openterminus/.env, never
+ *  subscription. Tokens are write-only: stored in ~/.theoi/.env, never
  *  echoed back (the form only shows whether one is set). */
 export default function ProviderManager({ onClose }: { onClose: () => void }) {
   const { providers, save, remove } = useProviders();
@@ -330,7 +330,7 @@ export default function ProviderManager({ onClose }: { onClose: () => void }) {
                 />
               </label>
               <p className="agent-editor-hint">
-                Stored in ~/.openterminus/.env, never shown again.
+                Stored in ~/.theoi/.env, never shown again.
               </p>
               {error && <div className="modal-status error">{error}</div>}
             </div>

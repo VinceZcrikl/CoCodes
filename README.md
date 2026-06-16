@@ -1,6 +1,8 @@
-# Open Terminus
+# Theoi
 
-A terminal-native desktop cockpit for AI coding CLIs. Open Terminus embeds the
+> **Agent coding cockpit**
+
+A terminal-native desktop cockpit for AI coding CLIs. Theoi embeds the
 **live CLI terminal** (not a config switcher, not a TUI), layers persona /
 instruction injection and visual session management on top, and is built to
 host *many* CLIs — Claude Code first, then Codex, Gemini, Grok, Kimi — each on
@@ -21,7 +23,7 @@ its own tab.
 - **Resumable sessions** — each sidebar session maps to a distinct claude
   conversation (`--session-id` / `--resume`).
 - **Persona injection** — per-profile `SOUL.md` / `MEMORY.md` / `USER.md` under
-  `~/.openterminus/personas/<profile>/` are folded into
+  `~/.theoi/personas/<profile>/` are folded into
   `--append-system-prompt-file`.
 - **Subscription auth** — never sets `ANTHROPIC_API_KEY`; claude uses your
   `/login` OAuth credentials in `~/.claude`.
@@ -56,7 +58,7 @@ src/                       React/TS frontend
   hooks/useClaudeSessions  per-profile session store (localStorage)
 src-tauri/src/
   terminal.rs              PTY engine — spawn / write / resize / close
-  persona.rs               app-owned persona loader (~/.openterminus)
+  persona.rs               app-owned persona loader (~/.theoi)
 ```
 
 ## Roadmap

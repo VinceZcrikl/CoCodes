@@ -87,7 +87,7 @@ interface Store {
 
 // cli defaults to "claude" so existing localStorage keys are unchanged.
 const KEY = (profileId: string, cli = "claude") =>
-  `openterminus.${cli}.sessions.${profileId}`;
+  `theoi.${cli}.sessions.${profileId}`;
 
 function load(profileId: string, cli = "claude"): Store {
   try {

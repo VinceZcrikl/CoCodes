@@ -1,10 +1,10 @@
 //! App-owned persona store.
 //!
-//! Re-homed from hermes-orb's `~/.hermes` profile dirs to OpenTerminus's own
+//! Re-homed from hermes-orb's `~/.hermes` profile dirs to Theoi's own
 //! data home. Each persona is a directory:
 //!
 //! ```text
-//! ~/.openterminus/personas/<id>/
+//! ~/.theoi/personas/<id>/
 //!   ├─ meta.json   { "name": "Dev Bot" }
 //!   ├─ SOUL.md     persona / system identity
 //!   ├─ MEMORY.md   long-lived facts the CLI should remember
@@ -90,11 +90,32 @@ struct Meta {
     prompt_mode: Option<String>,
 }
 
-/// The OpenTerminus data home — `~/.openterminus`.
+/// The Theoi data home — `~/.theoi`.
 pub fn app_home() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".openterminus")
+        .join(".theoi")
+}
+
+/// One-time rename of the legacy `~/.openterminus` data home to `~/.theoi`
+/// (the app was renamed from "Open Terminus"). Preserves personas, providers.json
+/// and the secret `.env`. No-op once `~/.theoi` already exists.
+pub fn migrate_legacy_home() {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+    let new_home = home.join(".theoi");
+    if new_home.exists() {
+        return;
+    }
+    let legacy = home.join(".openterminus");
+    if !legacy.is_dir() {
+        return;
+    }
+    match std::fs::rename(&legacy, &new_home) {
+        Ok(()) => tracing::info!("migrated data home ~/.openterminus → ~/.theoi"),
+        Err(e) => tracing::warn!("failed to migrate ~/.openterminus → ~/.theoi: {e}"),
+    }
 }
 
 fn personas_root() -> PathBuf {

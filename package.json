@@ -1,8 +1,8 @@
 {
-  "name": "open-terminus",
+  "name": "theoi",
   "private": true,
   "version": "0.1.0",
-  "description": "Terminal-native desktop cockpit for AI coding CLIs — embed the live CLI, switch providers per-tab, inject personas.",
+  "description": "Theoi — Agent coding cockpit: embed the live AI coding CLI, switch providers per-tab, inject personas.",
   "license": "MIT",
   "type": "module",
   "scripts": {

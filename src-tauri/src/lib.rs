@@ -1,4 +1,4 @@
-//! Open Terminus backend — a terminal-native cockpit for AI coding CLIs.
+//! Theoi backend — a terminal-native cockpit for AI coding CLIs.
 //!
 //! Phase 0 hosts the `claude` CLI inside an embedded PTY (see [`terminal`]).
 //! The per-CLI registry (`CliSpec`) and provider-switching modules land in
@@ -39,7 +39,7 @@ pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,open_terminus_lib=debug".into()),
+                .unwrap_or_else(|_| "info,theoi_lib=debug".into()),
         )
         .init();
 
@@ -47,6 +47,8 @@ pub fn run() {
         .setup(|_app| {
             #[cfg(target_os = "macos")]
             set_macos_dock_icon();
+            // Carry over data from the pre-rename home before anything reads it.
+            persona::migrate_legacy_home();
             tauri::async_runtime::spawn(persona::seed_default_personas());
             Ok(())
         })

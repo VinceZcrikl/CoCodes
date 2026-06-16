@@ -337,7 +337,7 @@ fn write_persona_file(id: &str, ctx: &PersonaContext) -> Option<PathBuf> {
         return None;
     }
 
-    let path = std::env::temp_dir().join(format!("openterminus-claude-persona-{id}.md"));
+    let path = std::env::temp_dir().join(format!("theoi-claude-persona-{id}.md"));
     match std::fs::write(&path, sections.join("\n\n")) {
         Ok(()) => Some(path),
         Err(e) => {
@@ -761,7 +761,7 @@ mod tests {
     fn persona_file_renders_named_sections() {
         let ctx = PersonaContext {
             soul: "You speak tersely.".into(),
-            memory: "The project is OpenTerminus.".into(),
+            memory: "The project is Theoi.".into(),
             user_profile: "Prefers Rust.".into(),
             name: "Atlas".into(),
         };

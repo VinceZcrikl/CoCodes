@@ -6,7 +6,7 @@ import {
   type OrbThemeName,
 } from "./orbThemes";
 
-const STORAGE_KEY = "openterminus:theme";
+const STORAGE_KEY = "theoi:theme";
 const THEME_EVENT = "theme:changed";
 const DEFAULT_THEME: OrbThemeName = "black-gold";
 

@@ -9,10 +9,10 @@ import {
   type AccentName,
 } from "./panelPalettes";
 
-const STORAGE_KEY = "openterminus:palette";
+const STORAGE_KEY = "theoi:palette";
 const PALETTE_EVENT = "palette:changed";
 /** One-shot flag: the seasonal World Cup theme is force-activated once. */
-const SEASONAL_KEY = "openterminus:wc2026-seasonal";
+const SEASONAL_KEY = "theoi:wc2026-seasonal";
 
 interface Persisted {
   name: PanelPaletteName;

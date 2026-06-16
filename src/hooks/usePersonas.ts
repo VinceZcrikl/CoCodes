@@ -32,7 +32,7 @@ export interface PersonaDoc {
 
 /** A base-model provider preset (Anthropic-compatible endpoint). Mirrors the
  *  Rust `providers::Provider`; secret-free — `has_token` flags whether a token
- *  is stored in ~/.openterminus/.env. */
+ *  is stored in ~/.theoi/.env. */
 export interface Provider {
   id: string;
   label: string;
@@ -43,7 +43,7 @@ export interface Provider {
 }
 
 /** Thin wrapper over the persona_* backend commands. Personas are app-owned
- *  dirs under ~/.openterminus/personas; the active one is injected into the
+ *  dirs under ~/.theoi/personas; the active one is injected into the
  *  embedded terminal as the system prompt. */
 export function usePersonas() {
   const [personas, setPersonas] = useState<PersonaSummary[]>([]);
@@ -91,7 +91,7 @@ export function usePersonas() {
 const PROVIDERS_CHANGED = "providers:changed";
 
 /** Thin wrapper over the provider_* backend commands. Providers are app-owned
- *  base-model presets under ~/.openterminus/providers.json; a persona may point
+ *  base-model presets under ~/.theoi/providers.json; a persona may point
  *  its embedded `claude` at one instead of the default Claude subscription. */
 export function useProviders() {
   const [providers, setProviders] = useState<Provider[]>([]);

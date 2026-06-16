@@ -319,7 +319,7 @@ export default function PersonaEditor({
               value={memory}
               onChange={(e) => setMemory(e.target.value)}
               rows={4}
-              placeholder="The project is OpenTerminus, a Tauri cockpit…"
+              placeholder="The project is Theoi, a Tauri cockpit…"
             />
           </label>
 

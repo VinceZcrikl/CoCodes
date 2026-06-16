@@ -1,16 +1,16 @@
 [package]
-name = "open-terminus"
+name = "theoi"
 version = "0.1.0"
-description = "OpenTerminus — a terminal-native desktop cockpit for AI coding CLIs"
-authors = ["OpenTerminus contributors"]
+description = "Theoi — a terminal-native desktop cockpit for AI coding CLIs"
+authors = ["Theoi contributors"]
 edition = "2021"
 rust-version = "1.77"
-default-run = "open-terminus"
+default-run = "theoi"
 license = "MIT"
 publish = false
 
 [lib]
-name = "open_terminus_lib"
+name = "theoi_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
