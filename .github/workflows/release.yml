@@ -80,23 +80,42 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      # ── macOS signing guard ────────────────────────────────────────────
+      # Detect whether valid Apple signing secrets are present.
+      # tauri-action aborts if APPLE_CERTIFICATE is non-empty but invalid,
+      # so we only forward the signing env vars when ALL five are provided.
+      - name: Detect Apple signing secrets
+        id: apple-signing
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if [ -n "$CERT" ] && [ -n "$CERT_PASS" ] && [ -n "$APPLE_ID" ] && \
+             [ -n "$APPLE_PASS" ] && [ -n "$TEAM_ID" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️  Apple signing secrets not set — building unsigned .dmg"
+          fi
+        env:
+          CERT:       ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASS:  ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID:   ${{ secrets.APPLE_ID }}
+          APPLE_PASS: ${{ secrets.APPLE_PASSWORD }}
+          TEAM_ID:    ${{ secrets.APPLE_TEAM_ID }}
+
       # ── Build & publish ────────────────────────────────────────────────
       - name: Build Tauri app and publish release assets
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ── macOS code signing (optional — skip if secrets are absent) ──
-          # Set these secrets in: Settings → Secrets → Actions
-          #   APPLE_CERTIFICATE         base64-encoded .p12 signing cert
-          #   APPLE_CERTIFICATE_PASSWORD .p12 password
-          #   APPLE_ID                  your Apple ID (email)
-          #   APPLE_PASSWORD            app-specific password from appleid.apple.com
-          #   APPLE_TEAM_ID             10-char Team ID from developer.apple.com
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Signing vars are only forwarded when the guard step confirmed all
+          # five secrets are present. Empty strings tell tauri-action to skip
+          # signing rather than attempting an import that would fail.
+          APPLE_CERTIFICATE:          ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_CERTIFICATE          || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID:                   ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_ID                   || '' }}
+          APPLE_PASSWORD:             ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_PASSWORD             || '' }}
+          APPLE_TEAM_ID:              ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_TEAM_ID              || '' }}
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: 'Theoi ${{ inputs.tag || github.ref_name }}'
@@ -113,6 +132,6 @@ jobs:
             | Linux (AppImage) | `theoi_*_amd64.AppImage` |
 
             > macOS: if Gatekeeper blocks the app, right-click → Open the first time.
-          releaseDraft: true      # stays hidden until you manually publish it
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.tauri-args }}
