@@ -81,6 +81,26 @@ pub async fn fs_list(path: Option<String>) -> Result<FsList, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Returns the list of available drive-root paths on Windows (e.g. `["C:/", "D:/"]`),
+/// sorted alphabetically. Returns an empty vec on macOS / Linux where the
+/// filesystem is a single unified tree rooted at `/`.
+#[tauri::command]
+pub async fn fs_drives() -> Vec<String> {
+    #[cfg(windows)]
+    {
+        (b'A'..=b'Z')
+            .filter_map(|c| {
+                let p = format!("{}:/", c as char);
+                std::path::Path::new(&p).is_dir().then_some(p)
+            })
+            .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
+    }
+}
+
 /// Recursive file list under `root`, relative + forward-slashed, capped at
 /// `limit` (default 8000). Skips [`SKIP_DIRS`] and does not follow symlinks
 /// (avoids loops). The frontend fuzzy-ranks these for search.
