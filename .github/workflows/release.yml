@@ -83,6 +83,36 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      # ── Sync version from git tag ──────────────────────────────────────
+      # Strips the leading 'v' and writes the version into the three files
+      # that Tauri reads when naming the bundle. pwsh runs on all platforms.
+      - name: Sync version from tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          $v = $env:RELEASE_TAG -replace '^v'
+
+          # src-tauri/tauri.conf.json
+          $f = 'src-tauri/tauri.conf.json'
+          (Get-Content $f -Raw) `
+            -replace '"version":\s*"[^"]*"', "`"version`": `"$v`"" |
+            Set-Content $f -NoNewline
+
+          # src-tauri/Cargo.toml  (only the [package] line — deps use { version = } syntax)
+          $f = 'src-tauri/Cargo.toml'
+          $txt = (Get-Content $f -Raw) `
+            -replace '(?m)^version = ".*"', "version = `"$v`""
+          Set-Content $f $txt -NoNewline
+
+          # package.json
+          $f = 'package.json'
+          (Get-Content $f -Raw) `
+            -replace '"version":\s*"[^"]*"', "`"version`": `"$v`"" |
+            Set-Content $f -NoNewline
+
+          Write-Host "Version set to $v"
+
       # ── macOS signing guard ────────────────────────────────────────────
       # Detect whether valid Apple signing secrets are present.
       # tauri-action aborts if APPLE_CERTIFICATE is non-empty but invalid,
@@ -135,6 +165,6 @@ jobs:
             | Linux (AppImage) | `theoi_*_amd64.AppImage` |
 
             > macOS: if Gatekeeper blocks the app, right-click → Open the first time.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.tauri-args }}
