@@ -46,7 +46,7 @@ interface PaneCtx {
   onSplit: (paneId: string, dir: "row" | "col", forkConvId?: string) => void;
   onClose: (paneId: string) => void;
   onSetRatio: (splitId: string, ratio: number) => void;
-  onPaneStarted: (paneId: string) => void;
+  onPaneStarted: (paneId: string, cwd: string | null) => void;
   onMissingCli?: (message: string) => void;
   onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
   /** Returns true if text was relayed, false if nothing was selected. */
@@ -85,7 +85,7 @@ interface Props {
   onSplit: (paneId: string, dir: "row" | "col", forkConvId?: string) => void;
   onClose: (paneId: string) => void;
   onSetRatio: (splitId: string, ratio: number) => void;
-  onPaneStarted: (paneId: string) => void;
+  onPaneStarted: (paneId: string, cwd: string | null) => void;
   onMissingCli?: (message: string) => void;
   onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
   onRespawn: (paneId: string) => void;
@@ -142,6 +142,14 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   // Per-pane profile override: if this pane was assigned a persona directly,
   // use its own profileId; otherwise fall back to the session-level one.
   const effectiveProfileId = node.profileId ?? ctx.profileId;
+
+  // The directory this pane spawns/resumes in. Once a pane has started, its cwd
+  // is pinned (recorded at first spawn — `null` means home), so `--resume` runs
+  // in the same project dir Claude saved the conversation under. Only a pane
+  // that has never recorded a cwd (fresh, or legacy pre-tracking) falls back to
+  // the current global cwd. `!== undefined` is deliberate: a recorded `null`
+  // must resolve to home, not the live default.
+  const effectiveCwd = node.cwd !== undefined ? node.cwd : ctx.defaultCwd;
 
   // Build CSS class string.
   let cls = "pane-leaf";
@@ -306,10 +314,10 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         resume={node.started}
         terminalKey={`${node.paneId}:${node.convId}`}
         paletteOverride={hasOverride ? { name: effPalette, accent: effAccent } : undefined}
-        cwd={node.cwd ?? ctx.defaultCwd}
+        cwd={effectiveCwd}
         cli={node.cli}
         onMissingCli={ctx.onMissingCli}
-        onOpened={() => ctx.onPaneStarted(node.paneId)}
+        onOpened={() => ctx.onPaneStarted(node.paneId, effectiveCwd)}
         onSessionConflict={() => ctx.onRespawn(node.paneId)}
         onFocus={() => ctx.setActive(node.paneId)}
         onKeyEvent={ctx.makeKeyHandler(node.paneId)}

@@ -83,7 +83,7 @@ export default function ClaudeTerminalView({
   onSplitPane: (sessionId: string, paneId: string, dir: "row" | "col", forkConvId?: string) => void;
   onClosePane: (sessionId: string, paneId: string) => void;
   onSetSplitRatio: (sessionId: string, splitId: string, ratio: number) => void;
-  onPaneStarted: (sessionId: string, paneId: string) => void;
+  onPaneStarted: (sessionId: string, paneId: string, cwd: string | null) => void;
   onAssignPaneProfile: (sessionId: string, paneId: string, profileId: string, cli: string) => void;
   onRespawnPane: (sessionId: string, paneId: string) => void;
   onRenamePane: (sessionId: string, paneId: string, title: string) => void;
@@ -250,7 +250,7 @@ export default function ClaudeTerminalView({
                 onSplit={(paneId, dir, forkConvId) => onSplitPane(s.id, paneId, dir, forkConvId)}
                 onClose={(paneId) => onClosePane(s.id, paneId)}
                 onSetRatio={(splitId, ratio) => onSetSplitRatio(s.id, splitId, ratio)}
-                onPaneStarted={(paneId) => onPaneStarted(s.id, paneId)}
+                onPaneStarted={(paneId, cwd) => onPaneStarted(s.id, paneId, cwd)}
                 onAssignPaneProfile={(paneId, profileId, cli) =>
                   onAssignPaneProfile(s.id, paneId, profileId, cli)
                 }
