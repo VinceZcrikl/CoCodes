@@ -39,11 +39,14 @@ interface GhostState {
  *  Avatars can be dragged (pointer events, not HTML5 DnD) onto split panes to
  *  rebind that pane to the persona's preferred CLI and profile. */
 export default function ProfileConstellation({ activeModel, onEdit, onNew }: Props) {
-  const { personas } = usePersonas();
+  const { personas, get } = usePersonas();
   const activeId = useProfileStore((s) => s.activeProfileId);
   const setActive = useProfileStore((s) => s.setActiveProfile);
   const [hover, setHover] = useState<HoverState | null>(null);
   const [ghost, setGhost] = useState<GhostState | null>(null);
+  // Full SOUL bodies, fetched lazily on first hover (the list summaries only
+  // carry a 120-char preview). Keyed by persona id.
+  const [souls, setSouls] = useState<Record<string, string>>({});
 
   const dragRef = useRef<{ persona: PersonaSummary; startX: number; startY: number } | null>(null);
   const didDragRef = useRef(false);
@@ -123,6 +126,14 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
                 if (dragRef.current) return;
                 const r = e.currentTarget.getBoundingClientRect();
                 setHover({ id: p.id, x: r.left + r.width / 2, y: r.bottom + 8 });
+                // Lazily pull the full SOUL the first time this persona is hovered.
+                if (souls[p.id] === undefined) {
+                  void get(p.id)
+                    .then((doc) =>
+                      setSouls((m) => ({ ...m, [p.id]: doc.soul ?? "" })),
+                    )
+                    .catch(() => {});
+                }
               }}
               onMouseLeave={() =>
                 setHover((h) => (h?.id === p.id ? null : h))
@@ -213,7 +224,7 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
               {hovered.name}
             </span>
             <span className="window-chat-constellation-soul-body">
-              {hovered.soulPreview?.trim() ||
+              {(souls[hovered.id] ?? hovered.soulPreview)?.trim() ||
                 "No SOUL set — claude uses its default identity."}
             </span>
           </div>,
