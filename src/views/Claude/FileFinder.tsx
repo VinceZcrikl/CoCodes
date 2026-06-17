@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Search, Folder, File, ArrowUp, FolderOpen, Check, Copy } from "lucide-react";
+import { Search, Folder, File, ArrowUp, FolderOpen, Lock, LockOpen, Copy } from "lucide-react";
 import { fuzzyScore } from "./fuzzy";
 
 interface FsEntry {
@@ -43,7 +43,6 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
   const [walkFiles, setWalkFiles] = useState<string[] | null>(null);
   const [walking, setWalking] = useState(false);
   const [active, setActive] = useState(0);
-  const [savedCwd, setSavedCwd] = useState(false);
   // Windows drive list; empty on Mac/Linux (no drive concept).
   const [drives, setDrives] = useState<string[]>([]);
   // True when showing the virtual "All Drives" root instead of a directory.
@@ -64,7 +63,6 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
   useEffect(() => {
     let cancelled = false;
     setWalkFiles(null);
-    setSavedCwd(false);
     void invoke<FsList>("fs_list", { path: dir })
       .then((r) => { if (!cancelled) { setList(r); setActive(0); } })
       .catch(() => { if (!cancelled) setList(null); });
@@ -158,6 +156,13 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
     onClose();
   };
 
+  // Folder lock button: lock the terminal workspace and Git panel to this
+  // folder (sets it as the working directory) without navigating into it. The
+  // finder stays open so the locked row updates its lock icon in place.
+  const lockTo = (path: string) => {
+    onSetCwd(path);
+  };
+
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -180,10 +185,6 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
   const browseNative = async () => {
     const picked = await invoke<string | null>("pick_directory");
     if (picked) { setQuery(""); setShowDrives(false); setDir(picked); }
-  };
-
-  const useAsCwd = () => {
-    if (list) { onSetCwd(list.dir); setSavedCwd(true); }
   };
 
   const canGoUp = showDrives ? false : !!(list?.parent || atDriveRoot);
@@ -228,17 +229,6 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
             </button>
           )}
           <span className="file-finder-path-text">{pathLabel}</span>
-          {!showDrives && (
-            <button
-              type="button"
-              className={`file-finder-cwd${savedCwd ? " saved" : ""}`}
-              onClick={useAsCwd}
-              title="Use as working directory"
-              aria-label="Use as working directory"
-            >
-              <Check size={12} strokeWidth={2.2} />
-            </button>
-          )}
         </div>
       </div>
 
@@ -266,17 +256,34 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
                 <File size={13} strokeWidth={1.75} className="file-finder-row-icon" />
               )}
               <span className="file-finder-row-label">{item.label}</span>
-              {item.isDir && !item.isParent && (
-                <button
-                  type="button"
-                  className="file-finder-copy"
-                  onClick={(e) => { e.stopPropagation(); copyAndInsert(item.path); }}
-                  title="Copy path & paste to terminal"
-                  aria-label="Copy path and paste to terminal"
-                >
-                  <Copy size={12} strokeWidth={1.9} />
-                </button>
-              )}
+              {item.isDir && !item.isParent && (() => {
+                const locked = item.path === cwd;
+                return (
+                  <>
+                    <button
+                      type="button"
+                      className={`file-finder-lock${locked ? " locked" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); lockTo(item.path); }}
+                      title={locked ? "Terminal & Git locked here" : "Lock terminal & Git to this folder"}
+                      aria-label={locked ? "Locked as working directory" : "Lock terminal and Git to this folder"}
+                      aria-pressed={locked}
+                    >
+                      {locked
+                        ? <Lock size={12} strokeWidth={1.9} />
+                        : <LockOpen size={12} strokeWidth={1.9} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="file-finder-copy"
+                      onClick={(e) => { e.stopPropagation(); copyAndInsert(item.path); }}
+                      title="Copy path & paste to terminal"
+                      aria-label="Copy path and paste to terminal"
+                    >
+                      <Copy size={12} strokeWidth={1.9} />
+                    </button>
+                  </>
+                );
+              })()}
             </div>
           ))
         )}

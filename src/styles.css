@@ -1072,8 +1072,7 @@ body {
 .file-finder-input::placeholder { color: var(--text-muted); }
 
 .file-finder-icon-btn,
-.file-finder-up,
-.file-finder-cwd {
+.file-finder-up {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1086,18 +1085,12 @@ body {
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .file-finder-icon-btn { width: 22px; height: 22px; }
-.file-finder-up,
-.file-finder-cwd { width: 20px; height: 20px; }
+.file-finder-up { width: 20px; height: 20px; }
 .file-finder-icon-btn:hover,
-.file-finder-up:hover,
-.file-finder-cwd:hover {
+.file-finder-up:hover {
   background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
   border-color: color-mix(in srgb, var(--accent-gold) 40%, transparent);
   color: var(--accent-gold);
-}
-.file-finder-cwd.saved {
-  color: #3fb950;
-  border-color: color-mix(in srgb, #3fb950 45%, transparent);
 }
 
 .file-finder-path {
@@ -1155,6 +1148,43 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+}
+
+/* Folder lock button — locks the terminal & Git to this folder. Revealed on
+   hover when unlocked; the locked folder keeps its lock visible (golden). */
+.file-finder-lock {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 100ms ease,
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+.file-finder-row:hover .file-finder-lock,
+.file-finder-row.active .file-finder-lock { opacity: 1; }
+.file-finder-lock:hover {
+  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 45%, transparent);
+  color: var(--accent-gold);
+}
+/* The currently locked folder: lock stays lit regardless of hover. */
+.file-finder-lock.locked {
+  opacity: 1;
+  color: var(--accent-gold);
+  border-color: color-mix(in srgb, var(--accent-gold) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
 }
 
 /* Folder copy button — revealed on hover / when the row is keyboard-active. */
@@ -3194,6 +3224,64 @@ body {
 }
 select.agent-editor-input {
   cursor: pointer;
+}
+/* Base-model picker rows: every supported provider, selectable, with an
+ * "Add key" shortcut on the keyless ones. */
+.basemodel-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.basemodel-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.basemodel-row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.basemodel-row-main:hover {
+  background: color-mix(in srgb, var(--accent-gold) 8%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 30%, transparent);
+}
+.basemodel-row-main.active,
+.basemodel-row.active .basemodel-row-main {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 50%, transparent);
+}
+.basemodel-row-main.active .cli-picker-label,
+.basemodel-row.active .cli-picker-label {
+  color: var(--accent-gold);
+}
+.basemodel-addkey {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 11px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-gold) 10%, transparent);
+  color: var(--accent-gold);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.basemodel-addkey:hover {
+  background: color-mix(in srgb, var(--accent-gold) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 55%, transparent);
 }
 .provider-list,
 .provider-form {

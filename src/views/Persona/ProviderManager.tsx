@@ -1,95 +1,32 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useProviders, type Provider } from "../../hooks/usePersonas";
+import {
+  PROVIDER_PRESETS,
+  CUSTOM_PRESET,
+  BLANK_PROVIDER as BLANK,
+  draftFromPreset,
+} from "./providerPresets";
 
-const BLANK: Provider = {
-  id: "",
-  label: "",
-  base_url: "",
-  model: "",
-  small_fast_model: null,
-  has_token: false,
-};
-
-/** A one-click provider preset. Picking one fills every field but the API key
- *  from the vendor's official Claude-Code / Anthropic-compatible docs, so the
- *  user only pastes their key. `keyUrl` is where that key is issued. */
-interface ProviderPreset {
-  key: string;
-  label: string;
-  id: string;
-  base_url: string;
-  model: string;
-  small_fast_model: string | null;
-  keyUrl: string;
-}
-
-/** Verified against each vendor's official Claude-Code integration docs
- *  (2026-06): base URL = the Anthropic-compatible endpoint, model = the
- *  recommended coding model. */
-const PROVIDER_PRESETS: ProviderPreset[] = [
-  {
-    key: "kimi",
-    label: "Kimi (Kimi Code)",
-    id: "kimi",
-    // kimi.com/code/docs — kimi-for-coding is a stable alias auto-mapped to the
-    // latest Kimi model server-side.
-    base_url: "https://api.kimi.com/coding/",
-    model: "kimi-for-coding",
-    small_fast_model: null,
-    keyUrl: "https://www.kimi.com/code",
-  },
-  {
-    key: "zhipu",
-    label: "Zhipu GLM (Z.ai)",
-    id: "zhipu",
-    // docs.z.ai — Claude Code endpoint; Opus/Sonnet → glm-4.7, Haiku → glm-4.5-air.
-    base_url: "https://api.z.ai/api/anthropic",
-    model: "glm-4.7",
-    small_fast_model: "glm-4.5-air",
-    keyUrl: "https://z.ai/manage-apikey/apikey-list",
-  },
-  {
-    key: "stepfun",
-    label: "StepFun (阶跃星辰)",
-    id: "stepfun",
-    // platform.stepfun.ai — Step Plan Claude Code endpoint; step-3.7-flash is
-    // the latest agentic coding model.
-    base_url: "https://api.stepfun.ai/step_plan",
-    model: "step-3.7-flash",
-    small_fast_model: null,
-    keyUrl: "https://platform.stepfun.ai",
-  },
-  {
-    key: "deepseek",
-    label: "DeepSeek",
-    id: "deepseek",
-    base_url: "https://api.deepseek.com/anthropic",
-    model: "deepseek-chat",
-    small_fast_model: null,
-    keyUrl: "https://platform.deepseek.com/api_keys",
-  },
-];
-
-/** The sentinel dropdown value for "fill nothing, I'll type it myself". */
-const CUSTOM_PRESET = "";
-
-function draftFromPreset(p: ProviderPreset): Provider {
-  return {
-    id: p.id,
-    label: p.label,
-    base_url: p.base_url,
-    model: p.model,
-    small_fast_model: p.small_fast_model,
-    has_token: false,
-  };
+interface Props {
+  onClose: () => void;
+  /** Open straight into the edit form for this existing provider id (used by
+   *  the base-model picker's "Add key" shortcut on a configured provider). */
+  initialEditId?: string;
+  /** Open straight into the add form pre-filled from this preset key (used when
+   *  the picker's "Add key" targets a supported-but-unconfigured provider). */
+  initialPresetKey?: string;
 }
 
 /** Manage base-model providers — Anthropic-compatible endpoints (DeepSeek,
  *  Kimi…) a persona's embedded `claude` can use instead of the Claude
  *  subscription. Tokens are write-only: stored in ~/.theoi/.env, never
  *  echoed back (the form only shows whether one is set). */
-export default function ProviderManager({ onClose }: { onClose: () => void }) {
+export default function ProviderManager({
+  onClose,
+  initialEditId,
+  initialPresetKey,
+}: Props) {
   const { providers, save, remove } = useProviders();
   // undefined = list view; otherwise the draft being added (isNew) or edited.
   const [draft, setDraft] = useState<Provider | undefined>(undefined);
@@ -128,6 +65,33 @@ export default function ProviderManager({ onClose }: { onClose: () => void }) {
     setDraft(undefined);
     setError(null);
   };
+
+  // Honor the "Add key" shortcut from the base-model picker: open directly into
+  // the matching form. Runs once; for an edit target it waits for the provider
+  // list to load (the effect re-runs when `providers` arrives).
+  const appliedInitial = useRef(false);
+  useEffect(() => {
+    if (appliedInitial.current) return;
+    if (initialPresetKey) {
+      appliedInitial.current = true;
+      const preset = PROVIDER_PRESETS.find((p) => p.key === initialPresetKey);
+      setPresetKey(preset ? preset.key : CUSTOM_PRESET);
+      setDraft(preset ? draftFromPreset(preset) : { ...BLANK });
+      setIsNew(true);
+      setToken("");
+      setError(null);
+    } else if (initialEditId) {
+      const p = providers.find((x) => x.id === initialEditId);
+      if (p) {
+        appliedInitial.current = true;
+        setDraft({ ...p });
+        setIsNew(false);
+        setPresetKey(CUSTOM_PRESET);
+        setToken("");
+        setError(null);
+      }
+    }
+  }, [initialEditId, initialPresetKey, providers]);
 
   const onDelete = async (id: string) => {
     try {

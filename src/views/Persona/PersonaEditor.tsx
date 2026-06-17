@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { KeyRound, Trash2, Upload } from "lucide-react";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import ProviderManager from "./ProviderManager";
+import { PROVIDER_PRESETS } from "./providerPresets";
 import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
 import ClaudeMascot from "./ClaudeMascot";
 import CodexMascot from "./CodexMascot";
@@ -62,10 +63,49 @@ export default function PersonaEditor({
   const [user, setUser] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [providerMgrOpen, setProviderMgrOpen] = useState(false);
+  // null = closed; {} = open to the list; otherwise open straight into a form
+  // (the "Add key" shortcut on a base-model row).
+  const [providerMgr, setProviderMgr] =
+    useState<{ editId?: string; presetKey?: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { providers } = useProviders();
   const { remove } = usePersonas();
+
+  // Every supported base-model provider, configured or not: the preset catalog
+  // first (in catalog order, merged with any saved overrides), then any custom
+  // providers the user added that aren't in the catalog. Keyless rows expose an
+  // "Add key" shortcut instead of being silently unusable.
+  const baseModelRows = useMemo(() => {
+    const byId = new Map(providers.map((p) => [p.id, p]));
+    const rows = PROVIDER_PRESETS.map((preset) => {
+      const cfg = byId.get(preset.id);
+      return {
+        id: preset.id,
+        label: cfg?.label ?? preset.label,
+        model: cfg?.model ?? preset.model,
+        hasToken: cfg?.has_token ?? false,
+        configured: !!cfg,
+        presetKey: preset.key as string | undefined,
+      };
+    });
+    for (const p of providers) {
+      if (PROVIDER_PRESETS.some((preset) => preset.id === p.id)) continue;
+      rows.push({
+        id: p.id,
+        label: p.label,
+        model: p.model,
+        hasToken: p.has_token,
+        configured: true,
+        presetKey: undefined,
+      });
+    }
+    return rows;
+  }, [providers]);
+
+  const openAddKey = (row: (typeof baseModelRows)[number]) =>
+    setProviderMgr(
+      row.configured ? { editId: row.id } : { presetKey: row.presetKey },
+    );
   // Two-step delete: first click arms (auto-disarms after 3s), second confirms.
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -104,10 +144,6 @@ export default function PersonaEditor({
     setError(null);
     if (!name.trim()) {
       setError("Name is required.");
-      return;
-    }
-    if (cli === "claude" && !soul.trim()) {
-      setError("SOUL (system prompt) is required for Claude personas.");
       return;
     }
     setSubmitting(true);
@@ -262,19 +298,50 @@ export default function PersonaEditor({
           {cli === "claude" && (
             <div className="agent-editor-label">
               <span>Base model</span>
-              <select
-                className="agent-editor-input"
-                value={baseModel}
-                onChange={(e) => setBaseModel(e.target.value)}
-              >
-                <option value="">Default — Claude subscription</option>
-                {providers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                    {p.has_token ? "" : " (needs key)"}
-                  </option>
+              <div className="basemodel-picker">
+                <button
+                  type="button"
+                  className={`basemodel-row-main${baseModel === "" ? " active" : ""}`}
+                  onClick={() => setBaseModel("")}
+                >
+                  <span className="cli-picker-label">
+                    Default — Claude subscription
+                  </span>
+                  <span className="cli-picker-hint">
+                    Your Claude subscription
+                  </span>
+                </button>
+                {baseModelRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className={`basemodel-row${baseModel === row.id ? " active" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="basemodel-row-main"
+                      onClick={() => setBaseModel(row.id)}
+                      title={row.model}
+                    >
+                      <span className="cli-picker-label">{row.label}</span>
+                      <span className="cli-picker-hint">
+                        {row.model}
+                        {row.hasToken ? "" : " · needs key"}
+                      </span>
+                    </button>
+                    {!row.hasToken && (
+                      <button
+                        type="button"
+                        className="basemodel-addkey"
+                        onClick={() => openAddKey(row)}
+                        title="Add an API key for this provider"
+                      >
+                        <KeyRound size={12} strokeWidth={2} />
+                        <span>Add key</span>
+                      </button>
+                    )}
+                  </div>
                 ))}
-              </select>
+              </div>
               <p className="agent-editor-hint">
                 Routes this persona's <code>claude</code> at a third-party
                 Anthropic-compatible endpoint. Other personas — and the default —
@@ -282,7 +349,7 @@ export default function PersonaEditor({
                 <button
                   type="button"
                   className="agent-editor-link"
-                  onClick={() => setProviderMgrOpen(true)}
+                  onClick={() => setProviderMgr({})}
                 >
                   Manage providers…
                 </button>
@@ -339,7 +406,7 @@ export default function PersonaEditor({
           )}
 
           <label className="agent-editor-label">
-            <span>SOUL — system prompt</span>
+            <span>SOUL — system prompt (optional)</span>
             <textarea
               className="agent-editor-input agent-editor-soul"
               value={soul}
@@ -347,6 +414,11 @@ export default function PersonaEditor({
               rows={7}
               placeholder="You are a terse, senior Rust engineer…"
             />
+            {cli === "claude" && !soul.trim() && (
+              <p className="agent-editor-hint">
+                Leave blank to use Claude Code's default system prompt.
+              </p>
+            )}
           </label>
 
           <label className="agent-editor-label">
@@ -413,8 +485,12 @@ export default function PersonaEditor({
         </footer>
       </div>
 
-      {providerMgrOpen && (
-        <ProviderManager onClose={() => setProviderMgrOpen(false)} />
+      {providerMgr && (
+        <ProviderManager
+          onClose={() => setProviderMgr(null)}
+          initialEditId={providerMgr.editId}
+          initialPresetKey={providerMgr.presetKey}
+        />
       )}
     </div>
   );
