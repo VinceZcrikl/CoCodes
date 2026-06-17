@@ -71,6 +71,13 @@ export interface ClaudeSession {
    *  a single default pane bound to `id`, so legacy sessions never grow a
    *  persisted layout until the user actually splits. */
   layout?: LayoutNode;
+  /** Working directory the default (unsplit) pane was actually spawned in,
+   *  recorded on first start. Claude Code stores each conversation under its
+   *  cwd's project dir, so `--resume` MUST run from the same directory — pinning
+   *  it here keeps restore working even after the global cwd later changes.
+   *  null = home dir; undefined = legacy session started before this was tracked
+   *  (falls back to the current directory). Mirrors `PaneNode.cwd` for splits. */
+  cwd?: string | null;
 }
 
 /** A user-created session group (folder) in the sidebar. */
@@ -121,6 +128,8 @@ function migrate(s: Partial<ClaudeSession> & { id: string; title: string }): Cla
     // Pass the layout through untouched when present; unsplit sessions keep it
     // undefined so the view synthesizes a default single pane at render time.
     layout: s.layout,
+    // Preserve the recorded spawn cwd (undefined for sessions predating it).
+    cwd: s.cwd,
   };
 }
 
@@ -134,6 +143,10 @@ export function defaultLayout(session: ClaudeSession, cli: string): PaneNode {
     convId: session.id,
     cli,
     started: session.started,
+    // Resume from the directory the session was actually born in, not the
+    // current global cwd — otherwise `--resume` runs in the wrong project dir
+    // and Claude can't find the conversation.
+    cwd: session.cwd,
   };
 }
 
@@ -231,18 +244,19 @@ function reassignPaneNode(
   };
 }
 
-/** Flip `started` on the pane `paneId` once its PTY has spawned. */
-function markStartedNode(node: LayoutNode, paneId: string): LayoutNode {
+/** Flip `started` on the pane `paneId` once its PTY has spawned, recording the
+ *  directory it spawned in so a later `--resume` runs from the same project dir. */
+function markStartedNode(node: LayoutNode, paneId: string, cwd: string | null): LayoutNode {
   if (node.type === "pane") {
     return node.paneId === paneId && !node.started
-      ? { ...node, started: true }
+      ? { ...node, started: true, cwd }
       : node;
   }
   return {
     ...node,
     children: [
-      markStartedNode(node.children[0], paneId),
-      markStartedNode(node.children[1], paneId),
+      markStartedNode(node.children[0], paneId, cwd),
+      markStartedNode(node.children[1], paneId, cwd),
     ],
   };
 }
@@ -415,21 +429,23 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     [update],
   );
 
-  /** Mark a pane's conversation started after its PTY spawns, so a later
-   *  restore resumes it via `--session-id` rather than re-creating. */
+  /** Mark a pane's conversation started after its PTY spawns, recording the
+   *  directory it spawned in (`cwd`). A later restore then resumes via
+   *  `--resume` from that exact project dir — Claude stores each conversation
+   *  per-cwd, so resuming from a different directory loses the history. */
   const markPaneStarted = useCallback(
-    (sessionId: string, paneId: string) => {
+    (sessionId: string, paneId: string, cwd: string | null) => {
       update((s) => ({
         ...s,
         sessions: s.sessions.map((sess) => {
           if (sess.id !== sessionId) return sess;
           // The default (unsplit) pane shares the session id: fold the started
-          // flag onto the session itself, leaving layout absent.
+          // flag (and spawn cwd) onto the session itself, leaving layout absent.
           if (!sess.layout && paneId === sess.id) {
-            return sess.started ? sess : { ...sess, started: true };
+            return sess.started ? sess : { ...sess, started: true, cwd };
           }
           if (!sess.layout) return sess;
-          return { ...sess, layout: markStartedNode(sess.layout, paneId) };
+          return { ...sess, layout: markStartedNode(sess.layout, paneId, cwd) };
         }),
       }));
     },
