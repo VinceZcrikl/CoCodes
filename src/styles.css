@@ -3989,6 +3989,19 @@ select.agent-editor-input {
   background-image: linear-gradient(180deg, #fff3d6 0%, #f1d488 48%, #cda24f 100%);
   filter: drop-shadow(0 0 3px rgba(243, 217, 138, 0.4));
 }
+/* Laurel sprigs flanking the wordmark — Greek victory laurel. Placed only at
+   the outer ends with a clear gap, so they frame "CoCodes" without ever
+   touching (or competing with) the letters. */
+.cc-laurel {
+  width: 15px;
+  height: 19px;
+  align-self: center;
+  opacity: 0.9;
+  filter: drop-shadow(0 0 3px rgba(232, 200, 120, 0.4));
+}
+.cc-laurel-left { margin-right: 8px; }
+.cc-laurel-right { margin-left: 8px; transform: scaleX(-1); }
+
 /* A thin terminal caret closing the mark — ties the wordmark to "Codes" without
    crowding the letters; a slow, gentle blink keeps it alive but unobtrusive. */
 .cc-caret {
