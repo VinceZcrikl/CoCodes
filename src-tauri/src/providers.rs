@@ -51,16 +51,15 @@ pub struct Resolved {
     pub small_fast_model: Option<String>,
 }
 
-/// What [`terminal_open`](crate::terminal) needs to point a `codex` process at an
-/// OpenAI-compatible provider via `-c model_provider*` overrides. Unlike
-/// [`Resolved`], the `token` is optional — local providers (Ollama, LM Studio)
-/// need no API key.
+/// What the Codex launch path needs to route a `codex` process through the
+/// loopback translator proxy ([`crate::codex_proxy`]): the human-readable name
+/// (shown in Codex), the upstream OpenAI-compatible Chat Completions base URL,
+/// the model, and the API key. Unlike [`Resolved`], the `token` is optional —
+/// local providers (Ollama, LM Studio) need no API key.
 pub struct ResolvedCodex {
     pub name: String,
     pub base_url: String,
     pub model: String,
-    /// `"chat"` (default) or `"responses"`.
-    pub wire_api: String,
     pub token: Option<String>,
 }
 
@@ -237,8 +236,8 @@ fn resolve_in(base: &Path, id: &str) -> Result<Option<Resolved>, String> {
 
 /// Resolve a provider for the `codex` CLI. Returns `None` only when the preset id
 /// is unknown — a missing token is fine (local providers like Ollama need none),
-/// surfacing as `token: None` so the caller omits `env_key` from the override.
-/// `wire_api` defaults to `"chat"`, the broadest OpenAI-compatible protocol.
+/// surfacing as `token: None` so the proxy forwards without an `Authorization`
+/// header. Called both at spawn time and per-request from [`crate::codex_proxy`].
 pub fn resolve_codex(id: &str) -> Result<Option<ResolvedCodex>, String> {
     resolve_codex_in(&app_home(), id)
 }
@@ -255,15 +254,10 @@ fn resolve_codex_in(base: &Path, id: &str) -> Result<Option<ResolvedCodex>, Stri
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
         .or_else(|| parse_env_key(&env_path(base), &key));
-    let wire_api = match p.wire_api.as_deref().map(str::trim) {
-        Some("responses") => "responses".to_string(),
-        _ => "chat".to_string(),
-    };
     Ok(Some(ResolvedCodex {
         name: if p.label.trim().is_empty() { p.id.clone() } else { p.label },
         base_url: p.base_url,
         model: p.model,
-        wire_api,
         token,
     }))
 }
@@ -507,23 +501,21 @@ mod tests {
         let r = resolve_codex_in(&base, "ollama-oss").unwrap().expect("resolves");
         assert_eq!(r.base_url, "http://localhost:11434/v1");
         assert_eq!(r.model, "gpt-oss:20b");
-        assert_eq!(r.wire_api, "chat");
         assert_eq!(r.name, "Ollama");
         assert!(r.token.is_none());
 
-        // A cloud provider with an explicit wire_api + key carries both through.
+        // A cloud provider carries its key through for the proxy to inject.
         let cloud = Provider {
             id: "deepseek-codex".into(),
             label: "DeepSeek".into(),
             base_url: "https://api.deepseek.com/v1".into(),
             model: "deepseek-chat".into(),
             small_fast_model: None,
-            wire_api: Some("responses".into()),
+            wire_api: Some("chat".into()),
             has_token: false,
         };
         save_in(&base, cloud, Some("sk-codex".into())).unwrap();
         let r = resolve_codex_in(&base, "deepseek-codex").unwrap().expect("resolves");
-        assert_eq!(r.wire_api, "responses");
         assert_eq!(r.token.as_deref(), Some("sk-codex"));
 
         // Unknown id → None.

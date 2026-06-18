@@ -411,10 +411,10 @@ export default function PersonaEditor({
               <p className="agent-editor-hint">
                 {isCodex ? (
                   <>
-                    Routes this persona's <code>codex</code> at an
-                    OpenAI-compatible endpoint (local Ollama / LM Studio or a
-                    cloud provider) via per-session config. Other personas — and
-                    the default — keep your Codex sign-in.
+                    Routes this persona's <code>codex</code> at a Chat
+                    Completions model (DeepSeek, Qwen, local Ollama / LM Studio)
+                    through Theoi's built-in Responses↔Chat translator. Other
+                    personas — and the default — keep your Codex sign-in.
                   </>
                 ) : (
                   <>

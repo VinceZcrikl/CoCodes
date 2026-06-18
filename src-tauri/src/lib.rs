@@ -4,6 +4,7 @@
 //! The per-CLI registry (`CliSpec`) and provider-switching modules land in
 //! later phases; the PTY engine here is already generic enough to drive them.
 
+pub mod codex_proxy;
 pub mod directory;
 pub mod fs;
 pub mod git;

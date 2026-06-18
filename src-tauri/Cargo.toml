@@ -32,6 +32,11 @@ getrandom = "0.2"
 portable-pty = "0.8"
 # Native folder-picker dialog for the directory selector in the toolbar.
 rfd = "0.14"
+# Local Codex base-model proxy: a tiny blocking HTTP server (tiny_http) that
+# translates between Codex's Responses API and providers' Chat Completions API,
+# forwarding upstream with `reqwest` (rustls so there's no system OpenSSL dep).
+tiny_http = "0.12"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 
 [features]
 default = ["custom-protocol"]

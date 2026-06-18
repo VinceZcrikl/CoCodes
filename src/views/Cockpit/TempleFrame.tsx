@@ -40,50 +40,18 @@ function Palmette({ className }: { className?: string }) {
   );
 }
 
-/** A corona of tapering gold rays, drawn alone (no disc) so it can radiate from
- *  behind the actual "e" letterform — the letter stays the legible sun body. */
-function SunRays({ className }: { className?: string }) {
-  const c = 16;
-  const rays = [];
-  const N = 16;
-  for (let i = 0; i < N; i++) {
-    const a = (i * (360 / N) * Math.PI) / 180;
-    // Alternate long/short rays for a livelier, hand-struck sun.
-    const long = i % 2 === 0;
-    const r1 = 9.0; // ray root (just clear of the letter bowl)
-    const r2 = long ? 13.0 : 11.2; // ray tip — kept short so the halo hugs the e
-    rays.push(
-      <line
-        key={i}
-        x1={(c + r1 * Math.sin(a)).toFixed(1)}
-        y1={(c - r1 * Math.cos(a)).toFixed(1)}
-        x2={(c + r2 * Math.sin(a)).toFixed(1)}
-        y2={(c - r2 * Math.cos(a)).toFixed(1)}
-        stroke={long ? "#f0d690" : GOLD}
-        strokeWidth={long ? 1.4 : 1.0}
-        strokeLinecap="round"
-      />,
-    );
-  }
-  return (
-    <svg className={className} viewBox="0 0 32 32" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-      {rays}
-    </svg>
-  );
-}
-
-/** The Theoi wordmark: "Th" + an artistic "e" reimagined as a radiant sun (the
- *  real gilded "e" letterform haloed by a ray corona) + "oi", set in a display
- *  serif and gilded to match the temple frame. Centred on the header divider. */
+/** The CoCodes wordmark — a gilded display-serif logotype. The two camelCase
+ *  capitals ("C…C") are set brighter and a touch larger so the "Co · Codes"
+ *  rhythm reads as a crafted mark, with a thin code-caret tying it to the
+ *  terminal. The rest stays a warm gold. Centred on the header divider. */
 function Wordmark({ className }: { className?: string }) {
   return (
-    <div className={className} role="img" aria-label="Theoi">
-      <span className="theoi-wm-side theoi-wm-th">Th</span>
-      <span className="theoi-wm-e">
-        <SunRays className="theoi-wm-rays" />
-        <span className="theoi-wm-eletter">e</span>
-      </span>
-      <span className="theoi-wm-side theoi-wm-oi">oi</span>
+    <div className={className} role="img" aria-label="CoCodes">
+      <span className="cc-cap">C</span>
+      <span className="cc-low">o</span>
+      <span className="cc-cap">C</span>
+      <span className="cc-low">odes</span>
+      <span className="cc-caret" aria-hidden="true" />
     </div>
   );
 }
@@ -121,7 +89,7 @@ export default function TempleFrame() {
       <Palmette className="theoi-palmette theoi-palmette-tr" />
       <Palmette className="theoi-palmette theoi-palmette-bl" />
       <Palmette className="theoi-palmette theoi-palmette-br" />
-      <Wordmark className="theoi-wordmark" />
+      <Wordmark className="cocodes-wordmark" />
       <Constellation className="theoi-constellation" />
     </div>
   );

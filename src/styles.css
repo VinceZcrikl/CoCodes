@@ -3944,104 +3944,66 @@ select.agent-editor-input {
 .theoi-palmette-bl { bottom: 11px; left: 11px; transform: scaleY(-1); }
 .theoi-palmette-br { bottom: 11px; right: 11px; transform: scale(-1, -1); }
 
-/* Theoi wordmark mounted on the header divider — "Th" + a radiant sun (the
-   artistic "e") + "oi", set in a classical inscriptional serif and gilded to
-   match the temple frame. Replaces the lone star medallion. */
-.theoi-wordmark {
+/* CoCodes wordmark mounted on the header divider — a gilded display-serif
+   logotype. The two camelCase capitals are brighter + a touch larger so the
+   "Co · Codes" rhythm reads as a crafted mark, closed by a soft terminal caret.
+   Baseline-aligned so the mixed sizes sit on one line. */
+.cocodes-wordmark {
   position: absolute;
   top: 62px;
   left: 50%;
   transform: translate(-50%, -50%);
   display: flex;
-  align-items: center;
-  gap: 2.5px;
+  align-items: baseline;
+  gap: 0;
   pointer-events: none;
   /* A soft shadow under the whole mark so the gilded glyphs lift off the
      divider; the gradient text itself can't carry a text-shadow. */
   filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.5));
 }
 /* A high-contrast display serif (Didot/Bodoni — elegant, "engraved") gives the
-   mark a designed, artistic feel rather than a plain UI face. Small-caps +
-   wide tracking reads as a classical inscription. */
-.theoi-wm-side,
-.theoi-wm-eletter {
+   mark a designed, artistic feel rather than a plain UI face. */
+.cc-cap,
+.cc-low {
   font-family: "Didot", "Bodoni 72", "Hoefler Text", "Cormorant Garamond",
-    "Trajan Pro", "Optima", Georgia, serif;
-  font-size: 19px;
+    "Optima", Georgia, serif;
   font-weight: 600;
-  font-variant: small-caps;
   line-height: 1;
-  letter-spacing: 0.16em;
-  /* Gold-leaf gradient, top-lit — brighter crown fading to a deeper base. */
-  background: linear-gradient(180deg, #fbeed3 0%, #eccf86 44%, #c1923f 100%);
+  letter-spacing: 0.04em;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
 }
-/* Give the sun-medallion clear space on both flanks so its rays never touch the
-   side letters — legibility first: "Theoi" must read cleanly. */
-.theoi-wm-th { margin-right: 9px; }
-.theoi-wm-oi { margin-left: 9px; }
-
-/* The artistic "e": a round lowercase letterform (its bowl reads as the sun's
-   disc) crowned by a bright ray corona radiating from behind — unmistakably
-   both an "e" and a sun. Rendered as a luminous medallion between Th and oi. */
-.theoi-wm-e {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* Lowercase body — warm gold. Use background-image (not the `background`
+   shorthand) so it doesn't reset `background-clip: text` → gilded glyphs, not
+   gold blocks. */
+.cc-low {
+  font-size: 18px;
+  background-image: linear-gradient(180deg, #f3d9a2 0%, #dcb368 50%, #b98a3e 100%);
 }
-/* Soft radial bloom behind the letter — the sun's glow disc. */
-.theoi-wm-e::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 18px;
-  height: 18px;
-  transform: translate(-50%, -52%);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(246, 227, 160, 0.55) 0%,
-    rgba(232, 200, 120, 0.28) 42%,
-    transparent 70%
-  );
-  z-index: 0;
-  pointer-events: none;
+/* The two camelCase capitals — brighter, a hair larger, lightly glowing — mark
+   the "Co · Codes" rhythm and carry the artistic weight. */
+.cc-cap {
+  font-size: 22px;
+  background-image: linear-gradient(180deg, #fff3d6 0%, #f1d488 48%, #cda24f 100%);
+  filter: drop-shadow(0 0 3px rgba(243, 217, 138, 0.4));
 }
-.theoi-wm-eletter {
-  position: relative;
-  z-index: 2;
-  /* Round lowercase e — drop the small-caps so the bowl stays circular — set a
-     hair larger and brighter than its neighbours so it glows as the sun's disc. */
-  font-variant: normal;
-  font-size: 21px;
-  letter-spacing: 0; /* a lone letter — no trailing track */
-  background: linear-gradient(180deg, #fff6df 0%, #f3d98a 46%, #d2a24c 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 4px rgba(243, 217, 138, 0.7));
+/* A thin terminal caret closing the mark — ties the wordmark to "Codes" without
+   crowding the letters; a slow, gentle blink keeps it alive but unobtrusive. */
+.cc-caret {
+  width: 2px;
+  height: 15px;
+  margin-left: 4px;
+  align-self: center;
+  border-radius: 1px;
+  background: linear-gradient(180deg, #fff3d6, #d2a24c);
+  box-shadow: 0 0 5px rgba(243, 217, 138, 0.6);
+  animation: cocodes-caret-blink 2.4s steps(1, end) infinite;
 }
-.theoi-wm-rays {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  /* nudged up so the corona centres on the e's x-height, not the line box */
-  transform: translate(-50%, -56%);
-  width: 26px;
-  height: 26px;
-  z-index: 1;
-  pointer-events: none;
-  animation: theoi-sun-breathe 4.6s ease-in-out infinite;
-}
-/* The sun gently breathes its corona, echoing the aegis halo on the theme dot. */
-@keyframes theoi-sun-breathe {
-  0%, 100% { filter: drop-shadow(0 0 1.5px rgba(232, 200, 120, 0.5)); transform: translate(-50%, -56%) scale(0.97); }
-  50% { filter: drop-shadow(0 0 5px rgba(243, 217, 138, 0.85)); transform: translate(-50%, -56%) scale(1.03); }
+@keyframes cocodes-caret-blink {
+  0%, 60% { opacity: 0.9; }
+  61%, 100% { opacity: 0.12; }
 }
 
 /* Faint gold constellation in the lower body, gently twinkling. */

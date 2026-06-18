@@ -152,9 +152,10 @@ export default function ProviderManager({
           <p className="modal-subtitle">
             {isCodex ? (
               <>
-                OpenAI-compatible endpoints (Ollama, LM Studio, DeepSeek…) a
-                persona's <code>codex</code> can use instead of your ChatGPT /
-                OpenAI sign-in. Local runtimes need no API key.
+                Chat Completions endpoints (DeepSeek, Qwen, Ollama, LM Studio…)
+                a persona's <code>codex</code> can use instead of your ChatGPT /
+                OpenAI sign-in. Theoi bridges Codex's Responses API to them
+                locally; local runtimes need no API key.
               </>
             ) : (
               <>
@@ -304,24 +305,12 @@ export default function ProviderManager({
                 />
               </label>
               {isCodex ? (
-                <label className="agent-editor-label">
-                  <span>Wire API</span>
-                  <select
-                    className="agent-editor-input"
-                    value={draft.wire_api ?? "chat"}
-                    onChange={(e) =>
-                      setDraft({ ...draft, wire_api: e.target.value })
-                    }
-                  >
-                    <option value="chat">chat (most compatible)</option>
-                    <option value="responses">responses</option>
-                  </select>
-                  <p className="agent-editor-hint">
-                    Use <code>chat</code> for Ollama / LM Studio and most
-                    OpenAI-compatible servers; <code>responses</code> only where
-                    the provider implements the OpenAI Responses API.
-                  </p>
-                </label>
+                <p className="agent-editor-hint">
+                  Codex only speaks OpenAI's Responses API, while this endpoint
+                  speaks Chat Completions. Theoi runs a local translator proxy
+                  that bridges the two automatically — just give the Chat
+                  Completions base URL (ending in <code>/v1</code>) above.
+                </p>
               ) : (
                 <label className="agent-editor-label">
                   <span>Small / fast model (optional — defaults to Model)</span>

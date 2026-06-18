@@ -564,47 +564,49 @@ pub async fn terminal_open(
         }
     }
 
-    // Per-persona base-model substitution for Codex. Codex selects its model and
-    // provider from `~/.codex/config.toml`, but supports per-invocation TOML
-    // overrides via repeated `-c key=value` flags — so we define the chosen
-    // OpenAI-compatible provider inline and never touch the global config. The
-    // provider id is namespaced (`theoi_*`) to avoid Codex's reserved ids
-    // (`openai`/`ollama`/`lmstudio`). A token (when present) is passed by
-    // reference: `env_key` names an env var we set on this one process only;
-    // local providers (Ollama, LM Studio) carry no token and need no key.
+    // Per-persona base-model substitution for Codex. Modern Codex speaks only
+    // the Responses API, but most third-party / local models speak only Chat
+    // Completions — so we can't point Codex straight at them (it would 404).
+    // Instead we route through Theoi's loopback translator proxy
+    // (`crate::codex_proxy`): Codex is configured with `wire_api = "responses"`
+    // and a `base_url` on the local proxy, which converts to/from Chat
+    // Completions and injects the provider's API key (kept out of Codex's config
+    // entirely). All of this is per-invocation `-c` overrides — the global
+    // `~/.codex/config.toml` is never touched. The provider id is namespaced
+    // (`theoi_*`) to avoid Codex's reserved ids (`openai`/`ollama`/`lmstudio`).
     if cli_name == "codex" {
         if let Some(preset_id) = crate::persona::base_model_for(profile_id.as_deref()) {
             match crate::providers::resolve_codex(&preset_id) {
-                Ok(Some(p)) => {
-                    let prov = format!("theoi_{}", preset_id.replace('-', "_"));
-                    cmd.arg("--model");
-                    cmd.arg(&p.model);
-                    cmd.arg("-c");
-                    cmd.arg(format!("model_provider={}", toml_str(&prov)));
-                    cmd.arg("-c");
-                    cmd.arg(format!("model_providers.{prov}.name={}", toml_str(&p.name)));
-                    cmd.arg("-c");
-                    cmd.arg(format!(
-                        "model_providers.{prov}.base_url={}",
-                        toml_str(&p.base_url)
-                    ));
-                    cmd.arg("-c");
-                    cmd.arg(format!(
-                        "model_providers.{prov}.wire_api={}",
-                        toml_str(&p.wire_api)
-                    ));
-                    if let Some(token) = p.token.as_deref() {
-                        const KEY: &str = "THEOI_CODEX_API_KEY";
+                Ok(Some(p)) => match crate::codex_proxy::ensure_started() {
+                    Ok(port) => {
+                        let prov = format!("theoi_{}", preset_id.replace('-', "_"));
+                        let base_url = crate::codex_proxy::base_url_for(port, &preset_id);
+                        cmd.arg("--model");
+                        cmd.arg(&p.model);
                         cmd.arg("-c");
-                        cmd.arg(format!("model_providers.{prov}.env_key={}", toml_str(KEY)));
-                        cmd.env(KEY, token);
+                        cmd.arg(format!("model_provider={}", toml_str(&prov)));
+                        cmd.arg("-c");
+                        cmd.arg(format!("model_providers.{prov}.name={}", toml_str(&p.name)));
+                        cmd.arg("-c");
+                        cmd.arg(format!("model_providers.{prov}.base_url={}", toml_str(&base_url)));
+                        cmd.arg("-c");
+                        cmd.arg(format!("model_providers.{prov}.wire_api={}", toml_str("responses")));
+                        // The proxy authenticates upstream; Codex itself needs no
+                        // key and must not prompt for ChatGPT sign-in.
+                        cmd.arg("-c");
+                        cmd.arg(format!("model_providers.{prov}.requires_openai_auth=false"));
+                        tracing::info!(
+                            "terminal: persona base-model '{preset_id}' → codex via proxy {base_url} \
+                             → {} ({})",
+                            p.base_url,
+                            p.model
+                        );
                     }
-                    tracing::info!(
-                        "terminal: persona base-model '{preset_id}' → codex {} ({})",
-                        p.base_url,
-                        p.model
-                    );
-                }
+                    Err(e) => tracing::warn!(
+                        "terminal: codex proxy failed to start: {e}; \
+                         using default codex provider"
+                    ),
+                },
                 Ok(None) => tracing::warn!(
                     "terminal: base-model preset '{preset_id}' is unconfigured \
                      (missing); using default codex provider"
