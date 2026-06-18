@@ -40,77 +40,18 @@ function Palmette({ className }: { className?: string }) {
   );
 }
 
-/** A small laurel sprig — Apollo's victory laurel. A curved stem with paired
- *  leaves alternating up its length, drawn for the left flank; CSS mirrors it
- *  for the right so the pair embraces the wordmark like a half-wreath. */
-function LaurelSprig({ className }: { className?: string }) {
-  const P0: [number, number] = [11, 26.5]; // base (bottom)
-  const P1: [number, number] = [5.5, 13]; // bows outward
-  const P2: [number, number] = [9.5, 2]; // tip
-  const at = (t: number): [number, number] => {
-    const m = 1 - t;
-    return [
-      m * m * P0[0] + 2 * m * t * P1[0] + t * t * P2[0],
-      m * m * P0[1] + 2 * m * t * P1[1] + t * t * P2[1],
-    ];
-  };
-  const angAt = (t: number): number => {
-    const m = 1 - t;
-    const dx = 2 * m * (P1[0] - P0[0]) + 2 * t * (P2[0] - P1[0]);
-    const dy = 2 * m * (P1[1] - P0[1]) + 2 * t * (P2[1] - P1[1]);
-    return (Math.atan2(dy, dx) * 180) / Math.PI;
-  };
-  const leaves = [];
-  const N = 7;
-  for (let i = 0; i < N; i++) {
-    const t = 0.1 + (i / (N - 1)) * 0.82;
-    const [sx, sy] = at(t);
-    const splay = angAt(t) + (i % 2 === 0 ? -1 : 1) * 46; // alternate sides
-    const cx = sx + Math.cos((splay * Math.PI) / 180) * 3.6;
-    const cy = sy + Math.sin((splay * Math.PI) / 180) * 3.6;
-    leaves.push(
-      <ellipse
-        key={i}
-        cx={cx.toFixed(1)}
-        cy={cy.toFixed(1)}
-        rx="3.6"
-        ry="1.4"
-        fill={GOLD}
-        opacity="0.9"
-        transform={`rotate(${splay.toFixed(1)} ${cx.toFixed(1)} ${cy.toFixed(1)})`}
-      />,
-    );
-  }
-  return (
-    <svg className={className} viewBox="0 0 22 28" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d={`M${P0[0]} ${P0[1]} Q${P1[0]} ${P1[1]} ${P2[0]} ${P2[1]}`}
-        stroke={GOLD}
-        strokeWidth="1"
-        strokeLinecap="round"
-        opacity="0.78"
-      />
-      {leaves}
-      <circle cx={P0[0]} cy={P0[1] - 0.5} r="1.1" fill="#f6e3a0" />
-    </svg>
-  );
-}
-
-/** The CoCodes wordmark — a gilded display-serif logotype flanked by laurel
- *  sprigs (Greek victory laurel). The two camelCase capitals are brighter and a
- *  touch larger so the "Co · Codes" rhythm reads as a crafted mark, closed by a
- *  thin terminal caret. Laurels sit only at the outer ends — well clear of the
- *  letters — so the word stays fully legible. Centred on the header divider. */
+/** The CoCodes wordmark — a gilded display-serif logotype. The two camelCase
+ *  capitals are brighter and a touch larger so the "Co · Codes" rhythm reads as
+ *  a crafted mark; each carries an engraved relief + a small gleam, closed by a
+ *  thin terminal caret. Centred on the header divider. */
 function Wordmark({ className }: { className?: string }) {
   return (
     <div className={className} role="img" aria-label="CoCodes">
-      <LaurelSprig className="cc-laurel cc-laurel-left" />
       <span className="cc-cap">C</span>
       <span className="cc-low">o</span>
       <span className="cc-cap">C</span>
       <span className="cc-low">odes</span>
       <span className="cc-caret" aria-hidden="true" />
-      <LaurelSprig className="cc-laurel cc-laurel-right" />
     </div>
   );
 }

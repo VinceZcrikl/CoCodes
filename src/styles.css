@@ -4016,31 +4016,53 @@ select.agent-editor-input {
 }
 /* Lowercase body — warm gold. Use background-image (not the `background`
    shorthand) so it doesn't reset `background-clip: text` → gilded glyphs, not
-   gold blocks. */
+   gold blocks. The paired drop-shadows carve a thin bright highlight along each
+   glyph's top edge and a soft shadow below — an engraved, in-relief look. */
 .cc-low {
   font-size: 18px;
   background-image: linear-gradient(180deg, #f3d9a2 0%, #dcb368 50%, #b98a3e 100%);
+  filter:
+    drop-shadow(0 -0.5px 0 rgba(255, 249, 230, 0.6))
+    drop-shadow(0 0.5px 0.3px rgba(74, 48, 18, 0.5));
 }
 /* The two camelCase capitals — brighter, a hair larger, lightly glowing — mark
    the "Co · Codes" rhythm and carry the artistic weight. */
 .cc-cap {
+  position: relative;
   font-size: 22px;
   background-image: linear-gradient(180deg, #fff3d6 0%, #f1d488 48%, #cda24f 100%);
-  filter: drop-shadow(0 0 3px rgba(243, 217, 138, 0.4));
+  /* soft gilt glow + engraved relief (top highlight, bottom shadow) */
+  filter:
+    drop-shadow(0 0 3px rgba(243, 217, 138, 0.4))
+    drop-shadow(0 -0.5px 0 rgba(255, 252, 240, 0.8))
+    drop-shadow(0 0.5px 0.3px rgba(74, 48, 18, 0.5));
 }
-/* Laurel sprigs flanking the wordmark — Greek victory laurel. Placed only at
-   the outer ends with a clear gap, so they frame "CoCodes" without ever
-   touching (or competing with) the letters. */
-.cc-laurel {
-  width: 15px;
-  height: 19px;
-  align-self: center;
-  opacity: 0.9;
-  filter: drop-shadow(0 0 3px rgba(232, 200, 120, 0.4));
+/* A tiny four-point gleam at each capital's upper-left terminal — a glint of
+   light on the gilt that echoes the temple's constellation. It sits in the
+   blank corner outside the strokes, so it never touches the letterform. The
+   pseudo-element isn't background-clipped like the glyph, so it renders solid. */
+.cc-cap::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -4px;
+  width: 5px;
+  height: 5px;
+  background: #fff3d6;
+  clip-path: polygon(
+    50% 0%, 60% 40%, 100% 50%, 60% 60%,
+    50% 100%, 40% 60%, 0% 50%, 40% 40%
+  );
+  filter: drop-shadow(0 0 2px rgba(243, 217, 138, 0.95));
+  animation: cc-gleam 6.5s ease-in-out infinite;
+  pointer-events: none;
 }
-.cc-laurel-left { margin-right: 8px; }
-.cc-laurel-right { margin-left: 8px; transform: scaleX(-1); }
-
+/* The second capital's gleam twinkles out of phase with the first. */
+.cc-low + .cc-cap::after { animation-delay: 3.25s; }
+@keyframes cc-gleam {
+  0%, 100% { opacity: 0.4; transform: scale(0.8) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.08) rotate(45deg); }
+}
 /* A thin terminal caret closing the mark — ties the wordmark to "Codes" without
    crowding the letters; a slow, gentle blink keeps it alive but unobtrusive. */
 .cc-caret {
@@ -4051,11 +4073,11 @@ select.agent-editor-input {
   border-radius: 1px;
   background: linear-gradient(180deg, #fff3d6, #d2a24c);
   box-shadow: 0 0 5px rgba(243, 217, 138, 0.6);
-  animation: cocodes-caret-blink 2.4s steps(1, end) infinite;
+  animation: cocodes-caret-blink 4.5s ease-in-out infinite;
 }
 @keyframes cocodes-caret-blink {
-  0%, 60% { opacity: 0.9; }
-  61%, 100% { opacity: 0.12; }
+  0%, 100% { opacity: 0.95; }
+  50% { opacity: 0.18; }
 }
 
 /* Faint gold constellation in the lower body, gently twinkling. */
