@@ -1,6 +1,11 @@
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Check, Pencil, Plus, Trash2 } from "lucide-react";
-import { usePersonas } from "../../hooks/usePersonas";
+import {
+  usePersonas,
+  cliGroupKey,
+  sortPersonasByCli,
+  CLI_LABELS,
+} from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
 import PersonaEditor from "./PersonaEditor";
 import PersonaAvatar from "./PersonaAvatar";
@@ -13,6 +18,9 @@ export default function PersonaManager({ onClose }: { onClose: () => void }) {
   const setActiveProfile = useProfileStore((s) => s.setActiveProfile);
   const [editorFor, setEditorFor] = useState<string | null | undefined>(undefined);
   // undefined = closed, null = creating, string = editing that id.
+
+  // Personas grouped by CLI, each group introduced by a small header.
+  const ordered = useMemo(() => sortPersonasByCli(personas), [personas]);
 
   const onDelete = async (id: string) => {
     try {
@@ -40,11 +48,19 @@ export default function PersonaManager({ onClose }: { onClose: () => void }) {
         </header>
         <div className="modal-body">
           <div className="persona-list">
-            {personas.map((p) => {
+            {ordered.map((p, idx) => {
               const active = p.id === activeProfileId;
+              const groupKey = cliGroupKey(p.cli);
+              const newGroup =
+                idx === 0 || cliGroupKey(ordered[idx - 1].cli) !== groupKey;
               return (
+                <Fragment key={p.id}>
+                  {newGroup && (
+                    <div className="persona-group-header">
+                      {CLI_LABELS[groupKey] ?? groupKey}
+                    </div>
+                  )}
                 <div
-                  key={p.id}
                   className={`persona-card${active ? " active" : ""}`}
                   onClick={() => setActiveProfile(p.id)}
                   role="button"
@@ -98,6 +114,7 @@ export default function PersonaManager({ onClose }: { onClose: () => void }) {
                     )}
                   </div>
                 </div>
+                </Fragment>
               );
             })}
           </div>

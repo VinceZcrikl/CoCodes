@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Pencil } from "lucide-react";
-import { usePersonas } from "../../hooks/usePersonas";
+import {
+  usePersonas,
+  cliGroupKey,
+  sortPersonasByCli,
+  CLI_LABELS,
+} from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
 import PersonaAvatar, { personaColor } from "./PersonaAvatar";
 import {
@@ -54,6 +59,11 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
   const hovered = hover
     ? personas.find((p) => p.id === hover.id) ?? null
     : null;
+
+  // Personas grouped by CLI so each kind sits together (Claude group first,
+  // led by the default persona). Stable within a group: a persona keeps its
+  // existing relative order, so newly created ones land beside their CLI's peers.
+  const ordered = useMemo(() => sortPersonasByCli(personas), [personas]);
 
   // Window-level pointer events so we track movement after leaving the button.
   useEffect(() => {
@@ -108,11 +118,20 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
   return (
     <div className="window-chat-constellation" aria-label="Personas">
       <div className="window-chat-constellation-scroll">
-        {personas.map((p) => {
+        {ordered.map((p, idx) => {
           const active = p.id === activeId;
+          // A thin divider whenever the CLI group changes from the previous cell.
+          const newGroup =
+            idx > 0 && cliGroupKey(ordered[idx - 1].cli) !== cliGroupKey(p.cli);
           return (
+            <Fragment key={p.id}>
+              {newGroup && (
+                <span
+                  className="window-chat-constellation-sep"
+                  aria-hidden="true"
+                />
+              )}
             <button
-              key={p.id}
               type="button"
               className={`window-chat-constellation-cell${active ? " active brand" : ""}`}
               style={{ ["--cell-accent" as string]: personaColor(p.id) }}
@@ -169,6 +188,7 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
                 <span className="window-chat-constellation-label">{p.name}</span>
               )}
             </button>
+            </Fragment>
           );
         })}
 
@@ -222,6 +242,9 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
           >
             <span className="window-chat-constellation-soul-name">
               {hovered.name}
+              <span className="window-chat-constellation-soul-group">
+                {CLI_LABELS[cliGroupKey(hovered.cli)] ?? cliGroupKey(hovered.cli)}
+              </span>
             </span>
             <span className="window-chat-constellation-soul-body">
               {(souls[hovered.id] ?? hovered.soulPreview)?.trim() ||

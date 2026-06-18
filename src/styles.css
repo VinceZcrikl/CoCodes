@@ -2448,6 +2448,17 @@ body {
   display: none;
 }
 
+/* Divider between CLI groups in the persona constellation. */
+.window-chat-constellation-sep {
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 30px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 1px;
+}
+
 .window-chat-constellation-cell {
   display: flex;
   flex-direction: column;
@@ -2691,6 +2702,21 @@ body {
   font-size: 12px;
   font-weight: 700;
   color: var(--accent-gold);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* CLI group label badge in the persona hover tooltip title. */
+.window-chat-constellation-soul-group {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim, rgba(255, 255, 255, 0.5));
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  padding: 1px 6px;
 }
 
 .window-chat-constellation-soul-body {
@@ -3381,6 +3407,19 @@ select.agent-editor-input {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* CLI group header in the persona library list. */
+.persona-group-header {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim, rgba(255, 255, 255, 0.45));
+  padding: 6px 4px 2px;
+}
+.persona-group-header:not(:first-child) {
+  margin-top: 6px;
 }
 
 .persona-card {

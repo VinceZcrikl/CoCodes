@@ -46,6 +46,49 @@ export interface Provider {
   has_token: boolean;
 }
 
+/** CLI group order for displaying personas — Claude first (it owns the default
+ *  persona), then the rest matching the editor's CLI picker. Unknown CLIs last. */
+export const CLI_ORDER = ["claude", "codex", "grok", "kimi"];
+
+/** Human labels for each CLI group header. */
+export const CLI_LABELS: Record<string, string> = {
+  claude: "Claude",
+  codex: "Codex",
+  grok: "Grok",
+  kimi: "Kimi Code",
+};
+
+/** Normalized CLI key (legacy personas with no `cli` count as Claude). */
+export const cliGroupKey = (cli: string) => cli || "claude";
+
+/** The default persona is the fallback identity; it always leads its group. */
+const DEFAULT_PERSONA_ID = "claude";
+
+const cliRank = (cli: string) => {
+  const i = CLI_ORDER.indexOf(cliGroupKey(cli));
+  return i === -1 ? CLI_ORDER.length : i;
+};
+
+/** Stable sort that groups personas by CLI so each kind sits together; within a
+ *  group order is preserved (so a newly created persona lands beside its CLI's
+ *  peers) except the default persona, which leads the Claude group. */
+export function sortPersonasByCli<T extends { id: string; cli: string }>(
+  list: T[],
+): T[] {
+  return list
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => {
+      const ra = cliRank(a.p.cli);
+      const rb = cliRank(b.p.cli);
+      if (ra !== rb) return ra - rb;
+      const da = a.p.id === DEFAULT_PERSONA_ID ? 0 : 1;
+      const db = b.p.id === DEFAULT_PERSONA_ID ? 0 : 1;
+      if (da !== db) return da - db;
+      return a.i - b.i;
+    })
+    .map(({ p }) => p);
+}
+
 /** Thin wrapper over the persona_* backend commands. Personas are app-owned
  *  dirs under ~/.theoi/personas; the active one is injected into the
  *  embedded terminal as the system prompt. */
