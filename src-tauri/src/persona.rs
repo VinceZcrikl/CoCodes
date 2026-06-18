@@ -1,10 +1,10 @@
 //! App-owned persona store.
 //!
-//! Re-homed from hermes-orb's `~/.hermes` profile dirs to Theoi's own
+//! Re-homed from hermes-orb's `~/.hermes` profile dirs to CoCodes's own
 //! data home. Each persona is a directory:
 //!
 //! ```text
-//! ~/.theoi/personas/<id>/
+//! ~/.cocodes/personas/<id>/
 //!   ├─ meta.json   { "name": "Dev Bot" }
 //!   ├─ SOUL.md     persona / system identity
 //!   ├─ MEMORY.md   long-lived facts the CLI should remember
@@ -90,31 +90,37 @@ struct Meta {
     prompt_mode: Option<String>,
 }
 
-/// The Theoi data home — `~/.theoi`.
+/// The CoCodes data home — `~/.cocodes`.
 pub fn app_home() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".theoi")
+        .join(".cocodes")
 }
 
-/// One-time rename of the legacy `~/.openterminus` data home to `~/.theoi`
-/// (the app was renamed from "Open Terminus"). Preserves personas, providers.json
-/// and the secret `.env`. No-op once `~/.theoi` already exists.
+/// One-time rename of a legacy data home to `~/.cocodes`. The app was renamed
+/// Open Terminus → Theoi → CoCodes, so an existing user may have their data
+/// under `~/.theoi` (more recent) or `~/.openterminus` (older). Preserves
+/// personas, providers.json, the sessions DB and the secret `.env`. No-op once
+/// `~/.cocodes` already exists.
 pub fn migrate_legacy_home() {
     let Some(home) = dirs::home_dir() else {
         return;
     };
-    let new_home = home.join(".theoi");
+    let new_home = home.join(".cocodes");
     if new_home.exists() {
         return;
     }
-    let legacy = home.join(".openterminus");
-    if !legacy.is_dir() {
+    // Prefer the most recent legacy home if more than one exists.
+    for name in [".theoi", ".openterminus"] {
+        let legacy = home.join(name);
+        if !legacy.is_dir() {
+            continue;
+        }
+        match std::fs::rename(&legacy, &new_home) {
+            Ok(()) => tracing::info!("migrated data home ~/{name} → ~/.cocodes"),
+            Err(e) => tracing::warn!("failed to migrate ~/{name} → ~/.cocodes: {e}"),
+        }
         return;
-    }
-    match std::fs::rename(&legacy, &new_home) {
-        Ok(()) => tracing::info!("migrated data home ~/.openterminus → ~/.theoi"),
-        Err(e) => tracing::warn!("failed to migrate ~/.openterminus → ~/.theoi: {e}"),
     }
 }
 

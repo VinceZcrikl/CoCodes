@@ -5,8 +5,8 @@
 //!   * **Anthropic-compatible** (DeepSeek, Kimi/Moonshot, …) for the `claude` CLI,
 //!   * **OpenAI-compatible** (Ollama, LM Studio, DeepSeek, …) for the `codex` CLI.
 //!
-//! The registry lives at `~/.theoi/providers.json` and is **secret-free**:
-//! tokens are stored separately in `~/.theoi/.env` under `PROVIDER_TOKEN_<ID>`,
+//! The registry lives at `~/.cocodes/providers.json` and is **secret-free**:
+//! tokens are stored separately in `~/.cocodes/.env` under `PROVIDER_TOKEN_<ID>`,
 //! and the registry only carries a `has_token` flag. `wire_api` is set on
 //! OpenAI/Codex providers (`"chat"` | `"responses"`) and absent on Anthropic ones.
 //!
@@ -262,7 +262,7 @@ fn resolve_codex_in(base: &Path, id: &str) -> Result<Option<ResolvedCodex>, Stri
     }))
 }
 
-// ---- Minimal `.env` reader/writer (theoi has no shared one yet). ----
+// ---- Minimal `.env` reader/writer (cocodes has no shared one yet). ----
 
 /// Read `KEY=value` from a `.env`-style file. Returns the trimmed value, or
 /// `None` if the file or key is absent / empty. First match wins.

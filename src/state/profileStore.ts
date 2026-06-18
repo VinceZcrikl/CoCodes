@@ -3,7 +3,7 @@ import { create } from "zustand";
 /** The active persona id drives which SOUL/MEMORY/USER the embedded terminal
  *  injects (`profileId` → `--append-system-prompt-file`). Persisted so the
  *  cockpit reopens with the same persona. */
-const STORAGE_KEY = "theoi:active-profile";
+const STORAGE_KEY = "cocodes:active-profile";
 const DEFAULT_PROFILE = "claude";
 
 function loadInitial(): string {

@@ -260,7 +260,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
             >
               {effPalette === "world-cup-2026" ? (
                 <TriondaBall className="pane-header-ball" />
-              ) : effPalette === "theoi" ? (
+              ) : effPalette === "cocodes" ? (
                 <LaurelWreath className="pane-header-laurel" />
               ) : (
                 <Palette size={13} strokeWidth={1.75} />

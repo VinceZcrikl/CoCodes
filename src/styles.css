@@ -3881,9 +3881,9 @@ select.agent-editor-input {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   "Theoi · Olympus" — the namesake Greek-mythology theme.
+   "CoCodes · Olympus" — the namesake Greek-mythology theme.
    A laurel-wreathed orb fills the palette buttons (rendered only when active);
-   everything else is scoped under [data-palette="theoi"] — meander ribbon,
+   everything else is scoped under [data-palette="cocodes"] — meander ribbon,
    Apollo sunbeam, divine wash, constellation — fully isolated + reversible.
    ════════════════════════════════════════════════════════════════════════ */
 
@@ -3893,23 +3893,23 @@ select.agent-editor-input {
 .pane-header-laurel { width: 15px; height: 15px; display: block; }
 
 /* Laurel motion: a slow ceremonial turn; a gold shimmer on hover. */
-@keyframes theoi-laurel-turn { to { transform: rotate(360deg); } }
-@keyframes theoi-laurel-shimmer {
+@keyframes cocodes-laurel-turn { to { transform: rotate(360deg); } }
+@keyframes cocodes-laurel-shimmer {
   0%, 100% { filter: none; }
   50% { filter: drop-shadow(0 0 4px rgba(243, 217, 138, 0.85)) brightness(1.22); }
 }
-[data-palette="theoi"] .cockpit-theme-laurel {
-  animation: theoi-laurel-turn 44s linear infinite;
+[data-palette="cocodes"] .cockpit-theme-laurel {
+  animation: cocodes-laurel-turn 44s linear infinite;
   transform-origin: 50% 50%;
 }
 .cockpit-theme-dot:hover .cockpit-theme-laurel,
 .pane-header-btn:hover .pane-header-laurel {
-  animation: theoi-laurel-shimmer 1.2s ease;
+  animation: cocodes-laurel-shimmer 1.2s ease;
 }
 
 /* Aegis halo — a gold corona that breathes around the palette button (the
    "光晕呼吸" lives here). A wider soft bloom pulses while a hairline ring holds. */
-@keyframes theoi-aegis-breathe {
+@keyframes cocodes-aegis-breathe {
   0%, 100% {
     box-shadow:
       0 0 0 1.5px rgba(232, 200, 120, 0.42),
@@ -3921,14 +3921,14 @@ select.agent-editor-input {
       0 0 22px 4px rgba(232, 200, 120, 0.6);
   }
 }
-[data-palette="theoi"] .cockpit-theme-dot {
-  animation: theoi-aegis-breathe 4.2s ease-in-out infinite;
+[data-palette="cocodes"] .cockpit-theme-dot {
+  animation: cocodes-aegis-breathe 4.2s ease-in-out infinite;
 }
 
 /* Header divider: a single refined gold hairline that fades at both ends —
    minimal and premium (replaces the dentil band). */
-[data-palette="theoi"] .cockpit-header { border-bottom-color: transparent; }
-[data-palette="theoi"] .cockpit-header::after {
+[data-palette="cocodes"] .cockpit-header { border-bottom-color: transparent; }
+[data-palette="cocodes"] .cockpit-header::after {
   content: "";
   position: absolute;
   left: 0;
@@ -3950,7 +3950,7 @@ select.agent-editor-input {
 /* ── Temple facade overlay: pediment crowning the top + fluted side columns
    with Doric capitals and bases. Lives in the transparent frame margin / panel
    edges, above the header, pointer-events:none so it never blocks the panel. */
-[data-palette="theoi"] .theoi-temple {
+[data-palette="cocodes"] .cocodes-temple {
   position: absolute;
   inset: 0;
   z-index: 40;
@@ -3959,7 +3959,7 @@ select.agent-editor-input {
 /* Refined gold-leaf hairline edging, hugging the panel border with a soft
    inner + outer glow — the premium frame. (inset 10px = the .cockpit padding
    that reveals the glass margin, so this lands exactly on the panel edge.) */
-.theoi-goldframe {
+.cocodes-goldframe {
   position: absolute;
   inset: 10px;
   border-radius: 14px;
@@ -3972,16 +3972,16 @@ select.agent-editor-input {
 
 /* Palmette flourishes nested into the four gold-frame corners. One SVG drawn
    for the top-left; the others are mirrored into place. */
-.theoi-palmette {
+.cocodes-palmette {
   position: absolute;
   width: 20px;
   height: 20px;
   filter: drop-shadow(0 0 3px rgba(232, 200, 120, 0.4));
 }
-.theoi-palmette-tl { top: 11px; left: 11px; }
-.theoi-palmette-tr { top: 11px; right: 11px; transform: scaleX(-1); }
-.theoi-palmette-bl { bottom: 11px; left: 11px; transform: scaleY(-1); }
-.theoi-palmette-br { bottom: 11px; right: 11px; transform: scale(-1, -1); }
+.cocodes-palmette-tl { top: 11px; left: 11px; }
+.cocodes-palmette-tr { top: 11px; right: 11px; transform: scaleX(-1); }
+.cocodes-palmette-bl { bottom: 11px; left: 11px; transform: scaleY(-1); }
+.cocodes-palmette-br { bottom: 11px; right: 11px; transform: scale(-1, -1); }
 
 /* CoCodes wordmark mounted on the header divider — a gilded display-serif
    logotype. The two camelCase capitals are brighter + a touch larger so the
@@ -4081,18 +4081,18 @@ select.agent-editor-input {
 }
 
 /* Faint gold constellation in the lower body, gently twinkling. */
-.theoi-constellation {
+.cocodes-constellation {
   position: absolute;
   right: 46px;
   bottom: 70px;
   width: 185px;
   height: auto;
   opacity: 0.6;
-  animation: theoi-twinkle 6s ease-in-out infinite;
+  animation: cocodes-twinkle 6s ease-in-out infinite;
 }
 
 /* Apollo's sunbeam sweeping along the frame's top edge (Helios over Olympus). */
-[data-palette="theoi"] .cockpit-frame::before {
+[data-palette="cocodes"] .cockpit-frame::before {
   left: 0;
   right: 0;
   height: 2px;
@@ -4105,9 +4105,9 @@ select.agent-editor-input {
   background-size: 34% 100%;
   background-repeat: no-repeat;
   filter: drop-shadow(0 0 6px color-mix(in srgb, var(--orb-accent) 60%, transparent));
-  animation: theoi-sunbeam-sweep 12s ease-in-out infinite;
+  animation: cocodes-sunbeam-sweep 12s ease-in-out infinite;
 }
-@keyframes theoi-sunbeam-sweep {
+@keyframes cocodes-sunbeam-sweep {
   0% { background-position: -40% 0; opacity: 0; }
   18% { opacity: 0.85; }
   82% { opacity: 0.85; }
@@ -4115,7 +4115,7 @@ select.agent-editor-input {
 }
 
 /* Divine light wash from above. */
-[data-palette="theoi"] .cockpit-frame::after {
+[data-palette="cocodes"] .cockpit-frame::after {
   background: radial-gradient(
     640px 420px at 50% 0%,
     color-mix(in srgb, var(--orb-accent) 18%, transparent) 0%,
@@ -4124,37 +4124,37 @@ select.agent-editor-input {
   opacity: 0.6;
 }
 
-/* Twinkle for the gold constellation (see .theoi-constellation). */
-@keyframes theoi-twinkle {
+/* Twinkle for the gold constellation (see .cocodes-constellation). */
+@keyframes cocodes-twinkle {
   0%, 100% { opacity: 0.42; }
   50% { opacity: 0.72; }
 }
 
 /* ── Oracle Descent (self-removing celebration overlay; global) ─────────── */
-.theoi-descent {
+.cocodes-descent {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 9999;
   overflow: hidden;
 }
-.theoi-leaf {
+.cocodes-leaf {
   position: absolute;
   top: -20px;
   width: var(--sz, 12px);
   height: var(--sz, 12px);
   will-change: transform, opacity;
-  animation: theoi-leaf-fall var(--dur, 2000ms) cubic-bezier(0.3, 0.6, 0.4, 1)
+  animation: cocodes-leaf-fall var(--dur, 2000ms) cubic-bezier(0.3, 0.6, 0.4, 1)
     var(--delay, 0ms) both;
 }
-.theoi-leaf svg { width: 100%; height: 100%; display: block; }
-@keyframes theoi-leaf-fall {
+.cocodes-leaf svg { width: 100%; height: 100%; display: block; }
+@keyframes cocodes-leaf-fall {
   0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
   8% { opacity: 1; }
   92% { opacity: 1; }
   100% { transform: translate(var(--dx, 0), 112vh) rotate(var(--rot, 480deg)); opacity: 0; }
 }
-.theoi-bloom {
+.cocodes-bloom {
   position: absolute;
   inset: 0;
   background: radial-gradient(
@@ -4163,28 +4163,28 @@ select.agent-editor-input {
     rgba(232, 200, 120, 0.12) 30%,
     transparent 62%
   );
-  animation: theoi-bloom 1900ms ease-in-out both;
+  animation: cocodes-bloom 1900ms ease-in-out both;
 }
-@keyframes theoi-bloom {
+@keyframes cocodes-bloom {
   0% { opacity: 0; }
   22% { opacity: 1; }
   100% { opacity: 0; }
 }
 
-/* Respect reduced-motion: kill every theoi animation, keep static chrome.
+/* Respect reduced-motion: kill every cocodes animation, keep static chrome.
    (OracleDescent also renders nothing under reduced-motion.) */
 @media (prefers-reduced-motion: reduce) {
-  [data-palette="theoi"] .cockpit-theme-laurel,
-  [data-palette="theoi"] .cockpit-theme-dot,
-  [data-palette="theoi"] .cockpit-frame::before,
-  .theoi-constellation,
+  [data-palette="cocodes"] .cockpit-theme-laurel,
+  [data-palette="cocodes"] .cockpit-theme-dot,
+  [data-palette="cocodes"] .cockpit-frame::before,
+  .cocodes-constellation,
   .cockpit-theme-dot:hover .cockpit-theme-laurel,
   .pane-header-btn:hover .pane-header-laurel,
-  .theoi-leaf,
-  .theoi-bloom {
+  .cocodes-leaf,
+  .cocodes-bloom {
     animation: none !important;
   }
-  [data-palette="theoi"] .cockpit-frame::before {
+  [data-palette="cocodes"] .cockpit-frame::before {
     background-position: 50% 0;
     opacity: 0.4;
   }

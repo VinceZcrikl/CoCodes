@@ -27,7 +27,7 @@ interface Props {
 /** Manage base-model providers a persona's embedded CLI can use instead of the
  *  vendor default — Anthropic-compatible endpoints for `claude`, or
  *  OpenAI-compatible ones for `codex`. Tokens are write-only: stored in
- *  ~/.theoi/.env, never echoed back (the form only shows whether one is set). */
+ *  ~/.cocodes/.env, never echoed back (the form only shows whether one is set). */
 export default function ProviderManager({
   onClose,
   kind = "claude",
@@ -154,7 +154,7 @@ export default function ProviderManager({
               <>
                 Chat Completions endpoints (DeepSeek, Qwen, Ollama, LM Studio…)
                 a persona's <code>codex</code> can use instead of your ChatGPT /
-                OpenAI sign-in. Theoi bridges Codex's Responses API to them
+                OpenAI sign-in. CoCodes bridges Codex's Responses API to them
                 locally; local runtimes need no API key.
               </>
             ) : (
@@ -307,7 +307,7 @@ export default function ProviderManager({
               {isCodex ? (
                 <p className="agent-editor-hint">
                   Codex only speaks OpenAI's Responses API, while this endpoint
-                  speaks Chat Completions. Theoi runs a local translator proxy
+                  speaks Chat Completions. CoCodes runs a local translator proxy
                   that bridges the two automatically — just give the Chat
                   Completions base URL (ending in <code>/v1</code>) above.
                 </p>
@@ -347,7 +347,7 @@ export default function ProviderManager({
                 />
               </label>
               <p className="agent-editor-hint">
-                Stored in ~/.theoi/.env, never shown again.
+                Stored in ~/.cocodes/.env, never shown again.
               </p>
               {error && <div className="modal-status error">{error}</div>}
             </div>

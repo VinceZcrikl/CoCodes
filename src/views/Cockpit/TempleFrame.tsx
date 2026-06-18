@@ -1,4 +1,4 @@
-/** Theoi · Olympus frame — a refined gold-leaf hairline edging the panel, with
+/** CoCodes · Olympus frame — a refined gold-leaf hairline edging the panel, with
  *  small palmette corner flourishes, a star medallion on the header divider, and
  *  a faint gold constellation in the lower body. Premium-minimal Greek; rendered
  *  as a pointer-events-none overlay so it never blocks the terminal. */
@@ -83,14 +83,14 @@ function Constellation({ className }: { className?: string }) {
 
 export default function TempleFrame() {
   return (
-    <div className="theoi-temple" aria-hidden="true">
-      <span className="theoi-goldframe" />
-      <Palmette className="theoi-palmette theoi-palmette-tl" />
-      <Palmette className="theoi-palmette theoi-palmette-tr" />
-      <Palmette className="theoi-palmette theoi-palmette-bl" />
-      <Palmette className="theoi-palmette theoi-palmette-br" />
+    <div className="cocodes-temple" aria-hidden="true">
+      <span className="cocodes-goldframe" />
+      <Palmette className="cocodes-palmette cocodes-palmette-tl" />
+      <Palmette className="cocodes-palmette cocodes-palmette-tr" />
+      <Palmette className="cocodes-palmette cocodes-palmette-bl" />
+      <Palmette className="cocodes-palmette cocodes-palmette-br" />
       <Wordmark className="cocodes-wordmark" />
-      <Constellation className="theoi-constellation" />
+      <Constellation className="cocodes-constellation" />
     </div>
   );
 }

@@ -40,7 +40,7 @@ const CLIS: CliDef[] = [
   { id: "kimi",   label: "Kimi Code", ready: true, defaultModel: "Kimi K2.7" },
 ];
 
-const CLI_STORAGE_KEY = "theoi:active-cli";
+const CLI_STORAGE_KEY = "cocodes:active-cli";
 
 export default function Cockpit() {
   const [activeCli, setActiveCli] = useState<string>(
@@ -54,10 +54,10 @@ export default function Cockpit() {
   const mini = useWindowStore((s) => s.mini);
 
   // The World Cup theme swaps the palette dot for the Trionda ball and unlocks
-  // the festive chrome (the rest is CSS, scoped to [data-palette]). The Theoi ·
+  // the festive chrome (the rest is CSS, scoped to [data-palette]). The CoCodes ·
   // Olympus theme does the same with a laurel-wreathed orb + Greek chrome.
   const isWorldCup = paletteName === "world-cup-2026";
-  const isTheoi = paletteName === "theoi";
+  const isCoCodes = paletteName === "cocodes";
   const [celebrate, setCelebrate] = useState(false);
 
   const profileId = useProfileStore((s) => s.activeProfileId);
@@ -157,11 +157,11 @@ export default function Cockpit() {
   useEffect(() => installPaletteSync(), []);
 
   // Celebration: fire when the user *switches into* a decorated theme (World Cup
-  // → confetti, Theoi → oracle descent) — not on every render, and not on a
+  // → confetti, CoCodes → oracle descent) — not on every render, and not on a
   // relaunch that's already in it. The overlay rendered is chosen by palette.
   const prevPalette = useRef(paletteName);
   useEffect(() => {
-    const decorated = paletteName === "world-cup-2026" || paletteName === "theoi";
+    const decorated = paletteName === "world-cup-2026" || paletteName === "cocodes";
     if (decorated && prevPalette.current !== paletteName) {
       setCelebrate(true);
     }
@@ -173,8 +173,8 @@ export default function Cockpit() {
   useEffect(() => {
     if (paletteName !== "world-cup-2026") return;
     try {
-      if (!localStorage.getItem("theoi:wc2026-celebrated")) {
-        localStorage.setItem("theoi:wc2026-celebrated", "1");
+      if (!localStorage.getItem("cocodes:wc2026-celebrated")) {
+        localStorage.setItem("cocodes:wc2026-celebrated", "1");
         setCelebrate(true);
       }
     } catch { /* localStorage unavailable; skip the kickoff */ }
@@ -185,13 +185,13 @@ export default function Cockpit() {
   return (
     <div className={`cockpit${mini ? " mini" : ""}`}>
       <div className="cockpit-frame" aria-hidden="true" data-tauri-drag-region />
-      {/* Greek-temple facade around the panel (theoi theme only, not in mini). */}
-      {isTheoi && !mini && <TempleFrame />}
+      {/* Greek-temple facade around the panel (cocodes theme only, not in mini). */}
+      {isCoCodes && !mini && <TempleFrame />}
       <div className="cockpit-panel">
         {mini ? (
           <div className="cockpit-mini-bar" data-tauri-drag-region>
             <AppLogo className="cockpit-mini-logo" />
-            <span className="cockpit-mini-title">Theoi · {activeName}</span>
+            <span className="cockpit-mini-title">CoCodes · {activeName}</span>
             <WindowControls />
           </div>
         ) : (
@@ -219,13 +219,13 @@ export default function Cockpit() {
                       // The Trionda ball and laurel-ringed orb both want a
                       // neutral disc to pop against; plain orb keeps the accent
                       // fill it tints itself from.
-                      background: isWorldCup || isTheoi ? "#15151b" : accentColor,
+                      background: isWorldCup || isCoCodes ? "#15151b" : accentColor,
                       color: accentColor,
                     }}
                   >
                     {isWorldCup ? (
                       <TriondaBall className="cockpit-theme-ball" />
-                    ) : isTheoi ? (
+                    ) : isCoCodes ? (
                       <span className="cockpit-theme-laurel-wrap">
                         {/* Cool celestial core so the gold laurel reads against
                             it (a gold orb + gold laurel would wash out). */}
@@ -304,7 +304,7 @@ export default function Cockpit() {
       {celebrate &&
         (isWorldCup ? (
           <GoalConfetti onDone={() => setCelebrate(false)} />
-        ) : isTheoi ? (
+        ) : isCoCodes ? (
           <OracleDescent onDone={() => setCelebrate(false)} />
         ) : null)}
     </div>

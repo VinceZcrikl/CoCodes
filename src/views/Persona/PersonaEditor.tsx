@@ -413,7 +413,7 @@ export default function PersonaEditor({
                   <>
                     Routes this persona's <code>codex</code> at a Chat
                     Completions model (DeepSeek, Qwen, local Ollama / LM Studio)
-                    through Theoi's built-in Responses↔Chat translator. Other
+                    through CoCodes's built-in Responses↔Chat translator. Other
                     personas — and the default — keep your Codex sign-in.
                   </>
                 ) : (
@@ -505,7 +505,7 @@ export default function PersonaEditor({
               value={memory}
               onChange={(e) => setMemory(e.target.value)}
               rows={4}
-              placeholder="The project is Theoi, a Tauri cockpit…"
+              placeholder="The project is CoCodes, a Tauri cockpit…"
             />
           </label>
 

@@ -1,8 +1,8 @@
-# Theoi
+# CoCodes
 
 > **Agent coding cockpit** — a terminal-native desktop home for your AI coding CLIs.
 
-Theoi runs the **real** AI coding CLIs (Claude Code, Codex, Grok, Kimi Code) inside live
+CoCodes runs the **real** AI coding CLIs (Claude Code, Codex, Grok, Kimi Code) inside live
 pseudo-terminals and gives them a cockpit: switchable personas, per-tab model providers,
 tmux-style split panes, and keep-alive sessions — all in one frameless, frosted-glass window.
 Nothing is re-implemented or proxied; you drive the actual CLI, with a layer of orchestration
@@ -10,17 +10,17 @@ on top.
 
 ## The name
 
-**Theoi** (Greek *θεοί*, "the gods") is a pantheon. That's the idea: you don't run a single
+**CoCodes** (Greek *θεοί*, "the gods") is a pantheon. That's the idea: you don't run a single
 assistant — you preside over a *pantheon of AI agents*. Each persona is a distinct mind you
 summon (Claude, Codex, Grok, Kimi…), each with its own SOUL, memory and voice, arrayed like a
-constellation you command from one cockpit. You're the mortal at the terminal; Theoi is where
+constellation you command from one cockpit. You're the mortal at the terminal; CoCodes is where
 the gods convene to do the work.
 
 ## Highlights
 
 - **Live embedded CLIs, not a wrapper.** Each CLI runs in a true PTY (`portable-pty`) rendered
   through a WebGL xterm.js surface. What you see is the real `claude` / `codex` / `grok` / `kimi`
-  process — Theoi just hosts and orchestrates it. Missing a CLI? An install card shows the exact
+  process — CoCodes just hosts and orchestrates it. Missing a CLI? An install card shows the exact
   command.
 
 - **A constellation of personas.** Every persona carries its own `SOUL.md` / `MEMORY.md` / `USER.md`,
@@ -40,7 +40,7 @@ the gods convene to do the work.
 
 - **Per-persona base model — like `claude model switch`, but per persona.**
   Claude Code ships a `/model` command and the `claude model switch` flow to change which underlying
-  model the CLI uses globally. Theoi takes this further: every persona stores its own **base-model
+  model the CLI uses globally. CoCodes takes this further: every persona stores its own **base-model
   provider preset**, so the model switch is per-persona rather than global.
 
   - Switch once per session with `claude model switch` → affects *all* terminals everywhere.
@@ -50,7 +50,7 @@ the gods convene to do the work.
   Point a persona at any **Anthropic-compatible endpoint** — **DeepSeek, Kimi, Zhipu GLM, StepFun**
   presets are prefilled from each vendor's docs, so you only paste a key. One persona can run
   `claude-opus-4-8` through the default subscription while another runs `deepseek-coder-v3` through
-  a self-hosted proxy, side by side in the same cockpit. Tokens live in `~/.theoi/.env` and are
+  a self-hosted proxy, side by side in the same cockpit. Tokens live in `~/.cocodes/.env` and are
   never echoed back.
 
 - **Keep-alive, resumable sessions.** PTYs survive view remounts and reloads (reconnect + replay
@@ -99,8 +99,8 @@ npm run tauri dev      # Vite (1422) + the Tauri shell
 
 Frontend-only iteration: `npm run dev`. Production bundle: `npm run tauri build`.
 
-App state lives under `~/.theoi/` (personas, `providers.json`, secret `.env`); Web-UI prefs are in
-`localStorage` under the `theoi:` prefix.
+App state lives under `~/.cocodes/` (personas, `providers.json`, secret `.env`); Web-UI prefs are in
+`localStorage` under the `cocodes:` prefix.
 
 ## License
 

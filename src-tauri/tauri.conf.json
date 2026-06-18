@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Theoi",
+  "productName": "CoCodes",
   "version": "0.1.0",
-  "identifier": "com.theoi.app",
+  "identifier": "com.cocodes.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1422",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Theoi",
+        "title": "CoCodes",
         "width": 1180,
         "height": 760,
         "minWidth": 420,

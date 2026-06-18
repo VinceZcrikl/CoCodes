@@ -1,4 +1,4 @@
-// Renders the Theoi app logo (the framed AppLogo) to a 1024×1024 PNG,
+// Renders the CoCodes app logo (the framed AppLogo) to a 1024×1024 PNG,
 // the single source `tauri icon` expands into every platform icon.
 //
 //   npm i -D @resvg/resvg-js   (already a devDependency)

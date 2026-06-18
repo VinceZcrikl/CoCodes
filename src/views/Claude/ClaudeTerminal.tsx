@@ -346,7 +346,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
                       ? err
                       : (err?.message ?? JSON.stringify(err));
                   term.write(
-                    `\r\n\x1b[31m[theoi] failed to start ${cli}: ${msg}\x1b[0m\r\n`,
+                    `\r\n\x1b[31m[cocodes] failed to start ${cli}: ${msg}\x1b[0m\r\n`,
                   );
                 }
               });

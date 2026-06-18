@@ -17,7 +17,7 @@
 
 export type PanelPaletteName =
   | "world-cup-2026"
-  | "theoi"
+  | "cocodes"
   | "deep-teal"
   | "obsidian-gold"
   | "graphite-mono"
@@ -73,13 +73,13 @@ export const PANEL_PALETTES: Record<PanelPaletteName, PanelPalette> = {
     accent: "#e8b23a",
     danger: "#e4322b",
   },
-  /** Theoi · Olympus — the app's namesake theme: an Olympus-at-dusk look (deep
+  /** CoCodes · Olympus — the app's namesake theme: an Olympus-at-dusk look (deep
    *  Aegean night + night-marble surfaces + Olympian gold accent, ivory marble
    *  text, Tyrian "divine wrath" red). Greek-mythology chrome (meander ribbon,
-   *  Apollo sunbeam, constellation, laurel) is scoped under [data-palette="theoi"]. */
-  theoi: {
-    name: "theoi",
-    label: "Theoi · Olympus",
+   *  Apollo sunbeam, constellation, laurel) is scoped under [data-palette="cocodes"]. */
+  cocodes: {
+    name: "cocodes",
+    label: "CoCodes · Olympus",
     bgCanvas: "#0a0e1a",
     panel: "#121a2e",
     panelDeep: "#0b1120",
@@ -239,7 +239,7 @@ export const PANEL_PALETTES: Record<PanelPaletteName, PanelPalette> = {
 };
 
 export const PANEL_PALETTE_ORDER: PanelPaletteName[] = [
-  "theoi",
+  "cocodes",
   "world-cup-2026",
   "deep-teal",
   "obsidian-gold",
@@ -251,7 +251,7 @@ export const PANEL_PALETTE_ORDER: PanelPaletteName[] = [
   "porcelain-ink",
 ];
 
-export const DEFAULT_PANEL_PALETTE: PanelPaletteName = "theoi";
+export const DEFAULT_PANEL_PALETTE: PanelPaletteName = "cocodes";
 
 /* ───────────────────────────── Accents ─────────────────────────────
  * The accent ("点缀") is an independent axis: it tints borders/dividers,

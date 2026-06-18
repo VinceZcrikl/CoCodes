@@ -1,4 +1,4 @@
-//! Theoi backend — a terminal-native cockpit for AI coding CLIs.
+//! CoCodes backend — a terminal-native cockpit for AI coding CLIs.
 //!
 //! Phase 0 hosts the `claude` CLI inside an embedded PTY (see [`terminal`]).
 //! The per-CLI registry (`CliSpec`) and provider-switching modules land in
@@ -35,14 +35,14 @@ fn set_macos_dock_icon() {
     }
 }
 
-/// In `tauri dev` the app runs as the unbundled binary `theoi`, so macOS shows
+/// In `tauri dev` the app runs as the unbundled binary `cocodes`, so macOS shows
 /// the lowercase executable name in the menu bar and on Dock-icon hover. Override
 /// it to the product name early, before AppKit reads it. (Bundled builds already
 /// use `productName` from tauri.conf.)
 #[cfg(target_os = "macos")]
 fn set_macos_app_name() {
     use objc2_foundation::{NSProcessInfo, NSString};
-    NSProcessInfo::processInfo().setProcessName(&NSString::from_str("Theoi"));
+    NSProcessInfo::processInfo().setProcessName(&NSString::from_str("CoCodes"));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -53,7 +53,7 @@ pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,theoi_lib=debug".into()),
+                .unwrap_or_else(|_| "info,cocodes_lib=debug".into()),
         )
         .init();
 

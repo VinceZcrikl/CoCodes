@@ -1,8 +1,8 @@
 {
-  "name": "theoi",
+  "name": "cocodes",
   "private": true,
   "version": "0.1.0",
-  "description": "Theoi — Agent coding cockpit: embed the live AI coding CLI, switch providers per-tab, inject personas.",
+  "description": "CoCodes — Agent coding cockpit: embed the live AI coding CLI, switch providers per-tab, inject personas.",
   "license": "MIT",
   "type": "module",
   "scripts": {

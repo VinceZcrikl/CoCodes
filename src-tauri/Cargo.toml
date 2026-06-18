@@ -1,16 +1,16 @@
 [package]
-name = "theoi"
+name = "cocodes"
 version = "0.1.0"
-description = "Theoi — a terminal-native desktop cockpit for AI coding CLIs"
-authors = ["Theoi contributors"]
+description = "CoCodes — a terminal-native desktop cockpit for AI coding CLIs"
+authors = ["CoCodes contributors"]
 edition = "2021"
 rust-version = "1.77"
-default-run = "theoi"
+default-run = "cocodes"
 license = "MIT"
 publish = false
 
 [lib]
-name = "theoi_lib"
+name = "cocodes_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

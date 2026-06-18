@@ -681,6 +681,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "cocodes"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "base64 0.22.1",
+ "core-foundation",
+ "dirs 5.0.1",
+ "getrandom 0.2.17",
+ "image",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "portable-pty",
+ "reqwest 0.12.28",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tiny_http",
+ "tracing",
+ "tracing-subscriber",
+ "xcap",
+]
+
+[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4796,32 +4822,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5d9cf598a6d7ce700a4e6a9199da127e6819a61e64b68609683cc9a01b5683a"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "theoi"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "base64 0.22.1",
- "core-foundation",
- "dirs 5.0.1",
- "getrandom 0.2.17",
- "image",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "portable-pty",
- "reqwest 0.12.28",
- "rfd",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tiny_http",
- "tracing",
- "tracing-subscriber",
- "xcap",
 ]
 
 [[package]]

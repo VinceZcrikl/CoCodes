@@ -1,6 +1,6 @@
 import { useId } from "react";
 
-/** The Theoi · Olympus palette button's golden laurel wreath — two symmetric
+/** The CoCodes · Olympus palette button's golden laurel wreath — two symmetric
  *  branches of leaves rising from a tie at the bottom up both sides, open at the
  *  top, ringing the glowing orb (the "divine spark"). Built on the same 32×32
  *  grid as the mascots/Trionda ball so it drops into the disc styling, with

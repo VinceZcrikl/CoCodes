@@ -24,7 +24,7 @@ export const useDirectoryStore = create<DirectoryState>()(
             : s.recent,
         })),
     }),
-    { name: "theoi-directory" },
+    { name: "cocodes-directory" },
   ),
 );
 

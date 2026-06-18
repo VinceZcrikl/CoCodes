@@ -31,7 +31,7 @@ function buildLeaves(): Leaf[] {
   return out;
 }
 
-/** "Oracle Descent" — the Theoi · Olympus celebration. Golden laurel/olive
+/** "Oracle Descent" — the CoCodes · Olympus celebration. Golden laurel/olive
  *  leaves drift down from the top while a soft Olympian light blooms from above.
  *  Mounts briefly, then calls `onDone` to unmount. Pointer-events-none and fully
  *  suppressed under `prefers-reduced-motion`. (Mirrors GoalConfetti's shape.) */
@@ -61,12 +61,12 @@ export default function OracleDescent({ onDone }: { onDone: () => void }) {
   if (reduced) return null;
 
   return (
-    <div className="theoi-descent" aria-hidden="true">
-      <div className="theoi-bloom" />
+    <div className="cocodes-descent" aria-hidden="true">
+      <div className="cocodes-bloom" />
       {leaves.map((p) => (
         <span
           key={p.id}
-          className="theoi-leaf"
+          className="cocodes-leaf"
           style={{
             left: `${p.left}%`,
             ["--dx" as string]: `${p.dx}vw`,

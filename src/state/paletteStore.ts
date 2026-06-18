@@ -9,11 +9,11 @@ import {
   type AccentName,
 } from "./panelPalettes";
 
-const STORAGE_KEY = "theoi:palette";
+const STORAGE_KEY = "cocodes:palette";
 const PALETTE_EVENT = "palette:changed";
-/** One-shot flag: the namesake Theoi · Olympus theme is force-activated once so
+/** One-shot flag: the namesake CoCodes · Olympus theme is force-activated once so
  *  existing installs adopt the new default (later picks then stick normally). */
-const DEFAULT_THEME_KEY = "theoi:default-olympus";
+const DEFAULT_THEME_KEY = "cocodes:default-olympus";
 
 interface Persisted {
   name: PanelPaletteName;
@@ -47,13 +47,13 @@ function loadInitial(): Persisted {
   const persisted = readPersisted();
   if (typeof localStorage === "undefined") return persisted;
   // One-time default activation: switch existing users onto the namesake
-  // Theoi · Olympus theme once, on the first launch after this update. Their
+  // CoCodes · Olympus theme once, on the first launch after this update. Their
   // accent is preserved and the new choice is persisted, so every later palette
   // they pick sticks normally — this never runs again.
   try {
     if (!localStorage.getItem(DEFAULT_THEME_KEY)) {
       localStorage.setItem(DEFAULT_THEME_KEY, "1");
-      const initial: Persisted = { name: "theoi", accent: persisted.accent };
+      const initial: Persisted = { name: "cocodes", accent: persisted.accent };
       persist(initial.name, initial.accent);
       return initial;
     }

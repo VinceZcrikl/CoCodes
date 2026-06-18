@@ -337,7 +337,7 @@ fn write_persona_file(id: &str, ctx: &PersonaContext) -> Option<PathBuf> {
         return None;
     }
 
-    let path = std::env::temp_dir().join(format!("theoi-claude-persona-{id}.md"));
+    let path = std::env::temp_dir().join(format!("cocodes-claude-persona-{id}.md"));
     match std::fs::write(&path, sections.join("\n\n")) {
         Ok(()) => Some(path),
         Err(e) => {
@@ -567,19 +567,19 @@ pub async fn terminal_open(
     // Per-persona base-model substitution for Codex. Modern Codex speaks only
     // the Responses API, but most third-party / local models speak only Chat
     // Completions — so we can't point Codex straight at them (it would 404).
-    // Instead we route through Theoi's loopback translator proxy
+    // Instead we route through CoCodes's loopback translator proxy
     // (`crate::codex_proxy`): Codex is configured with `wire_api = "responses"`
     // and a `base_url` on the local proxy, which converts to/from Chat
     // Completions and injects the provider's API key (kept out of Codex's config
     // entirely). All of this is per-invocation `-c` overrides — the global
     // `~/.codex/config.toml` is never touched. The provider id is namespaced
-    // (`theoi_*`) to avoid Codex's reserved ids (`openai`/`ollama`/`lmstudio`).
+    // (`cocodes_*`) to avoid Codex's reserved ids (`openai`/`ollama`/`lmstudio`).
     if cli_name == "codex" {
         if let Some(preset_id) = crate::persona::base_model_for(profile_id.as_deref()) {
             match crate::providers::resolve_codex(&preset_id) {
                 Ok(Some(p)) => match crate::codex_proxy::ensure_started() {
                     Ok(port) => {
-                        let prov = format!("theoi_{}", preset_id.replace('-', "_"));
+                        let prov = format!("cocodes_{}", preset_id.replace('-', "_"));
                         let base_url = crate::codex_proxy::base_url_for(port, &preset_id);
                         cmd.arg("--model");
                         cmd.arg(&p.model);
@@ -823,7 +823,7 @@ mod tests {
     fn persona_file_renders_named_sections() {
         let ctx = PersonaContext {
             soul: "You speak tersely.".into(),
-            memory: "The project is Theoi.".into(),
+            memory: "The project is CoCodes.".into(),
             user_profile: "Prefers Rust.".into(),
             name: "Atlas".into(),
         };

@@ -3,7 +3,7 @@
 //! Shells out to the system `git` (no native libgit dependency) on a blocking
 //! thread, always scoped to the caller-supplied working directory. This module
 //! never mutates the repo — staging, commits, and pushes stay the embedded
-//! CLI's job, matching Theoi's "drive the real CLI" philosophy.
+//! CLI's job, matching CoCodes's "drive the real CLI" philosophy.
 
 use std::path::PathBuf;
 use std::process::Command;
