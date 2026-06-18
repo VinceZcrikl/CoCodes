@@ -347,6 +347,13 @@ fn write_persona_file(id: &str, ctx: &PersonaContext) -> Option<PathBuf> {
     }
 }
 
+/// Render `s` as a TOML basic string (double-quoted, with `\` and `"` escaped)
+/// for a Codex `-c key=value` override. Values are URLs / model / provider names,
+/// but quoting defensively keeps a stray character from breaking the TOML parse.
+fn toml_str(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 /// Open a PTY, spawn the requested CLI tool with the active profile's
 /// persona/memory (Claude only), and stream its output as `terminal://data`
 /// events. Returns the session id the frontend uses to write/resize/close.
@@ -552,6 +559,59 @@ pub async fn terminal_open(
                 Err(e) => tracing::warn!(
                     "terminal: base-model resolve '{preset_id}' failed: {e}; \
                      using subscription Claude"
+                ),
+            }
+        }
+    }
+
+    // Per-persona base-model substitution for Codex. Codex selects its model and
+    // provider from `~/.codex/config.toml`, but supports per-invocation TOML
+    // overrides via repeated `-c key=value` flags — so we define the chosen
+    // OpenAI-compatible provider inline and never touch the global config. The
+    // provider id is namespaced (`theoi_*`) to avoid Codex's reserved ids
+    // (`openai`/`ollama`/`lmstudio`). A token (when present) is passed by
+    // reference: `env_key` names an env var we set on this one process only;
+    // local providers (Ollama, LM Studio) carry no token and need no key.
+    if cli_name == "codex" {
+        if let Some(preset_id) = crate::persona::base_model_for(profile_id.as_deref()) {
+            match crate::providers::resolve_codex(&preset_id) {
+                Ok(Some(p)) => {
+                    let prov = format!("theoi_{}", preset_id.replace('-', "_"));
+                    cmd.arg("--model");
+                    cmd.arg(&p.model);
+                    cmd.arg("-c");
+                    cmd.arg(format!("model_provider={}", toml_str(&prov)));
+                    cmd.arg("-c");
+                    cmd.arg(format!("model_providers.{prov}.name={}", toml_str(&p.name)));
+                    cmd.arg("-c");
+                    cmd.arg(format!(
+                        "model_providers.{prov}.base_url={}",
+                        toml_str(&p.base_url)
+                    ));
+                    cmd.arg("-c");
+                    cmd.arg(format!(
+                        "model_providers.{prov}.wire_api={}",
+                        toml_str(&p.wire_api)
+                    ));
+                    if let Some(token) = p.token.as_deref() {
+                        const KEY: &str = "THEOI_CODEX_API_KEY";
+                        cmd.arg("-c");
+                        cmd.arg(format!("model_providers.{prov}.env_key={}", toml_str(KEY)));
+                        cmd.env(KEY, token);
+                    }
+                    tracing::info!(
+                        "terminal: persona base-model '{preset_id}' → codex {} ({})",
+                        p.base_url,
+                        p.model
+                    );
+                }
+                Ok(None) => tracing::warn!(
+                    "terminal: base-model preset '{preset_id}' is unconfigured \
+                     (missing); using default codex provider"
+                ),
+                Err(e) => tracing::warn!(
+                    "terminal: base-model resolve '{preset_id}' failed: {e}; \
+                     using default codex provider"
                 ),
             }
         }

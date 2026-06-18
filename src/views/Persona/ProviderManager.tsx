@@ -6,10 +6,16 @@ import {
   CUSTOM_PRESET,
   BLANK_PROVIDER as BLANK,
   draftFromPreset,
+  type ProviderPreset,
 } from "./providerPresets";
 
 interface Props {
   onClose: () => void;
+  /** Which CLI's providers to manage — selects the preset catalog and copy.
+   *  "claude" → Anthropic-compatible; "codex" → OpenAI-compatible. */
+  kind?: "claude" | "codex";
+  /** The preset catalog for `kind`. Defaults to the Anthropic (claude) one. */
+  presets?: ProviderPreset[];
   /** Open straight into the edit form for this existing provider id (used by
    *  the base-model picker's "Add key" shortcut on a configured provider). */
   initialEditId?: string;
@@ -18,41 +24,47 @@ interface Props {
   initialPresetKey?: string;
 }
 
-/** Manage base-model providers — Anthropic-compatible endpoints (DeepSeek,
- *  Kimi…) a persona's embedded `claude` can use instead of the Claude
- *  subscription. Tokens are write-only: stored in ~/.theoi/.env, never
- *  echoed back (the form only shows whether one is set). */
+/** Manage base-model providers a persona's embedded CLI can use instead of the
+ *  vendor default — Anthropic-compatible endpoints for `claude`, or
+ *  OpenAI-compatible ones for `codex`. Tokens are write-only: stored in
+ *  ~/.theoi/.env, never echoed back (the form only shows whether one is set). */
 export default function ProviderManager({
   onClose,
+  kind = "claude",
+  presets = PROVIDER_PRESETS,
   initialEditId,
   initialPresetKey,
 }: Props) {
+  const isCodex = kind === "codex";
   const { providers, save, remove } = useProviders();
   // undefined = list view; otherwise the draft being added (isNew) or edited.
   const [draft, setDraft] = useState<Provider | undefined>(undefined);
   const [isNew, setIsNew] = useState(false);
   // Which preset is selected while adding ("" = Custom). Drives auto-fill.
-  const [presetKey, setPresetKey] = useState<string>(PROVIDER_PRESETS[0].key);
+  const [presetKey, setPresetKey] = useState<string>(presets[0]?.key ?? CUSTOM_PRESET);
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const activePreset = PROVIDER_PRESETS.find((p) => p.key === presetKey);
+  const activePreset = presets.find((p) => p.key === presetKey);
+  // A custom (non-preset) draft for this CLI: codex providers default to the
+  // "chat" wire protocol; claude ones have no wire_api.
+  const blankDraft = (): Provider => ({ ...BLANK, wire_api: isCodex ? "chat" : null });
 
   // Adding opens pre-filled with the first preset, so the form is ready and the
   // user only pastes a key. Switching the dropdown re-fills every field.
   const startAdd = () => {
-    const first = PROVIDER_PRESETS[0];
-    setPresetKey(first.key);
-    setDraft(draftFromPreset(first));
+    const first = presets[0];
+    setPresetKey(first ? first.key : CUSTOM_PRESET);
+    setDraft(first ? draftFromPreset(first) : blankDraft());
     setIsNew(true);
     setToken("");
     setError(null);
   };
   const applyPreset = (key: string) => {
     setPresetKey(key);
-    const preset = PROVIDER_PRESETS.find((p) => p.key === key);
-    setDraft(preset ? draftFromPreset(preset) : { ...BLANK });
+    const preset = presets.find((p) => p.key === key);
+    setDraft(preset ? draftFromPreset(preset) : blankDraft());
   };
   const startEdit = (p: Provider) => {
     setDraft({ ...p });
@@ -74,9 +86,9 @@ export default function ProviderManager({
     if (appliedInitial.current) return;
     if (initialPresetKey) {
       appliedInitial.current = true;
-      const preset = PROVIDER_PRESETS.find((p) => p.key === initialPresetKey);
+      const preset = presets.find((p) => p.key === initialPresetKey);
       setPresetKey(preset ? preset.key : CUSTOM_PRESET);
-      setDraft(preset ? draftFromPreset(preset) : { ...BLANK });
+      setDraft(preset ? draftFromPreset(preset) : blankDraft());
       setIsNew(true);
       setToken("");
       setError(null);
@@ -138,10 +150,20 @@ export default function ProviderManager({
         <header className="modal-header">
           <h2>Base-model providers</h2>
           <p className="modal-subtitle">
-            Anthropic-compatible endpoints (DeepSeek, Kimi…) a persona's{" "}
-            <code>claude</code> can use instead of your Claude subscription. Some
-            Claude features — prompt caching, 1M context, extended thinking — may
-            be unavailable on third-party endpoints.
+            {isCodex ? (
+              <>
+                OpenAI-compatible endpoints (Ollama, LM Studio, DeepSeek…) a
+                persona's <code>codex</code> can use instead of your ChatGPT /
+                OpenAI sign-in. Local runtimes need no API key.
+              </>
+            ) : (
+              <>
+                Anthropic-compatible endpoints (DeepSeek, Kimi…) a persona's{" "}
+                <code>claude</code> can use instead of your Claude subscription.
+                Some Claude features — prompt caching, 1M context, extended
+                thinking — may be unavailable on third-party endpoints.
+              </>
+            )}
           </p>
         </header>
 
@@ -198,7 +220,7 @@ export default function ProviderManager({
                     value={presetKey}
                     onChange={(e) => applyPreset(e.target.value)}
                   >
-                    {PROVIDER_PRESETS.map((p) => (
+                    {presets.map((p) => (
                       <option key={p.key} value={p.key}>
                         {p.label}
                       </option>
@@ -207,11 +229,21 @@ export default function ProviderManager({
                   </select>
                   <p className="agent-editor-hint">
                     {activePreset ? (
-                      <>
-                        Endpoint &amp; model pre-filled from {activePreset.label}'s
-                        docs — just paste your API key below. Get a key at{" "}
-                        <span className="provider-key-url">{activePreset.keyUrl}</span>
-                      </>
+                      activePreset.local ? (
+                        <>
+                          Endpoint &amp; model pre-filled for {activePreset.label} —
+                          no API key needed. Install it from{" "}
+                          <span className="provider-key-url">{activePreset.keyUrl}</span>
+                        </>
+                      ) : (
+                        <>
+                          Endpoint &amp; model pre-filled from {activePreset.label}'s
+                          docs — just paste your API key below. Get a key at{" "}
+                          <span className="provider-key-url">{activePreset.keyUrl}</span>
+                        </>
+                      )
+                    ) : isCodex ? (
+                      "Enter an OpenAI-compatible endpoint and model by hand."
                     ) : (
                       "Enter an Anthropic-compatible endpoint and model by hand."
                     )}
@@ -243,14 +275,23 @@ export default function ProviderManager({
                 </p>
               )}
               <label className="agent-editor-label">
-                <span>Base URL — Anthropic-compatible endpoint</span>
+                <span>
+                  Base URL —{" "}
+                  {isCodex
+                    ? "OpenAI-compatible endpoint"
+                    : "Anthropic-compatible endpoint"}
+                </span>
                 <input
                   className="agent-editor-input"
                   value={draft.base_url}
                   onChange={(e) =>
                     setDraft({ ...draft, base_url: e.target.value })
                   }
-                  placeholder="https://api.deepseek.com/anthropic"
+                  placeholder={
+                    isCodex
+                      ? "http://localhost:11434/v1"
+                      : "https://api.deepseek.com/anthropic"
+                  }
                 />
               </label>
               <label className="agent-editor-label">
@@ -262,26 +303,49 @@ export default function ProviderManager({
                   placeholder="deepseek-chat"
                 />
               </label>
-              <label className="agent-editor-label">
-                <span>Small / fast model (optional — defaults to Model)</span>
-                <input
-                  className="agent-editor-input"
-                  value={draft.small_fast_model ?? ""}
-                  onChange={(e) =>
-                    setDraft({ ...draft, small_fast_model: e.target.value })
-                  }
-                  placeholder="deepseek-chat"
-                />
-              </label>
+              {isCodex ? (
+                <label className="agent-editor-label">
+                  <span>Wire API</span>
+                  <select
+                    className="agent-editor-input"
+                    value={draft.wire_api ?? "chat"}
+                    onChange={(e) =>
+                      setDraft({ ...draft, wire_api: e.target.value })
+                    }
+                  >
+                    <option value="chat">chat (most compatible)</option>
+                    <option value="responses">responses</option>
+                  </select>
+                  <p className="agent-editor-hint">
+                    Use <code>chat</code> for Ollama / LM Studio and most
+                    OpenAI-compatible servers; <code>responses</code> only where
+                    the provider implements the OpenAI Responses API.
+                  </p>
+                </label>
+              ) : (
+                <label className="agent-editor-label">
+                  <span>Small / fast model (optional — defaults to Model)</span>
+                  <input
+                    className="agent-editor-input"
+                    value={draft.small_fast_model ?? ""}
+                    onChange={(e) =>
+                      setDraft({ ...draft, small_fast_model: e.target.value })
+                    }
+                    placeholder="deepseek-chat"
+                  />
+                </label>
+              )}
               <label className="agent-editor-label">
                 <span>
                   API token{" "}
                   <span className="provider-token-state">
-                    {isNew
-                      ? "(sent as ANTHROPIC_AUTH_TOKEN)"
-                      : draft.has_token
-                        ? "(stored — leave blank to keep)"
-                        : "(not set)"}
+                    {isCodex && isNew
+                      ? "(optional — local providers need none)"
+                      : isNew
+                        ? "(sent as ANTHROPIC_AUTH_TOKEN)"
+                        : draft.has_token
+                          ? "(stored — leave blank to keep)"
+                          : "(not set)"}
                   </span>
                 </span>
                 <input

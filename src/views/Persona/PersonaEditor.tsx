@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { KeyRound, Trash2, Upload } from "lucide-react";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import ProviderManager from "./ProviderManager";
-import { PROVIDER_PRESETS } from "./providerPresets";
+import { PROVIDER_PRESETS, CODEX_PROVIDER_PRESETS } from "./providerPresets";
 import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
 import ClaudeMascot from "./ClaudeMascot";
 import CodexMascot from "./CodexMascot";
@@ -68,44 +68,97 @@ export default function PersonaEditor({
   const [providerMgr, setProviderMgr] =
     useState<{ editId?: string; presetKey?: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const { providers } = useProviders();
+  const { providers, save: saveProvider } = useProviders();
   const { remove } = usePersonas();
+
+  // The base-model picker applies to the claude and codex CLIs. Each draws from
+  // its own preset catalog (Anthropic vs OpenAI-compatible); custom providers are
+  // matched to a CLI by `wire_api` (present → codex, absent → claude).
+  const isCodex = cli === "codex";
+  const showBaseModel = cli === "claude" || isCodex;
+  const catalog = isCodex ? CODEX_PROVIDER_PRESETS : PROVIDER_PRESETS;
 
   // Every supported base-model provider, configured or not: the preset catalog
   // first (in catalog order, merged with any saved overrides), then any custom
   // providers the user added that aren't in the catalog. Keyless rows expose an
-  // "Add key" shortcut instead of being silently unusable.
+  // "Add key" shortcut instead of being silently unusable (local codex providers
+  // need no key and are usable as soon as they're picked).
   const baseModelRows = useMemo(() => {
     const byId = new Map(providers.map((p) => [p.id, p]));
-    const rows = PROVIDER_PRESETS.map((preset) => {
+    const rows = catalog.map((preset) => {
       const cfg = byId.get(preset.id);
       return {
         id: preset.id,
         label: cfg?.label ?? preset.label,
         model: cfg?.model ?? preset.model,
+        base_url: cfg?.base_url ?? preset.base_url,
+        wire_api: cfg?.wire_api ?? preset.wire_api ?? null,
+        local: preset.local ?? false,
         hasToken: cfg?.has_token ?? false,
         configured: !!cfg,
         presetKey: preset.key as string | undefined,
       };
     });
     for (const p of providers) {
-      if (PROVIDER_PRESETS.some((preset) => preset.id === p.id)) continue;
+      if (catalog.some((preset) => preset.id === p.id)) continue;
+      // Only show custom providers whose kind matches this CLI.
+      if (!!p.wire_api !== isCodex) continue;
       rows.push({
         id: p.id,
         label: p.label,
         model: p.model,
+        base_url: p.base_url,
+        wire_api: p.wire_api ?? null,
+        local: false,
         hasToken: p.has_token,
         configured: true,
         presetKey: undefined,
       });
     }
     return rows;
-  }, [providers]);
+  }, [providers, catalog, isCodex]);
 
-  const openAddKey = (row: (typeof baseModelRows)[number]) =>
+  type BaseModelRow = (typeof baseModelRows)[number];
+
+  // A local codex provider needs no API key; everything else is "usable" only
+  // once a token is stored.
+  const rowUsableWithoutKey = (row: BaseModelRow) => row.local;
+
+  const openAddKey = (row: BaseModelRow) =>
     setProviderMgr(
       row.configured ? { editId: row.id } : { presetKey: row.presetKey },
     );
+
+  // Selecting a row: an unconfigured keyless local provider is persisted in one
+  // click (so the backend can resolve it); an unconfigured cloud provider opens
+  // the "Add key" form; anything already usable is selected directly.
+  const selectRow = async (row: BaseModelRow) => {
+    if (!row.configured && rowUsableWithoutKey(row)) {
+      try {
+        await saveProvider(
+          {
+            id: row.id,
+            label: row.label,
+            base_url: row.base_url,
+            model: row.model,
+            small_fast_model: null,
+            wire_api: row.wire_api ?? "chat",
+            has_token: false,
+          },
+          null,
+        );
+        setBaseModel(row.id);
+      } catch (e) {
+        setError(String(e));
+      }
+      return;
+    }
+    if (!row.configured && !row.hasToken) {
+      openAddKey(row);
+      return;
+    }
+    setBaseModel(row.id);
+  };
   // Two-step delete: first click arms (auto-disarms after 3s), second confirms.
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -153,8 +206,8 @@ export default function PersonaEditor({
         name: name.trim(),
         avatar: avatar.trim(),
         cli,
-        // base_model / prompt_mode only apply to the claude CLI.
-        base_model: cli === "claude" ? baseModel || null : null,
+        // base_model applies to claude + codex; prompt_mode is claude-only.
+        base_model: showBaseModel ? baseModel || null : null,
         prompt_mode: cli === "claude" ? promptMode : null,
         soul: soul.trim(),
         memory: memory.trim(),
@@ -285,7 +338,12 @@ export default function PersonaEditor({
                   key={opt.id}
                   type="button"
                   className={`cli-picker-btn${cli === opt.id ? " active" : ""}`}
-                  onClick={() => setCli(opt.id)}
+                  onClick={() => {
+                    // A base-model preset is CLI-specific; clear it on switch so a
+                    // claude provider can't leak onto a codex persona (or vice versa).
+                    if (opt.id !== cli) setBaseModel("");
+                    setCli(opt.id);
+                  }}
                   title={opt.hint}
                 >
                   <span className="cli-picker-label">{opt.label}</span>
@@ -295,7 +353,7 @@ export default function PersonaEditor({
             </div>
           </div>
 
-          {cli === "claude" && (
+          {showBaseModel && (
             <div className="agent-editor-label">
               <span>Base model</span>
               <div className="basemodel-picker">
@@ -305,47 +363,66 @@ export default function PersonaEditor({
                   onClick={() => setBaseModel("")}
                 >
                   <span className="cli-picker-label">
-                    Default — Claude subscription
+                    {isCodex
+                      ? "Default — ChatGPT / OpenAI"
+                      : "Default — Claude subscription"}
                   </span>
                   <span className="cli-picker-hint">
-                    Your Claude subscription
+                    {isCodex
+                      ? "Your Codex sign-in (ChatGPT or OPENAI_API_KEY)"
+                      : "Your Claude subscription"}
                   </span>
                 </button>
-                {baseModelRows.map((row) => (
-                  <div
-                    key={row.id}
-                    className={`basemodel-row${baseModel === row.id ? " active" : ""}`}
-                  >
-                    <button
-                      type="button"
-                      className="basemodel-row-main"
-                      onClick={() => setBaseModel(row.id)}
-                      title={row.model}
+                {baseModelRows.map((row) => {
+                  const needsKey = !row.hasToken && !rowUsableWithoutKey(row);
+                  return (
+                    <div
+                      key={row.id}
+                      className={`basemodel-row${baseModel === row.id ? " active" : ""}`}
                     >
-                      <span className="cli-picker-label">{row.label}</span>
-                      <span className="cli-picker-hint">
-                        {row.model}
-                        {row.hasToken ? "" : " · needs key"}
-                      </span>
-                    </button>
-                    {!row.hasToken && (
                       <button
                         type="button"
-                        className="basemodel-addkey"
-                        onClick={() => openAddKey(row)}
-                        title="Add an API key for this provider"
+                        className="basemodel-row-main"
+                        onClick={() => void selectRow(row)}
+                        title={row.model}
                       >
-                        <KeyRound size={12} strokeWidth={2} />
-                        <span>Add key</span>
+                        <span className="cli-picker-label">{row.label}</span>
+                        <span className="cli-picker-hint">
+                          {row.model}
+                          {row.local ? " · local" : ""}
+                          {needsKey ? " · needs key" : ""}
+                        </span>
                       </button>
-                    )}
-                  </div>
-                ))}
+                      {needsKey && (
+                        <button
+                          type="button"
+                          className="basemodel-addkey"
+                          onClick={() => openAddKey(row)}
+                          title="Add an API key for this provider"
+                        >
+                          <KeyRound size={12} strokeWidth={2} />
+                          <span>Add key</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <p className="agent-editor-hint">
-                Routes this persona's <code>claude</code> at a third-party
-                Anthropic-compatible endpoint. Other personas — and the default —
-                stay on your Claude subscription.{" "}
+                {isCodex ? (
+                  <>
+                    Routes this persona's <code>codex</code> at an
+                    OpenAI-compatible endpoint (local Ollama / LM Studio or a
+                    cloud provider) via per-session config. Other personas — and
+                    the default — keep your Codex sign-in.
+                  </>
+                ) : (
+                  <>
+                    Routes this persona's <code>claude</code> at a third-party
+                    Anthropic-compatible endpoint. Other personas — and the
+                    default — stay on your Claude subscription.
+                  </>
+                )}{" "}
                 <button
                   type="button"
                   className="agent-editor-link"
@@ -487,6 +564,8 @@ export default function PersonaEditor({
 
       {providerMgr && (
         <ProviderManager
+          kind={isCodex ? "codex" : "claude"}
+          presets={catalog}
           onClose={() => setProviderMgr(null)}
           initialEditId={providerMgr.editId}
           initialPresetKey={providerMgr.presetKey}

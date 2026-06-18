@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Hardened Runtime entitlements for the Developer ID-signed, notarized
+	  macOS build. The app embeds a WKWebView (xterm.js front-end) and spawns
+	  the user's AI coding CLIs (claude, node, …) through a real PTY, so it
+	  needs to relax a few of the default Hardened Runtime restrictions.
+	-->
+
+	<!-- WKWebView's JavaScript engine JIT-compiles, which requires writable +
+	     executable memory. Without these two the embedded webview crashes on
+	     launch under Hardened Runtime. -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+
+	<!-- The PTY spawns external binaries (claude, node, the user's shell) that
+	     are not signed by us. Library validation would otherwise refuse to load
+	     their unsigned/third-party-signed code into our process tree. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+
+	<!-- portable-pty sets environment variables (TERM, PATH, etc.) on the
+	     spawned shell; Hardened Runtime strips DYLD_* env vars unless allowed. -->
+	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
+	<true/>
+</dict>
+</plist>

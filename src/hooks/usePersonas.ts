@@ -22,8 +22,9 @@ export interface PersonaDoc {
   user: string;
   /** Preferred CLI for this persona: "claude" | "codex" | "grok" */
   cli: string;
-  /** Base-model provider preset id, or null → default Claude subscription.
-   *  Only meaningful for the "claude" CLI. */
+  /** Base-model provider preset id, or null → the CLI's default (Claude
+   *  subscription / ChatGPT login). Meaningful for the "claude" and "codex"
+   *  CLIs; the chosen provider's kind must match the CLI. */
   base_model?: string | null;
   /** SOUL application: "replace" swaps Claude Code's system prompt entirely;
    *  anything else (default) appends. Only meaningful for the "claude" CLI. */
@@ -39,6 +40,9 @@ export interface Provider {
   base_url: string;
   model: string;
   small_fast_model: string | null;
+  /** OpenAI/Codex wire protocol ("chat" | "responses"); null on Anthropic
+   *  (claude) providers. Its presence marks a provider as a Codex one. */
+  wire_api?: string | null;
   has_token: boolean;
 }
 

@@ -122,8 +122,8 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          if [ -n "$CERT" ] && [ -n "$CERT_PASS" ] && [ -n "$APPLE_ID" ] && \
-             [ -n "$APPLE_PASS" ] && [ -n "$TEAM_ID" ]; then
+          if [ -n "$CERT" ] && [ -n "$CERT_PASS" ] && [ -n "$IDENTITY" ] && \
+             [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASS" ] && [ -n "$TEAM_ID" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
@@ -132,6 +132,7 @@ jobs:
         env:
           CERT:       ${{ secrets.APPLE_CERTIFICATE }}
           CERT_PASS:  ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IDENTITY:   ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID:   ${{ secrets.APPLE_ID }}
           APPLE_PASS: ${{ secrets.APPLE_PASSWORD }}
           TEAM_ID:    ${{ secrets.APPLE_TEAM_ID }}
@@ -142,10 +143,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Signing vars are only forwarded when the guard step confirmed all
-          # five secrets are present. Empty strings tell tauri-action to skip
+          # six secrets are present. Empty strings tell tauri-action to skip
           # signing rather than attempting an import that would fail.
+          # APPLE_SIGNING_IDENTITY is the cert's Common Name, e.g.
+          # "Developer ID Application: Your Name (TEAMID)" — Tauri needs it to
+          # pick which imported identity to codesign with.
           APPLE_CERTIFICATE:          ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_CERTIFICATE          || '' }}
           APPLE_CERTIFICATE_PASSWORD: ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY:     ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_SIGNING_IDENTITY     || '' }}
           APPLE_ID:                   ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_ID                   || '' }}
           APPLE_PASSWORD:             ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_PASSWORD             || '' }}
           APPLE_TEAM_ID:              ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_TEAM_ID              || '' }}

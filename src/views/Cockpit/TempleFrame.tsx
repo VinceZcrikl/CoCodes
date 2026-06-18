@@ -40,21 +40,51 @@ function Palmette({ className }: { className?: string }) {
   );
 }
 
-/** An eight-point gold star for the centre of the header divider. */
-function StarMedallion({ className }: { className?: string }) {
-  const c = 11;
-  const pts = [];
-  for (let i = 0; i < 16; i++) {
-    const a = (i * 22.5 * Math.PI) / 180;
-    const r = i % 2 === 0 ? 10 : 3.4;
-    pts.push(`${(c + r * Math.sin(a)).toFixed(1)},${(c - r * Math.cos(a)).toFixed(1)}`);
+/** A corona of tapering gold rays, drawn alone (no disc) so it can radiate from
+ *  behind the actual "e" letterform — the letter stays the legible sun body. */
+function SunRays({ className }: { className?: string }) {
+  const c = 16;
+  const rays = [];
+  const N = 16;
+  for (let i = 0; i < N; i++) {
+    const a = (i * (360 / N) * Math.PI) / 180;
+    // Alternate long/short rays for a livelier, hand-struck sun.
+    const long = i % 2 === 0;
+    const r1 = 9.0; // ray root (just clear of the letter bowl)
+    const r2 = long ? 13.0 : 11.2; // ray tip — kept short so the halo hugs the e
+    rays.push(
+      <line
+        key={i}
+        x1={(c + r1 * Math.sin(a)).toFixed(1)}
+        y1={(c - r1 * Math.cos(a)).toFixed(1)}
+        x2={(c + r2 * Math.sin(a)).toFixed(1)}
+        y2={(c - r2 * Math.cos(a)).toFixed(1)}
+        stroke={long ? "#f0d690" : GOLD}
+        strokeWidth={long ? 1.4 : 1.0}
+        strokeLinecap="round"
+      />,
+    );
   }
   return (
-    <svg className={className} viewBox="0 0 22 22" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-      <polygon points={pts.join(" ")} fill={GOLD} opacity="0.95" />
-      <circle cx={c} cy={c} r="1.7" fill="#15151b" />
-      <circle cx={c} cy={c} r="0.9" fill="#f6e3a0" />
+    <svg className={className} viewBox="0 0 32 32" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+      {rays}
     </svg>
+  );
+}
+
+/** The Theoi wordmark: "Th" + an artistic "e" reimagined as a radiant sun (the
+ *  real gilded "e" letterform haloed by a ray corona) + "oi", set in a display
+ *  serif and gilded to match the temple frame. Centred on the header divider. */
+function Wordmark({ className }: { className?: string }) {
+  return (
+    <div className={className} role="img" aria-label="Theoi">
+      <span className="theoi-wm-side theoi-wm-th">Th</span>
+      <span className="theoi-wm-e">
+        <SunRays className="theoi-wm-rays" />
+        <span className="theoi-wm-eletter">e</span>
+      </span>
+      <span className="theoi-wm-side theoi-wm-oi">oi</span>
+    </div>
   );
 }
 
@@ -91,7 +121,7 @@ export default function TempleFrame() {
       <Palmette className="theoi-palmette theoi-palmette-tr" />
       <Palmette className="theoi-palmette theoi-palmette-bl" />
       <Palmette className="theoi-palmette theoi-palmette-br" />
-      <StarMedallion className="theoi-header-star" />
+      <Wordmark className="theoi-wordmark" />
       <Constellation className="theoi-constellation" />
     </div>
   );

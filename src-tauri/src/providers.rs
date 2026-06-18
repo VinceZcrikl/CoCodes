@@ -1,16 +1,20 @@
 //! Per-persona base-model provider presets.
 //!
-//! A "provider" is an Anthropic-compatible endpoint (DeepSeek, Kimi/Moonshot, …)
-//! that a persona can point its embedded `claude` CLI at, instead of the default
-//! Claude subscription. The registry lives at `~/.theoi/providers.json`
-//! and is **secret-free**: tokens are stored separately in `~/.theoi/.env`
-//! under `PROVIDER_TOKEN_<ID>`, and the registry only carries a `has_token` flag.
+//! A "provider" is a third-party model endpoint a persona can point its embedded
+//! CLI at, instead of the vendor default:
+//!   * **Anthropic-compatible** (DeepSeek, Kimi/Moonshot, …) for the `claude` CLI,
+//!   * **OpenAI-compatible** (Ollama, LM Studio, DeepSeek, …) for the `codex` CLI.
 //!
-//! [`terminal_open`](crate::terminal) calls [`resolve`] at spawn time and, when
-//! it returns `Some`, injects `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` /
-//! `ANTHROPIC_MODEL` / `ANTHROPIC_SMALL_FAST_MODEL` into that one process —
-//! per-persona, no global file touched. A missing preset or token yields `None`,
-//! so the caller falls back to subscription Claude.
+//! The registry lives at `~/.theoi/providers.json` and is **secret-free**:
+//! tokens are stored separately in `~/.theoi/.env` under `PROVIDER_TOKEN_<ID>`,
+//! and the registry only carries a `has_token` flag. `wire_api` is set on
+//! OpenAI/Codex providers (`"chat"` | `"responses"`) and absent on Anthropic ones.
+//!
+//! [`terminal_open`](crate::terminal) calls [`resolve`] (Claude) or
+//! [`resolve_codex`] (Codex) at spawn time and injects the result into that one
+//! process — per-persona, no global file touched. For Claude a missing preset or
+//! token yields `None` (falls back to subscription Claude); for Codex a missing
+//! token is allowed (local providers like Ollama need no key).
 
 use std::path::{Path, PathBuf};
 
@@ -29,6 +33,11 @@ pub struct Provider {
     pub model: String,
     #[serde(default)]
     pub small_fast_model: Option<String>,
+    /// Codex/OpenAI wire protocol: `"chat"` (default) or `"responses"`. Set on
+    /// OpenAI-compatible providers (for the `codex` CLI); `None` on Anthropic
+    /// ones (for `claude`). Its presence is how the UI tells the two kinds apart.
+    #[serde(default)]
+    pub wire_api: Option<String>,
     #[serde(default)]
     pub has_token: bool,
 }
@@ -40,6 +49,19 @@ pub struct Resolved {
     pub auth_token: String,
     pub model: String,
     pub small_fast_model: Option<String>,
+}
+
+/// What [`terminal_open`](crate::terminal) needs to point a `codex` process at an
+/// OpenAI-compatible provider via `-c model_provider*` overrides. Unlike
+/// [`Resolved`], the `token` is optional — local providers (Ollama, LM Studio)
+/// need no API key.
+pub struct ResolvedCodex {
+    pub name: String,
+    pub base_url: String,
+    pub model: String,
+    /// `"chat"` (default) or `"responses"`.
+    pub wire_api: String,
+    pub token: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -210,6 +232,39 @@ fn resolve_in(base: &Path, id: &str) -> Result<Option<Resolved>, String> {
         auth_token: token,
         model: p.model,
         small_fast_model: p.small_fast_model,
+    }))
+}
+
+/// Resolve a provider for the `codex` CLI. Returns `None` only when the preset id
+/// is unknown — a missing token is fine (local providers like Ollama need none),
+/// surfacing as `token: None` so the caller omits `env_key` from the override.
+/// `wire_api` defaults to `"chat"`, the broadest OpenAI-compatible protocol.
+pub fn resolve_codex(id: &str) -> Result<Option<ResolvedCodex>, String> {
+    resolve_codex_in(&app_home(), id)
+}
+
+fn resolve_codex_in(base: &Path, id: &str) -> Result<Option<ResolvedCodex>, String> {
+    let id = sanitize_provider_id(id)?;
+    let Some(p) = load_registry(base).providers.into_iter().find(|x| x.id == id) else {
+        return Ok(None);
+    };
+    // Process env first (a power user may export it shell-side), then `.env`.
+    let key = token_env_key(&id);
+    let token = std::env::var(&key)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .or_else(|| parse_env_key(&env_path(base), &key));
+    let wire_api = match p.wire_api.as_deref().map(str::trim) {
+        Some("responses") => "responses".to_string(),
+        _ => "chat".to_string(),
+    };
+    Ok(Some(ResolvedCodex {
+        name: if p.label.trim().is_empty() { p.id.clone() } else { p.label },
+        base_url: p.base_url,
+        model: p.model,
+        wire_api,
+        token,
     }))
 }
 
@@ -388,6 +443,7 @@ mod tests {
             base_url: "https://api.deepseek.com/anthropic".into(),
             model: "deepseek-chat".into(),
             small_fast_model: None, // should default to `model`
+            wire_api: None,
             has_token: false,
         };
         let saved = save_in(&base, p, Some("sk-test".into())).unwrap();
@@ -424,12 +480,54 @@ mod tests {
             base_url: "https://api.moonshot.ai/anthropic".into(),
             model: "kimi-k2".into(),
             small_fast_model: Some("kimi-k2".into()),
+            wire_api: None,
             has_token: false,
         };
         // Save with no token → has_token false, resolve yields None.
         let saved = save_in(&base, p, None).unwrap();
         assert!(!saved.has_token);
         assert!(resolve_in(&base, "kimi").unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn resolve_codex_allows_missing_token_and_defaults_wire_api() {
+        let base = tmp_base("codex");
+        // A keyless local provider (Ollama-style) still resolves for codex.
+        let local = Provider {
+            id: "ollama-oss".into(),
+            label: "Ollama".into(),
+            base_url: "http://localhost:11434/v1".into(),
+            model: "gpt-oss:20b".into(),
+            small_fast_model: None,
+            wire_api: None, // → defaults to "chat"
+            has_token: false,
+        };
+        save_in(&base, local, None).unwrap();
+        let r = resolve_codex_in(&base, "ollama-oss").unwrap().expect("resolves");
+        assert_eq!(r.base_url, "http://localhost:11434/v1");
+        assert_eq!(r.model, "gpt-oss:20b");
+        assert_eq!(r.wire_api, "chat");
+        assert_eq!(r.name, "Ollama");
+        assert!(r.token.is_none());
+
+        // A cloud provider with an explicit wire_api + key carries both through.
+        let cloud = Provider {
+            id: "deepseek-codex".into(),
+            label: "DeepSeek".into(),
+            base_url: "https://api.deepseek.com/v1".into(),
+            model: "deepseek-chat".into(),
+            small_fast_model: None,
+            wire_api: Some("responses".into()),
+            has_token: false,
+        };
+        save_in(&base, cloud, Some("sk-codex".into())).unwrap();
+        let r = resolve_codex_in(&base, "deepseek-codex").unwrap().expect("resolves");
+        assert_eq!(r.wire_api, "responses");
+        assert_eq!(r.token.as_deref(), Some("sk-codex"));
+
+        // Unknown id → None.
+        assert!(resolve_codex_in(&base, "nope").unwrap().is_none());
         let _ = std::fs::remove_dir_all(&base);
     }
 }
