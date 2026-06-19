@@ -308,7 +308,12 @@ export default function PersonaEditor({
                 <input
                   ref={fileRef}
                   type="file"
-                  accept="image/*"
+                  // Explicit extensions, not the `image/*` wildcard: on recent
+                  // macOS the wildcard makes WKWebView offer the system Photos
+                  // picker, which triggers a "would like to access your Photo
+                  // Library" prompt attributed to the app. Listing extensions
+                  // uses the plain file panel and still filters to images.
+                  accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.bmp"
                   style={{ display: "none" }}
                   onChange={onUpload}
                 />
