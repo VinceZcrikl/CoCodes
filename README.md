@@ -8,14 +8,6 @@ tmux-style split panes, and keep-alive sessions — all in one frameless, froste
 Nothing is re-implemented or proxied; you drive the actual CLI, with a layer of orchestration
 on top.
 
-## The name
-
-**CoCodes** (Greek *θεοί*, "the gods") is a pantheon. That's the idea: you don't run a single
-assistant — you preside over a *pantheon of AI agents*. Each persona is a distinct mind you
-summon (Claude, Codex, Grok, Kimi…), each with its own SOUL, memory and voice, arrayed like a
-constellation you command from one cockpit. You're the mortal at the terminal; CoCodes is where
-the gods convene to do the work.
-
 ## Highlights
 
 - **Live embedded CLIs, not a wrapper.** Each CLI runs in a true PTY (`portable-pty`) rendered
