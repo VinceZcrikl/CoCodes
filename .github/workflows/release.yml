@@ -156,20 +156,22 @@ jobs:
           APPLE_TEAM_ID:              ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_TEAM_ID              || '' }}
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: 'Theoi ${{ inputs.tag || github.ref_name }}'
+          releaseName: 'CoCodes ${{ inputs.tag || github.ref_name }}'
           releaseBody: |
             ## Downloads
 
             | Platform | File |
             |----------|------|
-            | macOS (Apple Silicon) | `Theoi_*_aarch64.dmg` |
-            | macOS (Intel) | `Theoi_*_x64.dmg` |
-            | Windows | `Theoi_*_x64-setup.exe` · `Theoi_*_x64_en-US.msi` |
-            | Linux (Debian/Ubuntu) | `theoi_*_amd64.deb` |
-            | Linux (Fedora/RHEL) | `theoi_*_x86_64.rpm` |
-            | Linux (AppImage) | `theoi_*_amd64.AppImage` |
+            | macOS (Apple Silicon) | `CoCodes_*_aarch64.dmg` |
+            | macOS (Intel) | `CoCodes_*_x64.dmg` |
+            | Windows | `CoCodes_*_x64-setup.exe` · `CoCodes_*_x64_en-US.msi` |
+            | Linux (Debian/Ubuntu) | `CoCodes_*_amd64.deb` |
+            | Linux (Fedora/RHEL) | `CoCodes_*_x86_64.rpm` |
+            | Linux (AppImage) | `CoCodes_*_amd64.AppImage` |
 
-            > macOS: if Gatekeeper blocks the app, right-click → Open the first time.
+            > macOS builds are unsigned unless Apple secrets are configured. If
+            > Gatekeeper blocks the app, right-click → Open the first time (or run
+            > `xattr -dr com.apple.quarantine /Applications/CoCodes.app`).
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.tauri-args }}
