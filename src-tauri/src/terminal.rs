@@ -595,6 +595,18 @@ pub async fn terminal_open(
                         // key and must not prompt for ChatGPT sign-in.
                         cmd.arg("-c");
                         cmd.arg(format!("model_providers.{prov}.requires_openai_auth=false"));
+                        // Model metadata for custom slugs: without these Codex
+                        // warns "Model metadata for <model> not found" and falls
+                        // back to conservative defaults (wrong compaction/limits).
+                        // Top-level keys (Codex ignores per-profile ones here).
+                        if let Some(ctx) = p.context_window {
+                            cmd.arg("-c");
+                            cmd.arg(format!("model_context_window={ctx}"));
+                        }
+                        if let Some(max_out) = p.max_output_tokens {
+                            cmd.arg("-c");
+                            cmd.arg(format!("model_max_output_tokens={max_out}"));
+                        }
                         tracing::info!(
                             "terminal: persona base-model '{preset_id}' → codex via proxy {base_url} \
                              → {} ({})",

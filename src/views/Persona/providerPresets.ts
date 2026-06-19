@@ -17,6 +17,10 @@ export interface ProviderPreset {
   /** A local endpoint (Ollama, LM Studio) that needs no API key — the picker
    *  configures it in one click and never shows "needs key". */
   local?: boolean;
+  /** Codex model metadata (Codex presets) — silences "Model metadata not found"
+   *  and fixes compaction/limits for the custom slug. */
+  context_window?: number | null;
+  max_output_tokens?: number | null;
 }
 
 /** Verified against each vendor's official Claude-Code integration docs
@@ -83,6 +87,8 @@ export const CODEX_PROVIDER_PRESETS: ProviderPreset[] = [
     small_fast_model: null,
     wire_api: "chat",
     local: true,
+    context_window: 131072,
+    max_output_tokens: 32768,
     keyUrl: "https://ollama.com/download",
   },
   {
@@ -94,6 +100,8 @@ export const CODEX_PROVIDER_PRESETS: ProviderPreset[] = [
     small_fast_model: null,
     wire_api: "chat",
     local: true,
+    context_window: 131072,
+    max_output_tokens: 32768,
     keyUrl: "https://lmstudio.ai",
   },
   {
@@ -106,6 +114,9 @@ export const CODEX_PROVIDER_PRESETS: ProviderPreset[] = [
     model: "deepseek-chat",
     small_fast_model: null,
     wire_api: "chat",
+    // deepseek-chat (DeepSeek V3.x): 128K context, 8K max output.
+    context_window: 131072,
+    max_output_tokens: 8192,
     keyUrl: "https://platform.deepseek.com/api_keys",
   },
 ];
@@ -122,6 +133,8 @@ export const BLANK_PROVIDER: Provider = {
   model: "",
   small_fast_model: null,
   wire_api: null,
+  context_window: null,
+  max_output_tokens: null,
   has_token: false,
 };
 
@@ -133,6 +146,8 @@ export function draftFromPreset(p: ProviderPreset): Provider {
     model: p.model,
     small_fast_model: p.small_fast_model,
     wire_api: p.wire_api ?? null,
+    context_window: p.context_window ?? null,
+    max_output_tokens: p.max_output_tokens ?? null,
     has_token: false,
   };
 }

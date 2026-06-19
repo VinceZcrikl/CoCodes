@@ -38,6 +38,14 @@ pub struct Provider {
     /// ones (for `claude`). Its presence is how the UI tells the two kinds apart.
     #[serde(default)]
     pub wire_api: Option<String>,
+    /// Codex model metadata for custom models (the `codex` CLI). Codex warns
+    /// "Model metadata for <model> not found" and falls back to conservative
+    /// defaults for unknown slugs; setting these injects `model_context_window`
+    /// / `model_max_output_tokens` so compaction and limits are correct.
+    #[serde(default)]
+    pub context_window: Option<i64>,
+    #[serde(default)]
+    pub max_output_tokens: Option<i64>,
     #[serde(default)]
     pub has_token: bool,
 }
@@ -61,6 +69,9 @@ pub struct ResolvedCodex {
     pub base_url: String,
     pub model: String,
     pub token: Option<String>,
+    /// Codex model metadata overrides (see [`Provider::context_window`]).
+    pub context_window: Option<i64>,
+    pub max_output_tokens: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -259,6 +270,8 @@ fn resolve_codex_in(base: &Path, id: &str) -> Result<Option<ResolvedCodex>, Stri
         base_url: p.base_url,
         model: p.model,
         token,
+        context_window: p.context_window,
+        max_output_tokens: p.max_output_tokens,
     }))
 }
 
@@ -438,6 +451,8 @@ mod tests {
             model: "deepseek-chat".into(),
             small_fast_model: None, // should default to `model`
             wire_api: None,
+            context_window: None,
+            max_output_tokens: None,
             has_token: false,
         };
         let saved = save_in(&base, p, Some("sk-test".into())).unwrap();
@@ -475,6 +490,8 @@ mod tests {
             model: "kimi-k2".into(),
             small_fast_model: Some("kimi-k2".into()),
             wire_api: None,
+            context_window: None,
+            max_output_tokens: None,
             has_token: false,
         };
         // Save with no token → has_token false, resolve yields None.
@@ -495,6 +512,8 @@ mod tests {
             model: "gpt-oss:20b".into(),
             small_fast_model: None,
             wire_api: None, // → defaults to "chat"
+            context_window: None,
+            max_output_tokens: None,
             has_token: false,
         };
         save_in(&base, local, None).unwrap();
@@ -512,11 +531,15 @@ mod tests {
             model: "deepseek-chat".into(),
             small_fast_model: None,
             wire_api: Some("chat".into()),
+            context_window: Some(131072),
+            max_output_tokens: Some(8192),
             has_token: false,
         };
         save_in(&base, cloud, Some("sk-codex".into())).unwrap();
         let r = resolve_codex_in(&base, "deepseek-codex").unwrap().expect("resolves");
         assert_eq!(r.token.as_deref(), Some("sk-codex"));
+        assert_eq!(r.context_window, Some(131072));
+        assert_eq!(r.max_output_tokens, Some(8192));
 
         // Unknown id → None.
         assert!(resolve_codex_in(&base, "nope").unwrap().is_none());

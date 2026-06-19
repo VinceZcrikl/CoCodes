@@ -43,6 +43,10 @@ export interface Provider {
   /** OpenAI/Codex wire protocol ("chat" | "responses"); null on Anthropic
    *  (claude) providers. Its presence marks a provider as a Codex one. */
   wire_api?: string | null;
+  /** Codex model metadata for custom slugs — silences Codex's "Model metadata
+   *  not found" warning and fixes compaction/limits. Codex (codex CLI) only. */
+  context_window?: number | null;
+  max_output_tokens?: number | null;
   has_token: boolean;
 }
 
