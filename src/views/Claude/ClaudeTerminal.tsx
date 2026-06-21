@@ -126,6 +126,12 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
     const sessionIdRef = useRef<string | null>(null);
     const paletteName = usePaletteStore((s) => s.name);
     const accentName = usePaletteStore((s) => s.accent);
+    const webglEnabled = usePaletteStore((s) => s.webglEnabled);
+    // Track the current WebGL addon so we can dispose/reload it on toggle.
+    const webglAddonRef = useRef<WebglAddon | null>(null);
+    // Expose the current webglEnabled to the mount-time effect via ref.
+    const webglEnabledRef = useRef(webglEnabled);
+    webglEnabledRef.current = webglEnabled;
     // Per-pane override wins over the global palette for this terminal.
     const effPalette = (paletteOverride?.name ?? paletteName) as PanelPaletteName;
     const effAccent = (paletteOverride?.accent ?? accentName) as AccentName;
@@ -220,12 +226,19 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       // addon and xterm transparently falls back to its DOM renderer, so a lost
       // context degrades instead of leaving a frozen/ghosted surface. A throw at
       // construction (no GL support at all) lands in the same DOM fallback.
-      try {
-        const webgl = new WebglAddon();
-        webgl.onContextLoss(() => webgl.dispose());
-        term.loadAddon(webgl);
-      } catch {
-        /* WebGL unavailable — DOM renderer stays active. */
+      // Skipped entirely when the user has disabled WebGL effects.
+      if (webglEnabledRef.current) {
+        try {
+          const webgl = new WebglAddon();
+          webgl.onContextLoss(() => {
+            webgl.dispose();
+            webglAddonRef.current = null;
+          });
+          term.loadAddon(webgl);
+          webglAddonRef.current = webgl;
+        } catch {
+          /* WebGL unavailable — DOM renderer stays active. */
+        }
       }
 
       // Report focus so the layout can mark this the active pane. xterm's
@@ -453,6 +466,27 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       // the parent's `key`.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [profileId, claudeSessionId]);
+
+    // Dynamically enable / disable the xterm WebGL addon when the user
+    // toggles the setting. Disabling disposes the addon so xterm falls
+    // back to its DOM renderer, freeing the GPU process memory immediately.
+    // Re-enabling loads a fresh addon onto the live terminal.
+    useEffect(() => {
+      if (!webglEnabled) {
+        webglAddonRef.current?.dispose();
+        webglAddonRef.current = null;
+      } else if (termRef.current && !webglAddonRef.current) {
+        try {
+          const webgl = new WebglAddon();
+          webgl.onContextLoss(() => {
+            webgl.dispose();
+            webglAddonRef.current = null;
+          });
+          termRef.current.loadAddon(webgl);
+          webglAddonRef.current = webgl;
+        } catch { /* WebGL unavailable — DOM renderer stays active. */ }
+      }
+    }, [webglEnabled]);
 
     return <div className="claude-terminal-host" ref={hostRef} />;
   },

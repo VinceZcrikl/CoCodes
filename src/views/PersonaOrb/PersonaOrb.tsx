@@ -14,6 +14,7 @@ import { Renderer, Program, Mesh, Triangle } from "ogl";
 import { ORB_VERT, ORB_FRAG } from "./orbShaders";
 import { makeSpring, stepSpring, hexToRgb, shade } from "./orbSprings";
 import { getPulse, startAgentPulse, stopAgentPulse } from "../../state/agentPulse";
+import { usePaletteStore } from "../../state/paletteStore";
 
 /** Brand colour per CLI persona (matches the cockpit tab accents). */
 export const CLI_COLORS: Record<string, string> = {
@@ -40,6 +41,7 @@ function resolve(color?: string, cli?: string): string {
 }
 
 export default function PersonaOrb({ cli = "claude", color, reactive = true, spin = 0.18 }: Props) {
+  const webglEnabled = usePaletteStore((s) => s.webglEnabled);
   const ref = useRef<HTMLCanvasElement | null>(null);
   // Live values readable inside the rAF loop without re-running setup.
   const colorRef = useRef(resolve(color, cli));
@@ -50,6 +52,7 @@ export default function PersonaOrb({ cli = "claude", color, reactive = true, spi
   spinRef.current = spin;
 
   useEffect(() => {
+    if (!webglEnabled) return; // CSS fallback is active — skip WebGL setup
     const canvas = ref.current;
     if (!canvas) return;
 
@@ -188,7 +191,17 @@ export default function PersonaOrb({ cli = "claude", color, reactive = true, spi
       if (pulsing) stopAgentPulse();
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
-  }, []);
+  }, [webglEnabled]);
 
+  const orbColor = resolve(color, cli);
+  if (!webglEnabled) {
+    return (
+      <div
+        className="persona-orb persona-orb-css"
+        aria-hidden="true"
+        style={{ ["--orb-color" as string]: orbColor }}
+      />
+    );
+  }
   return <canvas ref={ref} className="persona-orb" aria-hidden="true" />;
 }

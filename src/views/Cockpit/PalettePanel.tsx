@@ -79,6 +79,8 @@ export default function PalettePanel({
   const gSetPalette = usePaletteStore((s) => s.setPalette);
   const gAccent = usePaletteStore((s) => s.accent);
   const gSetAccent = usePaletteStore((s) => s.setAccent);
+  const webglEnabled = usePaletteStore((s) => s.webglEnabled);
+  const setWebgl = usePaletteStore((s) => s.setWebgl);
   const ref = useRef<HTMLDivElement>(null);
 
   // Controlled (per-pane) when `value` is supplied, else the global store.
@@ -166,6 +168,26 @@ export default function PalettePanel({
           );
         })}
       </div>
+
+      {!perPane && (
+        <div className="palette-webgl-section">
+          <div className="palette-webgl-labels">
+            <span className="palette-popover-title">GPU effects</span>
+            <span className="palette-popover-sub">Disable to reduce GPU memory</span>
+          </div>
+          <label
+            className="palette-toggle"
+            title={webglEnabled ? "Disable WebGL effects" : "Enable WebGL effects"}
+          >
+            <input
+              type="checkbox"
+              checked={webglEnabled}
+              onChange={(e) => setWebgl(e.target.checked)}
+            />
+            <span className="palette-toggle-track" />
+          </label>
+        </div>
+      )}
     </div>
   );
 }

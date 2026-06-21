@@ -2176,9 +2176,9 @@ body {
   top: calc(100% + 10px);
   right: 0;
   z-index: 80;
-  width: 264px;
+  width: 280px;
   max-width: calc(100vw - 24px);
-  max-height: min(70vh, 480px);
+  max-height: calc(100vh - 80px);
   overflow-y: auto;
   box-sizing: border-box;
   padding: 12px;
@@ -2308,6 +2308,76 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* ── WebGL effects toggle ──────────────────────────────────────────── */
+.palette-webgl-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.palette-webgl-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Pill-style toggle switch */
+.palette-toggle {
+  position: relative;
+  display: inline-flex;
+  width: 34px;
+  height: 19px;
+  flex: none;
+  cursor: pointer;
+}
+.palette-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.palette-toggle-track {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
+}
+.palette-toggle-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition:
+    transform 180ms ease,
+    background 180ms ease;
+}
+.palette-toggle input:checked ~ .palette-toggle-track {
+  background: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+.palette-toggle input:checked ~ .palette-toggle-track::after {
+  transform: translateX(15px);
+  background: #0d0d0d;
+}
+.palette-toggle input:focus-visible ~ .palette-toggle-track {
+  outline: 2px solid var(--accent-gold);
+  outline-offset: 2px;
 }
 
 .palette-accent {
@@ -4063,17 +4133,18 @@ select.agent-editor-input {
   0%, 100% { opacity: 0.4; transform: scale(0.8) rotate(0deg); }
   50% { opacity: 1; transform: scale(1.08) rotate(45deg); }
 }
-/* A thin terminal caret closing the mark — ties the wordmark to "Codes" without
-   crowding the letters; a slow, gentle blink keeps it alive but unobtrusive. */
+/* A terminal underline caret closing the mark — ties the wordmark to "Codes"
+   without crowding the letters; a slow, gentle blink keeps it alive but unobtrusive. */
 .cc-caret {
-  width: 2px;
-  height: 15px;
-  margin-left: 4px;
-  align-self: center;
+  width: 10px;
+  height: 2px;
+  margin-left: 3px;
+  align-self: flex-end;
+  margin-bottom: 1px;
   border-radius: 1px;
-  background: linear-gradient(180deg, #fff3d6, #d2a24c);
+  background: linear-gradient(90deg, #fff3d6, #d2a24c);
   box-shadow: 0 0 5px rgba(243, 217, 138, 0.6);
-  animation: cocodes-caret-blink 4.5s ease-in-out infinite;
+  animation: cocodes-caret-blink 2.4s ease-in-out infinite;
 }
 @keyframes cocodes-caret-blink {
   0%, 100% { opacity: 0.95; }
@@ -4188,4 +4259,24 @@ select.agent-editor-input {
     background-position: 50% 0;
     opacity: 0.4;
   }
+}
+
+/* ── PersonaOrb CSS fallback (WebGL disabled) ──────────────────────── */
+/* Breathing tinted disc that matches the orb's position and clipping. */
+.persona-orb-css {
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 40% 35%,
+    color-mix(in srgb, var(--orb-color, #d0a76f) 92%, white) 0%,
+    color-mix(in srgb, var(--orb-color, #d0a76f) 42%, black) 54%,
+    color-mix(in srgb, var(--orb-color, #d0a76f) 14%, black) 100%
+  );
+  animation: orb-css-breathe 3.4s ease-in-out infinite;
+}
+@keyframes orb-css-breathe {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .persona-orb-css { animation: none; opacity: 0.8; }
 }

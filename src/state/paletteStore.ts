@@ -11,6 +11,8 @@ import {
 
 const STORAGE_KEY = "cocodes:palette";
 const PALETTE_EVENT = "palette:changed";
+const WEBGL_STORAGE_KEY = "cocodes:webgl";
+const WEBGL_EVENT = "webgl:changed";
 /** One-shot flag: the namesake CoCodes · Olympus theme is force-activated once so
  *  existing installs adopt the new default (later picks then stick normally). */
 const DEFAULT_THEME_KEY = "cocodes:default-olympus";
@@ -71,15 +73,34 @@ function persist(name: PanelPaletteName, accent: AccentName) {
   }
 }
 
+function readWebglEnabled(): boolean {
+  try {
+    const v = localStorage.getItem(WEBGL_STORAGE_KEY);
+    return v !== "0"; // default true; "0" is the only falsy stored value
+  } catch {
+    return true;
+  }
+}
+
+function persistWebgl(enabled: boolean) {
+  try {
+    localStorage.setItem(WEBGL_STORAGE_KEY, enabled ? "1" : "0");
+  } catch { /* localStorage unavailable */ }
+}
+
 interface PaletteState {
   /** Base palette (surfaces + neutral text). */
   name: PanelPaletteName;
   /** Accent ("点缀") — "auto" follows the base palette's own accent. */
   accent: AccentName;
+  /** Whether WebGL effects (PersonaOrb canvas + xterm WebGL addon) are active.
+   *  Disable to save GPU process memory. */
+  webglEnabled: boolean;
   /** `broadcast=true` (default) emits a Tauri event so other windows re-skin in
    *  sync; set false inside the listener to avoid a re-broadcast loop. */
   setPalette: (name: PanelPaletteName, broadcast?: boolean) => void;
   setAccent: (accent: AccentName, broadcast?: boolean) => void;
+  setWebgl: (enabled: boolean, broadcast?: boolean) => void;
 }
 
 export const usePaletteStore = create<PaletteState>((set, get) => {
@@ -87,6 +108,7 @@ export const usePaletteStore = create<PaletteState>((set, get) => {
   return {
     name: init.name,
     accent: init.accent,
+    webglEnabled: readWebglEnabled(),
     setPalette: (name, broadcast = true) => {
       if (get().name === name) return;
       set({ name });
@@ -99,6 +121,12 @@ export const usePaletteStore = create<PaletteState>((set, get) => {
       persist(get().name, accent);
       if (broadcast) void emit(PALETTE_EVENT, { name: get().name, accent });
     },
+    setWebgl: (enabled, broadcast = true) => {
+      if (get().webglEnabled === enabled) return;
+      set({ webglEnabled: enabled });
+      persistWebgl(enabled);
+      if (broadcast) void emit(WEBGL_EVENT, { enabled });
+    },
   };
 });
 
@@ -109,7 +137,9 @@ export const usePaletteStore = create<PaletteState>((set, get) => {
  */
 export function installPaletteSync(): () => void {
   let unlisten: UnlistenFn | null = null;
+  let unlistenWebgl: UnlistenFn | null = null;
   let cancelled = false;
+
   void listen<Persisted>(PALETTE_EVENT, (event) => {
     if (cancelled) return;
     const { name, accent } = event.payload ?? {};
@@ -118,18 +148,22 @@ export function installPaletteSync(): () => void {
     if (name && name in PANEL_PALETTES && name !== st.name) st.setPalette(name, false);
     if (accent && accent in PANEL_ACCENTS && accent !== st.accent) st.setAccent(accent, false);
   }).then((fn) => {
-    if (cancelled) {
-      void fn();
-    } else {
-      unlisten = fn;
-    }
+    if (cancelled) void fn();
+    else unlisten = fn;
   });
+
+  void listen<{ enabled: boolean }>(WEBGL_EVENT, (event) => {
+    if (cancelled) return;
+    const { enabled } = event.payload ?? {};
+    if (typeof enabled === "boolean") usePaletteStore.getState().setWebgl(enabled, false);
+  }).then((fn) => {
+    if (cancelled) void fn();
+    else unlistenWebgl = fn;
+  });
+
   return () => {
     cancelled = true;
-    if (unlisten) {
-      const fn = unlisten;
-      unlisten = null;
-      void fn();
-    }
+    if (unlisten) { const fn = unlisten; unlisten = null; void fn(); }
+    if (unlistenWebgl) { const fn = unlistenWebgl; unlistenWebgl = null; void fn(); }
   };
 }
