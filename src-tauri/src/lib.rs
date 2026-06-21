@@ -58,12 +58,24 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
-        .setup(|_app| {
+        .plugin(tauri_plugin_window_state::Builder::new().build())
+        .setup(|app| {
             #[cfg(target_os = "macos")]
             set_macos_dock_icon();
             // Carry over data from the pre-rename home before anything reads it.
             persona::migrate_legacy_home();
             tauri::async_runtime::spawn(persona::seed_default_personas());
+            // tauri-plugin-window-state persists the visible flag for all
+            // windows. If the screenshot overlay was open when the user last
+            // closed the app, the plugin would restore it as visible on next
+            // launch. Force it hidden on every startup so it only appears when
+            // explicitly triggered by the screenshot command.
+            {
+                use tauri::Manager;
+                if let Some(overlay) = app.get_webview_window("screenshot-overlay") {
+                    let _ = overlay.hide();
+                }
+            }
             Ok(())
         })
         .manage(terminal::TerminalRegistry::default())
@@ -99,6 +111,10 @@ pub fn run() {
             // running so reopening restores the live session. On macOS, hide
             // and reopen via the dock icon (Cmd+Q still quits). Elsewhere there
             // is no dock to reopen from, so exit as before.
+            //
+            // Use app_handle().exit() instead of std::process::exit() so Tauri
+            // plugins (including tauri-plugin-window-state) can flush their
+            // state to disk before the process terminates.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     #[cfg(target_os = "macos")]
@@ -108,8 +124,9 @@ pub fn run() {
                     }
                     #[cfg(not(target_os = "macos"))]
                     {
+                        use tauri::Manager;
                         let _ = api;
-                        std::process::exit(0);
+                        window.app_handle().exit(0);
                     }
                 }
             }
