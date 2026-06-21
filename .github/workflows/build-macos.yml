@@ -24,19 +24,31 @@ on:
           - both
 
 jobs:
+  # Build the matrix from the chosen arch — the `matrix` context isn't available
+  # in a job-level `if:`, so we select legs here instead of filtering later.
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        shell: bash
+        run: |
+          arm='{"arch":"arm64","platform":"macos-latest","target":"aarch64-apple-darwin"}'
+          intel='{"arch":"intel","platform":"macos-13","target":"x86_64-apple-darwin"}'
+          case "${{ github.event.inputs.arch }}" in
+            arm64) inc="[$arm]" ;;
+            intel) inc="[$intel]" ;;
+            both)  inc="[$arm,$intel]" ;;
+            *)     inc="[$arm]" ;;
+          esac
+          echo "matrix={\"include\":$inc}" >> "$GITHUB_OUTPUT"
+
   build:
-    # Skip the matrix legs the user didn't ask for.
-    if: ${{ github.event.inputs.arch == 'both' || github.event.inputs.arch == matrix.arch }}
+    needs: setup
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - arch: arm64          # Apple Silicon (M1/M2/M3)
-            platform: macos-latest
-            target: aarch64-apple-darwin
-          - arch: intel          # Intel x86_64
-            platform: macos-13
-            target: x86_64-apple-darwin
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.platform }}
 
     steps:
