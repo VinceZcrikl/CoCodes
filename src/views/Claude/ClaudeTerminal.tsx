@@ -468,14 +468,46 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
     }, [profileId, claudeSessionId]);
 
     // Dynamically enable / disable the xterm WebGL addon when the user
-    // toggles the setting. Disabling disposes the addon so xterm falls
-    // back to its DOM renderer, freeing the GPU process memory immediately.
-    // Re-enabling loads a fresh addon onto the live terminal.
+    // toggles the setting. Disabling disposes the addon and explicitly loses
+    // the WebGL context so the GPU process releases texture memory (glyph atlas
+    // etc.) immediately rather than waiting for JS GC. Re-enabling loads a
+    // fresh addon onto the live terminal.
     useEffect(() => {
       if (!webglEnabled) {
-        webglAddonRef.current?.dispose();
+        const addon = webglAddonRef.current;
         webglAddonRef.current = null;
+
+        // Capture GL context references before dispose() can remove their
+        // canvases from the DOM, then call loseContext() after disposal so the
+        // GPU process frees textures and framebuffers right away.
+        const loseFns: Array<() => void> = [];
+        if (hostRef.current) {
+          hostRef.current.querySelectorAll("canvas").forEach((canvas) => {
+            const gl =
+              (canvas.getContext("webgl2") ??
+                canvas.getContext("webgl")) as WebGLRenderingContext | null;
+            const ext = gl?.getExtension("WEBGL_lose_context");
+            if (ext) loseFns.push(() => ext.loseContext());
+          });
+        }
+
+        addon?.dispose();
+        loseFns.forEach((fn) => fn());
+
+        // Prevent the DOM-renderer canvases from being promoted to GPU
+        // compositor layers — saves the associated backing-store textures.
+        if (hostRef.current) {
+          hostRef.current.querySelectorAll("canvas").forEach((canvas) => {
+            (canvas as HTMLCanvasElement).style.willChange = "auto";
+          });
+        }
       } else if (termRef.current && !webglAddonRef.current) {
+        // Restore compositor hint so xterm's WebGL renderer can use it.
+        if (hostRef.current) {
+          hostRef.current.querySelectorAll("canvas").forEach((canvas) => {
+            (canvas as HTMLCanvasElement).style.willChange = "";
+          });
+        }
         try {
           const webgl = new WebglAddon();
           webgl.onContextLoss(() => {

@@ -664,15 +664,46 @@ pub async fn terminal_open(
     // reconnecting view can catch up. Runs until EOF (claude exited) or error.
     let app_for_thread = app.clone();
     let id_for_thread = id.clone();
+    // Belt-and-suspenders: if ensure_claude_trusts() failed to pre-trust the
+    // directory (e.g. path-separator mismatch), detect the dialog in the PTY
+    // stream and answer "1\r" automatically so the user never sees it.
+    let is_claude_cli = cli_name == "claude";
     std::thread::spawn(move || {
+        let trust_sig: &[u8] = b"Yes, I trust this folder";
+        let sig_len = trust_sig.len();
+        let mut trust_tail: Vec<u8> = Vec::with_capacity(sig_len);
+        let mut trust_sent = false;
+
         let mut buf = [0u8; 8192];
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
+                    let chunk = &buf[..n];
+
+                    if !trust_sent && is_claude_cli {
+                        // Combine the tail of the previous chunk with the
+                        // current one so we catch signatures that span reads.
+                        let window: Vec<u8> =
+                            trust_tail.iter().chain(chunk.iter()).copied().collect();
+                        if window.windows(sig_len).any(|w| w == trust_sig) {
+                            trust_sent = true;
+                            let reg = app_for_thread.state::<TerminalRegistry>();
+                            let mut sessions = reg.sessions.lock().unwrap();
+                            if let Some(s) = sessions.get_mut(&id_for_thread) {
+                                let _ = s.writer.write_all(b"1\r");
+                                let _ = s.writer.flush();
+                            }
+                        }
+                        // Keep the tail for the next iteration.
+                        let tail_start = chunk.len().saturating_sub(sig_len);
+                        trust_tail.clear();
+                        trust_tail.extend_from_slice(&chunk[tail_start..]);
+                    }
+
                     {
                         let mut b = buffer.lock().unwrap();
-                        b.extend_from_slice(&buf[..n]);
+                        b.extend_from_slice(chunk);
                         if b.len() > REPLAY_BUFFER_MAX {
                             let excess = b.len() - REPLAY_BUFFER_MAX;
                             b.drain(0..excess);
@@ -680,7 +711,7 @@ pub async fn terminal_open(
                     }
                     let payload = DataEvent {
                         id: id_for_thread.clone(),
-                        data: STANDARD.encode(&buf[..n]),
+                        data: STANDARD.encode(chunk),
                     };
                     let _ = app_for_thread.emit("terminal://data", payload);
                 }
@@ -804,6 +835,12 @@ fn ensure_claude_trusts(dir: &std::path::Path) {
         return;
     };
 
+    // Normalise to the OS-native separator so the key matches what the CLI's
+    // process.cwd() returns (Node.js on Windows always returns backslashes,
+    // but PathBuf preserves whatever separator the input string used).
+    #[cfg(windows)]
+    let key = dir.to_string_lossy().replace('/', "\\");
+    #[cfg(not(windows))]
     let key = dir.to_string_lossy().to_string();
     let entry = projects
         .entry(key)
