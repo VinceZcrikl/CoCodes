@@ -67,17 +67,62 @@ pub fn run() {
             // Carry over data from the pre-rename home before anything reads it.
             persona::migrate_legacy_home();
             tauri::async_runtime::spawn(persona::seed_default_personas());
+
+            use tauri::Manager;
             // tauri-plugin-window-state persists the visible flag for all
             // windows. If the screenshot overlay was open when the user last
             // closed the app, the plugin would restore it as visible on next
             // launch. Force it hidden on every startup so it only appears when
             // explicitly triggered by the screenshot command.
-            {
-                use tauri::Manager;
-                if let Some(overlay) = app.get_webview_window("screenshot-overlay") {
-                    let _ = overlay.hide();
-                }
+            if let Some(overlay) = app.get_webview_window("screenshot-overlay") {
+                let _ = overlay.hide();
             }
+
+            // System-tray icon: left-click or "Show Window" → restore the main
+            // window. "Quit CoCodes" → orderly shutdown (plugins flush first).
+            {
+                use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+                let version = app.package_info().version.to_string();
+                let ver_item  = MenuItem::with_id(app, "version", format!("CoCodes v{version}"), false, None::<&str>)?;
+                let sep       = PredefinedMenuItem::separator(app)?;
+                let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
+                let quit_item = MenuItem::with_id(app, "quit", "Quit CoCodes", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&ver_item, &sep, &show_item, &quit_item])?;
+
+                TrayIconBuilder::new()
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .tooltip("CoCodes")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app = tray.app_handle();
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+            }
+
             Ok(())
         })
         .manage(terminal::TerminalRegistry::default())
@@ -108,28 +153,15 @@ pub fn run() {
             fs::fs_drives,
         ])
         .on_window_event(|window, event| {
-            // The frameless main window's custom close button calls
-            // `window.close()`. Keep the process — and every live terminal —
-            // running so reopening restores the live session. On macOS, hide
-            // and reopen via the dock icon (Cmd+Q still quits). Elsewhere there
-            // is no dock to reopen from, so exit as before.
-            //
-            // Use app_handle().exit() instead of std::process::exit() so Tauri
-            // plugins (including tauri-plugin-window-state) can flush their
-            // state to disk before the process terminates.
+            // X closes the window to the system tray on all platforms — the
+            // process (and every live terminal) keeps running. The user can
+            // restore the window via the tray icon or, on macOS, the dock.
+            // "Quit CoCodes" in the tray menu calls app.exit(0) for an orderly
+            // shutdown that flushes plugin state to disk.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
-                    #[cfg(target_os = "macos")]
-                    {
-                        api.prevent_close();
-                        let _ = window.hide();
-                    }
-                    #[cfg(not(target_os = "macos"))]
-                    {
-                        use tauri::Manager;
-                        let _ = api;
-                        window.app_handle().exit(0);
-                    }
+                    api.prevent_close();
+                    let _ = window.hide();
                 }
             }
         })

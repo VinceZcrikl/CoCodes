@@ -18,7 +18,7 @@ tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
 # `macos-private-api` is required for the transparent screenshot-overlay window.
-tauri = { version = "2.1", features = ["macos-private-api"] }
+tauri = { version = "2.1", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-window-state = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
