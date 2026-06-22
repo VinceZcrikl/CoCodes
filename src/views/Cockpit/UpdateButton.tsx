@@ -164,7 +164,7 @@ export async function checkForUpdate(): Promise<void> {
       setPendingUpdate(update);
       store.getState().setAvailable(update.version, update.body ?? null);
     }
-  } catch {
-    // Network unavailable or endpoint not configured yet — silently ignore.
+  } catch (e) {
+    console.warn("[updater] check failed:", e);
   }
 }
