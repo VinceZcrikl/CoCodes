@@ -835,11 +835,12 @@ fn ensure_claude_trusts(dir: &std::path::Path) {
         return;
     };
 
-    // Normalise to the OS-native separator so the key matches what the CLI's
-    // process.cwd() returns (Node.js on Windows always returns backslashes,
-    // but PathBuf preserves whatever separator the input string used).
+    // Claude Code uses forward slashes in ~/.claude.json project keys on
+    // Windows (its Node.js path is normalised via path.posix), so we must
+    // match that format exactly.  PathBuf on Windows preserves backslashes,
+    // so we replace them here before writing or looking up the entry.
     #[cfg(windows)]
-    let key = dir.to_string_lossy().replace('/', "\\");
+    let key = dir.to_string_lossy().replace('\\', "/");
     #[cfg(not(windows))]
     let key = dir.to_string_lossy().to_string();
     let entry = projects
