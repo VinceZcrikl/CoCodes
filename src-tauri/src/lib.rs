@@ -53,7 +53,9 @@ pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,cocodes_lib=debug".into()),
+                // Silence updater noise (endpoint 404 before first release is
+                // expected and already handled silently in JS).
+                .unwrap_or_else(|_| "info,cocodes_lib=debug,tauri_plugin_updater=off".into()),
         )
         .init();
 
