@@ -6,6 +6,7 @@ import AppLogo from "./AppLogo";
 import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaEditor from "../Persona/PersonaEditor";
 import PalettePanel from "./PalettePanel";
+import UpdateButton, { checkForUpdate } from "./UpdateButton";
 import TriondaBall from "./TriondaBall";
 import LaurelWreath from "./LaurelWreath";
 import TempleFrame from "./TempleFrame";
@@ -156,6 +157,12 @@ export default function Cockpit() {
   useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
   useEffect(() => installPaletteSync(), []);
 
+  // Check for updates once, 5 seconds after launch.
+  useEffect(() => {
+    const t = window.setTimeout(() => { void checkForUpdate(); }, 5000);
+    return () => window.clearTimeout(t);
+  }, []);
+
   // Celebration: fire when the user *switches into* a decorated theme (World Cup
   // → confetti, CoCodes → oracle descent) — not on every render, and not on a
   // relaunch that's already in it. The overlay rendered is chosen by palette.
@@ -207,6 +214,7 @@ export default function Cockpit() {
               />
 
               <div className="cockpit-header-right">
+                <UpdateButton />
                 <div className="cockpit-palette-wrap">
                   <button
                     type="button"

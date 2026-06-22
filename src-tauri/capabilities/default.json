@@ -20,6 +20,8 @@
     "core:window:allow-set-focus",
     "core:window:allow-close",
     "core:window:allow-minimize",
-    "core:webview:default"
+    "core:webview:default",
+    "updater:default",
+    "process:default"
   ]
 }

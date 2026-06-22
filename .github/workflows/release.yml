@@ -154,6 +154,12 @@ jobs:
           APPLE_ID:                   ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_ID                   || '' }}
           APPLE_PASSWORD:             ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_PASSWORD             || '' }}
           APPLE_TEAM_ID:              ${{ steps.apple-signing.outputs.available == 'true' && secrets.APPLE_TEAM_ID              || '' }}
+          # Updater signing — generates signed artifacts and latest.json for auto-update.
+          # Add TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD to
+          # GitHub repo secrets. Generate the key pair with:
+          #   npx tauri signer generate -w ~/.tauri/cocodes.key
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: 'CoCodes ${{ inputs.tag || github.ref_name }}'
