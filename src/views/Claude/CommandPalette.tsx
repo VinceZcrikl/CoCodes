@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Activity,
   ArrowUp,
@@ -200,13 +201,26 @@ interface Props {
   onCommand: (slash: string, submit: boolean) => void;
 }
 
+/** Detailed hover explanation for a command chip — what the chip's icon+label
+ *  alone can't convey. Anchored to the hovered chip; flips above/below to stay
+ *  on screen. */
+interface TipState {
+  cmd: Cmd;
+  color: string;
+  cx: number;
+  top: number;
+  bottom: number;
+}
+
 export default function CommandPalette({ open, onClose, onCommand }: Props) {
   const [query, setQuery] = useState("");
+  const [tip, setTip] = useState<TipState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     setQuery("");
+    setTip(null);
     const t = window.setTimeout(() => inputRef.current?.focus(), 40);
     return () => window.clearTimeout(t);
   }, [open]);
@@ -251,7 +265,7 @@ export default function CommandPalette({ open, onClose, onCommand }: Props) {
           className="cmd-palette-input"
           placeholder="Search slash commands…"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); setTip(null); }}
           onKeyDown={(e) => {
             if (e.key === "Escape") { onClose(); return; }
             if (e.key === "Enter" && filtered && filtered.length > 0) run(filtered[0]);
@@ -283,7 +297,23 @@ export default function CommandPalette({ open, onClose, onCommand }: Props) {
                 <span className="cmd-cat-label" style={{ color: cat.color }}>{cat.label}</span>
                 <div className="cmd-cat-grid">
                   {cmds.map((c) => (
-                    <Chip key={c.slash} cmd={c} color={cat.color} onRun={() => run(c)} />
+                    <Chip
+                      key={c.slash}
+                      cmd={c}
+                      color={cat.color}
+                      onRun={() => run(c)}
+                      onHover={(el) => {
+                        const r = el.getBoundingClientRect();
+                        setTip({
+                          cmd: c,
+                          color: cat.color,
+                          cx: r.left + r.width / 2,
+                          top: r.top,
+                          bottom: r.bottom,
+                        });
+                      }}
+                      onLeave={() => setTip((t) => (t?.cmd === c ? null : t))}
+                    />
                   ))}
                 </div>
               </div>
@@ -291,18 +321,72 @@ export default function CommandPalette({ open, onClose, onCommand }: Props) {
           })
         )}
       </div>
+
+      {tip && <CommandTip tip={tip} />}
     </div>
   );
 }
 
-function Chip({ cmd, color, onRun }: { cmd: Cmd; color: string; onRun: () => void }) {
+/** The floating explanation, portaled to <body> so the palette's `overflow:
+ *  hidden` can't clip it. Flips above the chip by default; drops below when the
+ *  chip is too near the top of the viewport. */
+function CommandTip({ tip }: { tip: TipState }) {
+  const MARGIN = 10;
+  const HALF = 130; // half of max-width, for horizontal clamping
+  const below = tip.top < 130;
+  const left = Math.min(
+    Math.max(tip.cx, MARGIN + HALF),
+    window.innerWidth - MARGIN - HALF,
+  );
+  return createPortal(
+    <div
+      className="cmd-tip"
+      role="tooltip"
+      style={{
+        left,
+        top: below ? tip.bottom + 8 : tip.top - 8,
+        transform: below ? "translateX(-50%)" : "translate(-50%, -100%)",
+      }}
+    >
+      <span className="cmd-tip-head">
+        <span className="cmd-tip-slash" style={{ color: tip.color }}>
+          {tip.cmd.slash}
+        </span>
+        <span className="cmd-tip-label">{tip.cmd.label}</span>
+      </span>
+      <span className="cmd-tip-desc">{tip.cmd.desc}</span>
+      {!tip.cmd.submit && (
+        <span className="cmd-tip-args">Inserts only — needs arguments</span>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
+function Chip({
+  cmd,
+  color,
+  onRun,
+  onHover,
+  onLeave,
+}: {
+  cmd: Cmd;
+  color: string;
+  onRun: () => void;
+  onHover: (el: HTMLElement) => void;
+  onLeave: () => void;
+}) {
   const { Icon } = cmd;
   return (
     <button
       type="button"
       className="cmd-chip"
-      title={`${cmd.slash} — ${cmd.desc}`}
+      aria-label={`${cmd.slash} — ${cmd.desc}`}
       onClick={onRun}
+      onMouseEnter={(e) => onHover(e.currentTarget)}
+      onMouseLeave={onLeave}
+      onFocus={(e) => onHover(e.currentTarget)}
+      onBlur={onLeave}
       style={{ "--chip": color } as React.CSSProperties}
     >
       <span className="cmd-chip-ico"><Icon size={14} strokeWidth={1.75} /></span>
