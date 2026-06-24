@@ -1,14 +1,7 @@
 import { create } from "zustand";
 import type { Update } from "@tauri-apps/plugin-updater";
 
-export type UpdatePhase =
-  | "idle"
-  | "checking"
-  | "uptodate"
-  | "available"
-  | "downloading"
-  | "ready"
-  | "error";
+export type UpdatePhase = "idle" | "available" | "downloading" | "ready" | "error";
 
 interface UpdateState {
   phase: UpdatePhase;

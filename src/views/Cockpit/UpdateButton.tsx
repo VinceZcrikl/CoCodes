@@ -1,14 +1,14 @@
 /** Update button — sits next to the palette dot in the cockpit header.
  *
- *  Always visible: in the `idle` state it's a subtle "Check for updates" refresh
- *  button. Clicking it runs an on-demand check; if a newer version is found the
- *  icon turns gold and pulses and a popover offers Download & Install with a
- *  live progress bar; if not, it briefly reports "up to date".
+ *  Hidden by default. It appears automatically only once a check finds a newer
+ *  version: a gold, gently pulsing download icon. Clicking it opens a popover to
+ *  Download & Install with a live progress bar, then Restart. There is no manual
+ *  "check" button — checks run silently in the background (startup + periodic,
+ *  driven from Cockpit), so the button surfaces on its own when an update lands.
  *
- *  A silent check also runs automatically from Cockpit ~5s after startup.
  *  Download + install are handled here via @tauri-apps/plugin-updater. */
 import { useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, Check, RefreshCw, X } from "lucide-react";
+import { ArrowDownToLine, X } from "lucide-react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import {
   useUpdateStore,
@@ -77,43 +77,25 @@ export default function UpdateButton() {
     }
   };
 
-  // Transient states (idle/checking/uptodate/error) revert to idle when the
-  // popover closes, so the button settles back to its neutral resting look.
+  // Closing dismisses a failed download (back to hidden); an available/ready
+  // update stays put so the user can act on it later.
   const close = () => {
     setOpen(false);
-    if (phase === "uptodate" || phase === "error") reset();
+    if (phase === "error") reset();
   };
 
-  // After reporting "up to date", quietly settle back to idle.
-  useEffect(() => {
-    if (phase !== "uptodate") return;
-    const t = window.setTimeout(() => {
-      if (!open) reset();
-    }, 6000);
-    return () => window.clearTimeout(t);
-  }, [phase, open, reset]);
-
-  const onButton = () => {
-    // Idle / up-to-date / error → run a fresh check; otherwise toggle popover.
-    if (phase === "idle" || phase === "uptodate" || phase === "error") {
-      setOpen(true);
-      void checkForUpdate(true);
-    } else {
-      setOpen((v) => !v);
-    }
-  };
+  // Only ever visible when there's a real update to act on. The background
+  // checks leave the phase at "idle" when there's nothing new → button hidden.
+  if (phase !== "available" && phase !== "downloading" && phase !== "ready" && phase !== "error") {
+    return null;
+  }
 
   const pct = Math.round(progress * 100);
-  const hasUpdate = phase === "available" || phase === "downloading" || phase === "ready";
-  const Icon = hasUpdate ? ArrowDownToLine : phase === "uptodate" ? Check : RefreshCw;
   const title =
     phase === "available" ? `Update ${version} available`
     : phase === "downloading" ? `Downloading… ${pct}%`
     : phase === "ready" ? "Ready to install"
-    : phase === "checking" ? "Checking for updates…"
-    : phase === "uptodate" ? "You're up to date"
-    : phase === "error" ? "Update check failed"
-    : "Check for updates";
+    : "Update failed";
 
   return (
     <div className="cockpit-update-wrap">
@@ -122,40 +104,31 @@ export default function UpdateButton() {
         type="button"
         className={
           "cockpit-update-btn" +
-          (hasUpdate ? "" : " cockpit-update-btn--idle") +
           (phase === "available" ? " cockpit-update-btn--pulse" : "") +
-          (phase === "checking" ? " cockpit-update-btn--spin" : "") +
           (open ? " cockpit-update-btn--open" : "")
         }
-        onClick={onButton}
+        onClick={() => setOpen((v) => !v)}
         title={title}
         aria-label={title}
         aria-expanded={open}
         aria-haspopup="true"
       >
-        <Icon size={13} strokeWidth={2} />
+        <ArrowDownToLine size={13} strokeWidth={2} />
       </button>
 
       {open && (
         <div className="update-popover" ref={popoverRef} role="dialog" aria-label="Software update">
           <div className="update-popover-header">
             <span className="update-popover-title">
-              {phase === "checking" && "Checking for updates…"}
-              {phase === "uptodate" && "You're up to date"}
               {phase === "available" && `CoCodes ${version}`}
               {phase === "downloading" && "Downloading update…"}
               {phase === "ready" && "Ready to install"}
-              {phase === "error" && "Update check failed"}
-              {phase === "idle" && "Check for updates"}
+              {phase === "error" && "Update failed"}
             </span>
             <button type="button" className="update-popover-close" onClick={close} aria-label="Close">
               <X size={13} strokeWidth={2} />
             </button>
           </div>
-
-          {phase === "uptodate" && (
-            <p className="update-popover-notes">No updates available right now.</p>
-          )}
 
           {phase === "available" && notes && (
             <p className="update-popover-notes">{notes}</p>
@@ -179,14 +152,6 @@ export default function UpdateButton() {
           )}
 
           <div className="update-popover-actions">
-            {phase === "checking" && (
-              <span className="update-pct-label">Checking…</span>
-            )}
-            {phase === "uptodate" && (
-              <button type="button" className="update-action-btn" onClick={() => void checkForUpdate(true)}>
-                Check again
-              </button>
-            )}
             {phase === "available" && (
               <button type="button" className="update-action-btn update-action-btn--primary" onClick={startDownload}>
                 Download &amp; Install
@@ -201,8 +166,8 @@ export default function UpdateButton() {
               </button>
             )}
             {phase === "error" && (
-              <button type="button" className="update-action-btn" onClick={() => void checkForUpdate(true)}>
-                Retry
+              <button type="button" className="update-action-btn" onClick={reset}>
+                Dismiss
               </button>
             )}
           </div>
@@ -212,41 +177,19 @@ export default function UpdateButton() {
   );
 }
 
-/** Check the updater endpoint for a newer release.
- *
- *  `manual` (a user clicking the button) surfaces the outcome: a spinner while
- *  checking, then "up to date" or an error if the check fails. The automatic
- *  startup check (`manual = false`) stays silent — it only reveals itself when
- *  an update is actually available, so a missing release / offline endpoint
- *  never nags on launch. */
-export async function checkForUpdate(manual = false): Promise<void> {
-  const store = useUpdateStore.getState();
-  if (manual) store.setPhase("checking");
+/** Silently check the updater endpoint for a newer release. Called from Cockpit
+ *  on startup and periodically. It never surfaces anything unless an update is
+ *  actually available — at which point the button appears on its own — so a
+ *  missing release / offline endpoint never nags. */
+export async function checkForUpdate(): Promise<void> {
   try {
     const { check } = await import("@tauri-apps/plugin-updater");
     const update = await check();
     if (update) {
       setPendingUpdate(update);
       useUpdateStore.getState().setAvailable(update.version, update.body ?? null);
-    } else if (manual) {
-      useUpdateStore.getState().setPhase("uptodate");
-    } else if (useUpdateStore.getState().phase === "checking") {
-      useUpdateStore.getState().setPhase("idle");
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn("[updater] check failed:", msg);
-    if (!manual) {
-      if (useUpdateStore.getState().phase === "checking") useUpdateStore.getState().setPhase("idle");
-      return;
-    }
-    // A missing or unreachable update manifest (no release published yet, or
-    // offline) just means "nothing to update to" — present it gently as "up to
-    // date" rather than a hard error. Genuinely unexpected failures still surface.
-    if (/valid release json|not found|404|fetch|network|connect|timed?\s?out|dns/i.test(msg)) {
-      useUpdateStore.getState().setPhase("uptodate");
-    } else {
-      useUpdateStore.getState().setError(msg);
-    }
+    console.warn("[updater] check failed:", e instanceof Error ? e.message : String(e));
   }
 }

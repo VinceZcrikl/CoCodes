@@ -157,10 +157,13 @@ export default function Cockpit() {
   useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
   useEffect(() => installPaletteSync(), []);
 
-  // Check for updates once, 5 seconds after launch.
+  // Check for updates 5s after launch, then quietly re-check every 6 hours so a
+  // version published while the app stays open surfaces the download button on
+  // its own (the check is silent unless an update is found).
   useEffect(() => {
     const t = window.setTimeout(() => { void checkForUpdate(); }, 5000);
-    return () => window.clearTimeout(t);
+    const i = window.setInterval(() => { void checkForUpdate(); }, 6 * 60 * 60 * 1000);
+    return () => { window.clearTimeout(t); window.clearInterval(i); };
   }, []);
 
   // Celebration: fire when the user *switches into* a decorated theme (World Cup
