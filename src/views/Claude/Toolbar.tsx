@@ -122,6 +122,7 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
         {cli === "claude" && (
           <button
             type="button"
+            data-panel-toggle="commands"
             className={`cmd-trigger${paletteOpen ? " open" : ""}`}
             onClick={() => setPaletteOpen((v) => !v)}
             aria-label="Open command palette"
@@ -154,6 +155,7 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
             (does not replace the CLI terminal); active while it's showing. */}
         <button
           type="button"
+          data-panel-toggle="shell"
           className={`cli-tool-btn${shellOpen ? " active" : ""}`}
           onClick={toggleShell}
           title={shellOpen ? "Hide shell" : "Open shell"}
@@ -166,6 +168,7 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
         {/* ── Git panel toggle ── floating read-only source-control window. */}
         <button
           type="button"
+          data-panel-toggle="git"
           className={`cli-tool-btn${gitOpen ? " active" : ""}`}
           onClick={toggleGit}
           title={gitOpen ? "Hide Git panel" : "Git panel"}

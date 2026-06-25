@@ -216,6 +216,7 @@ export default function CommandPalette({ open, onClose, onCommand }: Props) {
   const [query, setQuery] = useState("");
   const [tip, setTip] = useState<TipState | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -230,6 +231,17 @@ export default function CommandPalette({ open, onClose, onCommand }: Props) {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      if ((e.target as Element).closest('[data-panel-toggle="commands"]')) return;
+      onClose();
+    };
+    const id = window.setTimeout(() => window.addEventListener("mousedown", handler), 0);
+    return () => { window.clearTimeout(id); window.removeEventListener("mousedown", handler); };
   }, [open, onClose]);
 
   const q = query.trim().toLowerCase();
@@ -257,7 +269,7 @@ export default function CommandPalette({ open, onClose, onCommand }: Props) {
   const catColor = (id: CatId) => CATS.find((c) => c.id === id)?.color ?? "";
 
   return (
-    <div className="cmd-palette" role="dialog" aria-label="Command palette">
+    <div ref={panelRef} className="cmd-palette" role="dialog" aria-label="Command palette">
       <div className="cmd-palette-search">
         <Search size={12} strokeWidth={1.75} className="cmd-palette-search-ico" />
         <input

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   GitBranch,
   RefreshCw,
@@ -104,6 +104,18 @@ export default function GitPanel({ open, maximized, onToggleMax, onClose }: Prop
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [files, setFiles] = useState<Record<string, GitFileEntry[] | "loading">>({});
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      if ((e.target as Element).closest('[data-panel-toggle="git"]')) return;
+      onClose();
+    };
+    const id = window.setTimeout(() => window.addEventListener("mousedown", handler), 0);
+    return () => { window.clearTimeout(id); window.removeEventListener("mousedown", handler); };
+  }, [open, onClose]);
 
   const graph = useMemo(() => computeGraph(commits), [commits]);
 
@@ -127,6 +139,7 @@ export default function GitPanel({ open, maximized, onToggleMax, onClose }: Prop
 
   return (
     <div
+      ref={panelRef}
       className={`git-overlay${maximized ? " max" : ""}`}
       style={{ display: open ? "flex" : "none" }}
       role="dialog"
