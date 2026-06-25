@@ -8,7 +8,13 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 use serde::Serialize;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Structured failure the frontend can branch on. `GitNotFound` lets the panel
 /// render an "install git" hint instead of a raw error.
@@ -87,9 +93,11 @@ fn git_bin() -> Result<PathBuf, GitError> {
 /// `GitError::Failed` carrying stderr.
 fn run_git(cwd: &str, args: &[&str]) -> Result<String, GitError> {
     let git = git_bin()?;
-    let out = Command::new(&git)
-        .args(args)
-        .current_dir(cwd)
+    let mut cmd = Command::new(&git);
+    cmd.args(args).current_dir(cwd);
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let out = cmd
         .output()
         .map_err(|e| GitError::Failed(e.to_string()))?;
     if !out.status.success() {
