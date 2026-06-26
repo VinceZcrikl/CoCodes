@@ -65,6 +65,14 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
   // existing relative order, so newly created ones land beside their CLI's peers.
   const ordered = useMemo(() => sortPersonasByCli(personas), [personas]);
 
+  // Invalidate the cached SOUL bodies whenever the persona list changes (an edit
+  // anywhere emits `personas:changed` → refresh → new array). Without this, the
+  // hover tooltip would keep showing a persona's pre-edit SOUL (or "No SOUL set"
+  // if it was empty when first hovered). The next hover re-fetches the current one.
+  useEffect(() => {
+    setSouls({});
+  }, [personas]);
+
   // Window-level pointer events so we track movement after leaving the button.
   useEffect(() => {
     const onMove = (e: PointerEvent) => {

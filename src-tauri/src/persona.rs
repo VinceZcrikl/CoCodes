@@ -181,6 +181,7 @@ fn load(profile_id: Option<String>) -> PersonaContext {
     let pid = profile_id
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
+        .map(|s| sanitize_id(&s))
         .unwrap_or_else(|| DEFAULT_PROFILE.to_string());
 
     let dir = persona_dir(&pid);

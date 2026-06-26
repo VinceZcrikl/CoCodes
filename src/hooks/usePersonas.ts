@@ -4,6 +4,12 @@ import { emit, listen } from "@tauri-apps/api/event";
 
 const PERSONAS_CHANGED = "personas:changed";
 
+/** Window event dispatched when a persona is saved, carrying its id. A live
+ *  terminal bound to that persona restarts itself so the edited SOUL / memory /
+ *  base-model takes effect — `claude` bakes the system prompt in at spawn, so a
+ *  running session must respawn (it re-resumes, keeping the conversation). */
+export const PERSONA_RESTART_EVENT = "persona:restart";
+
 export interface PersonaSummary {
   id: string;
   name: string;
@@ -129,6 +135,9 @@ export function usePersonas() {
   const save = useCallback(async (doc: PersonaDoc) => {
     const id = await invoke<string>("persona_save", { doc });
     void emit(PERSONAS_CHANGED);
+    // Restart any live terminal bound to this persona so the new SOUL / memory /
+    // base-model applies immediately (the running CLI baked in the old one).
+    window.dispatchEvent(new CustomEvent(PERSONA_RESTART_EVENT, { detail: { id } }));
     return id;
   }, []);
   const remove = useCallback(async (id: string) => {

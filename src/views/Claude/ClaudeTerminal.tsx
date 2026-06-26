@@ -3,6 +3,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -15,6 +16,7 @@ import "@xterm/xterm/css/xterm.css";
 import { usePaletteStore } from "../../state/paletteStore";
 import { xtermThemeForPalette } from "../../state/uiPalette";
 import type { PanelPaletteName, AccentName } from "../../state/panelPalettes";
+import { PERSONA_RESTART_EVENT } from "../../hooks/usePersonas";
 
 /** Imperative handle the parent view uses to drive the terminal — composer
  *  injection calls `writeLine`. */
@@ -144,6 +146,36 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
     onKeyEventRef.current = onKeyEvent;
     const onSessionConflictRef = useRef(onSessionConflict);
     onSessionConflictRef.current = onSessionConflict;
+    // Current persona for this pane, read by the once-registered restart
+    // listener below without re-subscribing.
+    const profileIdRef = useRef(profileId);
+    profileIdRef.current = profileId;
+
+    // Bumped to force a full respawn (e.g. after this pane's persona is edited).
+    const [restartNonce, setRestartNonce] = useState(0);
+
+    // When this pane's persona is saved, restart the CLI so the new SOUL / memory
+    // / base-model takes effect. The running process baked the old prompt in, so
+    // we kill it and remount — the remount re-resumes the same conversation with
+    // a freshly-written persona file. Closing FIRST (not the graced close) avoids
+    // a "session already in use" race against the resuming replacement.
+    useEffect(() => {
+      const onRestart = (e: Event) => {
+        const id = (e as CustomEvent<{ id: string }>).detail?.id;
+        if (!id || id !== profileIdRef.current) return;
+        const sid = sessionIdRef.current;
+        if (sid) {
+          sessionIdRef.current = null; // stop the unmount cleanup re-closing it
+          void invoke("terminal_close", { id: sid }).finally(() =>
+            setRestartNonce((n) => n + 1),
+          );
+        } else {
+          setRestartNonce((n) => n + 1);
+        }
+      };
+      window.addEventListener(PERSONA_RESTART_EVENT, onRestart);
+      return () => window.removeEventListener(PERSONA_RESTART_EVENT, onRestart);
+    }, []);
 
     // Re-theme the live terminal when the palette / accent changes (no remount).
     useEffect(() => {
@@ -463,9 +495,11 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       };
       // Callbacks are stable; resume is read once at mount on purpose, so
       // neither belongs in deps. A profile, session, or cli change remounts via
-      // the parent's `key`.
+      // the parent's `key`. `restartNonce` bumps force a full respawn (persona
+      // edited) — the prior PTY was already closed by the restart listener, so
+      // terminal_open spawns fresh (re-resuming) with the updated persona file.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [profileId, claudeSessionId]);
+    }, [profileId, claudeSessionId, restartNonce]);
 
     // Dynamically enable / disable the xterm WebGL addon when the user
     // toggles the setting. Disabling disposes the addon and explicitly loses
