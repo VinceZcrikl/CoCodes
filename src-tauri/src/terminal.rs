@@ -20,6 +20,11 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Cap on the per-session replay buffer (most-recent bytes kept). A TUI like
 /// Claude Code repaints the whole screen, so the recent tail reconstructs the
 /// current view on reconnect.
@@ -125,9 +130,10 @@ pub(crate) fn find_in_path(exe: &str, extra_dirs: &[PathBuf]) -> Option<PathBuf>
 /// CLIs installed by PowerShell scripts that modify the user PATH via registry.
 #[cfg(windows)]
 fn where_exe(name: &str) -> Option<PathBuf> {
-    std::process::Command::new("where")
-        .arg(name)
-        .output()
+    let mut cmd = std::process::Command::new("where");
+    cmd.arg(name);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.output()
         .ok()
         .filter(|o| o.status.success())
         .and_then(|o| {

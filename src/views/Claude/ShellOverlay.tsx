@@ -36,6 +36,7 @@ export default function ShellOverlay({ open, maximized, onToggleMax, onClose }: 
   // spawn and reconnect to an already-running session).
   const terminalReadyRef = useRef(false);
 
+  const panelRef = useRef<HTMLDivElement>(null);
   const pendingCmd = useShellStore((s) => s.pendingCmd);
   const clearPendingCmd = useShellStore((s) => s.clearPendingCmd);
 
@@ -69,8 +70,20 @@ export default function ShellOverlay({ open, maximized, onToggleMax, onClose }: 
     setReloadKey((k) => k + 1);
   };
 
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      if ((e.target as Element).closest('[data-panel-toggle="shell"]')) return;
+      onClose();
+    };
+    const id = window.setTimeout(() => window.addEventListener("mousedown", handler), 0);
+    return () => { window.clearTimeout(id); window.removeEventListener("mousedown", handler); };
+  }, [open, onClose]);
+
   return (
     <div
+      ref={panelRef}
       className={`shell-overlay${maximized ? " max" : ""}`}
       style={{ display: open ? "flex" : "none" }}
       role="dialog"
