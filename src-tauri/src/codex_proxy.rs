@@ -73,6 +73,20 @@ pub fn base_url_for(port: u16, provider_id: &str) -> String {
     format!("http://127.0.0.1:{port}/p/{provider_id}/v1")
 }
 
+/// The loopback base URL for Claude's `ANTHROPIC_BASE_URL` when a persona's model
+/// needs thinking injected (Claude appends `/v1/messages`).
+pub fn anthropic_base_url_for(port: u16, provider_id: &str) -> String {
+    format!("http://127.0.0.1:{port}/a/{provider_id}")
+}
+
+/// Whether a model mandates `thinking:{type:"enabled"}` on every request — true
+/// for Moonshot's `*-code` reasoning models (e.g. `kimi-k2.7-code`), which 400
+/// otherwise. Claude Code doesn't send thinking on a normal turn, so such a model
+/// must be routed through [`handle_anthropic`], which injects it.
+pub fn model_requires_thinking(model: &str) -> bool {
+    model.to_ascii_lowercase().contains("-code")
+}
+
 /// Register the app handle once at startup so `emit_activity` can reach the UI
 /// even on the Claude path (which never starts the proxy).
 pub fn init(app: &AppHandle) {
@@ -100,19 +114,24 @@ fn accept_loop(server: Server) {
     }
 }
 
-fn handle(mut request: tiny_http::Request) {
-    // Expect POST /p/<id>/v1/responses (the only endpoint Codex hits in
-    // responses mode). Anything else is a 404.
+fn handle(request: tiny_http::Request) {
     let url = request.url().to_string();
     let path = url.split('?').next().unwrap_or(&url);
-    let provider_id = match parse_provider_id(path) {
-        Some(id) => id,
-        None => {
-            let _ = request.respond(Response::from_string("not found").with_status_code(404));
-            return;
-        }
-    };
+    // `/p/<id>/v1/responses` → Codex Responses↔Chat translation.
+    if let Some(id) = parse_provider_id(path) {
+        handle_codex(request, id);
+        return;
+    }
+    // `/a/<id>/v1/messages` → Anthropic passthrough with thinking injection.
+    if let Some(id) = parse_anthropic_id(path) {
+        handle_anthropic(request, id);
+        return;
+    }
+    let _ = request.respond(Response::from_string("not found").with_status_code(404));
+}
 
+/// Codex Responses → Chat Completions translation (`POST /p/<id>/v1/responses`).
+fn handle_codex(mut request: tiny_http::Request, provider_id: String) {
     let mut body = String::new();
     if let Err(e) = request.as_reader().read_to_string(&mut body) {
         respond_failed(request, &format!("read request body: {e}"));
@@ -222,11 +241,163 @@ fn handle(mut request: tiny_http::Request) {
     }
 }
 
+/// Anthropic passthrough (`POST /a/<id>/v1/messages`). Both sides speak the
+/// Anthropic Messages protocol, so this is a transparent pipe — the only edits
+/// are: inject the real API key, and (for thinking-required models) rewrite the
+/// request's `thinking` to `{type:"enabled"}` so models like `kimi-k2.7-code`
+/// stop returning 400. The upstream response (SSE included) is streamed back
+/// byte-for-byte.
+fn handle_anthropic(mut request: tiny_http::Request, provider_id: String) {
+    // Capture the anthropic-* headers before consuming the body reader.
+    let fwd_headers: Vec<(String, String)> = request
+        .headers()
+        .iter()
+        .filter_map(|h| {
+            let name = h.field.as_str().as_str().to_ascii_lowercase();
+            if name == "anthropic-version" || name == "anthropic-beta" {
+                Some((name, h.value.as_str().to_string()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut body = String::new();
+    if let Err(e) = request.as_reader().read_to_string(&mut body) {
+        respond_anthropic_error(request, &format!("read request body: {e}"));
+        return;
+    }
+    let mut req_json: Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            respond_anthropic_error(request, &format!("parse request body: {e}"));
+            return;
+        }
+    };
+
+    let resolved = match providers::resolve(&provider_id) {
+        Ok(Some(r)) => r,
+        Ok(None) => {
+            respond_anthropic_error(
+                request,
+                &format!("provider '{provider_id}' is unconfigured (missing or no key)"),
+            );
+            return;
+        }
+        Err(e) => {
+            respond_anthropic_error(request, &format!("resolve provider '{provider_id}': {e}"));
+            return;
+        }
+    };
+
+    let model = req_json.get("model").and_then(Value::as_str).unwrap_or("").to_string();
+    let injected = model_requires_thinking(&model);
+    if injected {
+        inject_thinking(&mut req_json);
+    }
+    let upstream_url = format!("{}/v1/messages", resolved.base_url.trim_end_matches('/'));
+    tracing::info!(
+        "claude proxy: request provider='{provider_id}' model='{model}' \
+         thinking={injected} → {upstream_url}"
+    );
+    emit_activity("claude", &provider_id, &model);
+
+    let client = match reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            respond_anthropic_error(request, &format!("build http client: {e}"));
+            return;
+        }
+    };
+    let mut req = client.post(&upstream_url).json(&req_json).bearer_auth(&resolved.auth_token);
+    let mut have_version = false;
+    for (name, value) in &fwd_headers {
+        if name == "anthropic-version" {
+            have_version = true;
+        }
+        req = req.header(name.as_str(), value.as_str());
+    }
+    if !have_version {
+        req = req.header("anthropic-version", "2023-06-01");
+    }
+    let resp = match req.send() {
+        Ok(r) => r,
+        Err(e) => {
+            respond_anthropic_error(request, &format!("upstream request failed: {e}"));
+            return;
+        }
+    };
+
+    // Transparent passthrough: forward upstream status + content-type, stream the
+    // body (handles both JSON and SSE). Errors flow back so Claude sees the real
+    // message instead of a generic failure.
+    let status = resp.status().as_u16();
+    let ctype = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/json")
+        .to_string();
+    let header = Header::from_bytes(&b"Content-Type"[..], ctype.as_bytes())
+        .unwrap_or_else(|_| sse_header());
+    let response = Response::new(StatusCode(status), vec![header], resp, None, None);
+    let _ = request.respond(response);
+}
+
+/// Rewrite a request to force extended thinking on (overwriting any adaptive /
+/// missing value), and strip sampling params Anthropic disallows alongside
+/// thinking. `budget_tokens` is kept strictly below `max_tokens`.
+fn inject_thinking(req: &mut Value) {
+    let Some(obj) = req.as_object_mut() else { return };
+    let max_tokens = obj.get("max_tokens").and_then(Value::as_i64).unwrap_or(8192);
+    // Keep budget < max_tokens; bump max_tokens if the caller asked for very few.
+    let (max_tokens, budget) = if max_tokens > 1025 {
+        (max_tokens, 4096.min(max_tokens - 1))
+    } else {
+        (4097, 4096)
+    };
+    obj.insert("max_tokens".into(), json!(max_tokens));
+    obj.insert("thinking".into(), json!({ "type": "enabled", "budget_tokens": budget }));
+    // Extended thinking requires default sampling — drop conflicting knobs.
+    obj.remove("temperature");
+    obj.remove("top_p");
+    obj.remove("top_k");
+}
+
+/// Send an Anthropic-shaped error so Claude Code surfaces a useful message.
+fn respond_anthropic_error(request: tiny_http::Request, message: &str) {
+    tracing::warn!("claude proxy: {message}");
+    let body = json!({ "type": "error", "error": { "type": "api_error", "message": message } })
+        .to_string();
+    let header = Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+        .expect("static header is valid");
+    let response = Response::new(
+        StatusCode(502),
+        vec![header],
+        io::Cursor::new(body.into_bytes()),
+        None,
+        None,
+    );
+    let _ = request.respond(response);
+}
+
 /// Extract `<id>` from `/p/<id>/v1/responses`. Returns `None` for any other path.
 fn parse_provider_id(path: &str) -> Option<String> {
     let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
     match parts.as_slice() {
         ["p", id, "v1", "responses"] if !id.is_empty() => Some((*id).to_string()),
+        _ => None,
+    }
+}
+
+/// Extract `<id>` from `/a/<id>/v1/messages` (the Anthropic passthrough route).
+fn parse_anthropic_id(path: &str) -> Option<String> {
+    let parts: Vec<&str> = path.trim_matches('/').split('/').collect();
+    match parts.as_slice() {
+        ["a", id, "v1", "messages"] if !id.is_empty() => Some((*id).to_string()),
         _ => None,
     }
 }
@@ -836,6 +1007,34 @@ fn rand_id(prefix: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_anthropic_id_and_thinking_detection() {
+        assert_eq!(parse_anthropic_id("/a/kimi/v1/messages").as_deref(), Some("kimi"));
+        assert_eq!(parse_anthropic_id("/a/kimi/v1/responses"), None);
+        assert_eq!(parse_anthropic_id("/p/kimi/v1/messages"), None);
+        assert!(model_requires_thinking("kimi-k2.7-code"));
+        assert!(model_requires_thinking("kimi-k2.7-code-highspeed"));
+        assert!(!model_requires_thinking("kimi-k2.6"));
+        assert!(!model_requires_thinking("deepseek-chat"));
+    }
+
+    #[test]
+    fn inject_thinking_forces_enabled_and_keeps_budget_below_max() {
+        let mut req = json!({"model":"kimi-k2.7-code","max_tokens":32000,"temperature":0.7,"top_p":0.9,"messages":[]});
+        inject_thinking(&mut req);
+        assert_eq!(req["thinking"]["type"], "enabled");
+        let budget = req["thinking"]["budget_tokens"].as_i64().unwrap();
+        let max = req["max_tokens"].as_i64().unwrap();
+        assert!(budget < max && budget > 0);
+        assert!(req.get("temperature").is_none()); // stripped (conflicts with thinking)
+        assert!(req.get("top_p").is_none());
+
+        // Tiny max_tokens gets bumped so budget < max still holds.
+        let mut small = json!({"model":"kimi-k2.7-code","max_tokens":50,"messages":[]});
+        inject_thinking(&mut small);
+        assert!(small["thinking"]["budget_tokens"].as_i64().unwrap() < small["max_tokens"].as_i64().unwrap());
+    }
 
     #[test]
     fn parse_provider_id_only_matches_responses_path() {

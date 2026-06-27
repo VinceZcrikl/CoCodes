@@ -56,15 +56,15 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     // platform.moonshot.ai). NOTE: this is NOT api.kimi.com/coding — that's the
     // separate Kimi-Code subscription service with its own keys.
     base_url: "https://api.moonshot.ai/anthropic",
-    // Only list models that work with Claude Code's direct connection. The
-    // `*-code` models (kimi-k2.7-code…) REQUIRE `thinking:{type:"enabled"}` on
-    // every request and 400 otherwise — Claude Code doesn't send thinking on
-    // normal/background turns and there's no proxy on the Claude path to inject
-    // it, so they're unusable here. k2.6 / k2.5 work unconditionally.
-    model: "kimi-k2.6",
-    models: ["kimi-k2.6", "kimi-k2.5"],
+    // k2.6 / k2.5 work directly. kimi-k2.7-code mandates `thinking:{type:"enabled"}`
+    // (400 otherwise) and Claude Code doesn't send thinking on a normal turn — so
+    // CoCodes routes `*-code` models through a local proxy that injects it (see
+    // codex_proxy::handle_anthropic). small/fast stays on a non-thinking model so
+    // background calls aren't forced into a thinking budget.
+    model: "kimi-k2.7-code",
+    models: ["kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5"],
     models_url: "https://api.moonshot.ai/v1/models",
-    small_fast_model: null,
+    small_fast_model: "kimi-k2.6",
     keyUrl: "https://platform.moonshot.ai/console/api-keys",
   },
   {

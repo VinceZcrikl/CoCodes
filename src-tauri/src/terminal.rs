@@ -479,7 +479,7 @@ pub async fn terminal_open(
                         p.base_url,
                         p.model
                     );
-                    Some(p)
+                    Some((preset_id, p))
                 }
                 Ok(None) => {
                     tracing::warn!(
@@ -510,7 +510,7 @@ pub async fn terminal_open(
         let ctx = crate::persona::load_persona_context(profile_id.clone()).await;
         let identity = claude_provider
             .as_ref()
-            .map(|p| claude_identity_note(&p.model, &p.name));
+            .map(|(_, p)| claude_identity_note(&p.model, &p.name));
         write_persona_file(&id, &ctx, identity.as_deref())
     } else {
         None
@@ -604,9 +604,36 @@ pub async fn terminal_open(
     // process's env — never a global file — so other personas and the system
     // Claude install are unaffected. (Resolution + the truthful-identity prompt
     // happened earlier, before the persona file was written.)
-    if let Some(p) = claude_provider.as_ref() {
-        cmd.env("ANTHROPIC_BASE_URL", &p.base_url);
-        cmd.env("ANTHROPIC_AUTH_TOKEN", &p.auth_token);
+    if let Some((preset_id, p)) = claude_provider.as_ref() {
+        // Most models connect direct. But a model that mandates `thinking=enabled`
+        // (Moonshot `*-code`) would 400 — Claude Code doesn't send thinking on a
+        // normal turn. Route those through the loopback proxy, which rewrites each
+        // request's thinking and injects the real key.
+        let base_url = if crate::codex_proxy::model_requires_thinking(&p.model) {
+            match crate::codex_proxy::ensure_started(&app) {
+                Ok(port) => {
+                    let url = crate::codex_proxy::anthropic_base_url_for(port, preset_id);
+                    // The proxy authenticates upstream; give Claude a placeholder.
+                    cmd.env("ANTHROPIC_AUTH_TOKEN", "cocodes-proxy");
+                    tracing::info!(
+                        "terminal: claude base-model '{preset_id}' via proxy {url} \
+                         → {} ({}) [thinking-injected]",
+                        p.base_url,
+                        p.model
+                    );
+                    url
+                }
+                Err(e) => {
+                    tracing::warn!("terminal: claude proxy failed to start: {e}; direct");
+                    cmd.env("ANTHROPIC_AUTH_TOKEN", &p.auth_token);
+                    p.base_url.clone()
+                }
+            }
+        } else {
+            cmd.env("ANTHROPIC_AUTH_TOKEN", &p.auth_token);
+            p.base_url.clone()
+        };
+        cmd.env("ANTHROPIC_BASE_URL", &base_url);
         cmd.env("ANTHROPIC_MODEL", &p.model);
         if let Some(small) = p.small_fast_model.as_deref() {
             cmd.env("ANTHROPIC_SMALL_FAST_MODEL", small);
@@ -614,9 +641,7 @@ pub async fn terminal_open(
         // Keep AUTH_TOKEN the sole Bearer source: a stale ANTHROPIC_API_KEY
         // inherited from the parent shell would otherwise compete with the token.
         cmd.env_remove("ANTHROPIC_API_KEY");
-        // Pulse the cockpit's live indicator at launch (Claude talks straight to
-        // the endpoint, so there's no per-request hook — this is the activation
-        // signal).
+        // Pulse the cockpit's live indicator at launch.
         crate::codex_proxy::emit_activity("claude", &p.name, &p.model);
     }
 
