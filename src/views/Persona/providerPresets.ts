@@ -25,6 +25,22 @@ export interface ProviderPreset {
    *  and fixes compaction/limits for the custom slug. */
   context_window?: number | null;
   max_output_tokens?: number | null;
+  /** OpenAI-compatible `…/models` endpoint used to refresh the dropdown with the
+   *  vendor's live model list. Set when it differs from `<base_url>/models` (e.g.
+   *  Kimi's coding base URL is not where its model list lives). When omitted, a
+   *  `/v1` base URL derives `<base_url>/models` automatically. */
+  models_url?: string | null;
+}
+
+/** The OpenAI-compatible model-list endpoint for a provider, or null when none
+ *  can be derived (so the static `models` list is used as-is). */
+export function effectiveModelsUrl(p: {
+  models_url?: string | null;
+  base_url: string;
+}): string | null {
+  if (p.models_url) return p.models_url;
+  const b = p.base_url.replace(/\/+$/, "");
+  return b.endsWith("/v1") ? `${b}/models` : null;
 }
 
 /** Verified against each vendor's official Claude-Code integration docs
@@ -39,8 +55,11 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     // kimi.com/code/docs — kimi-for-coding is a stable alias auto-mapped to the
     // latest Kimi model server-side.
     base_url: "https://api.kimi.com/coding/",
-    model: "kimi-for-coding",
-    models: ["kimi-for-coding", "kimi-k2-thinking", "kimi-k2-0905-preview"],
+    model: "kimi-k2.7-code",
+    models: ["kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5"],
+    // The coding base URL isn't where the model list lives — Kimi/Moonshot's
+    // OpenAI-compatible list endpoint is on api.moonshot.ai.
+    models_url: "https://api.moonshot.ai/v1/models",
     small_fast_model: null,
     keyUrl: "https://www.kimi.com/code",
   },

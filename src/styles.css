@@ -3498,6 +3498,50 @@ select.agent-editor-input {
   font-size: 11px;
   color: var(--text-soft, rgba(255, 255, 255, 0.78));
 }
+/* "Model" label row with a Refresh button that pulls the live list. */
+.basemodel-keypanel-modelhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.basemodel-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-gold);
+  cursor: pointer;
+}
+.basemodel-refresh:hover {
+  filter: brightness(1.12);
+}
+.basemodel-refresh:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.basemodel-refresh .spin {
+  animation: basemodel-spin 0.8s linear infinite;
+}
+@keyframes basemodel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.basemodel-keypanel-err {
+  font-size: 10px;
+  color: var(--text-muted, rgba(255, 255, 255, 0.5));
+}
+.basemodel-keypanel-note {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-gold);
+}
 .basemodel-keypanel-actions {
   display: flex;
   align-items: center;

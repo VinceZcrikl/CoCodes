@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, ExternalLink, KeyRound, Trash2, Upload } from "lucide-react";
+import { ChevronRight, ExternalLink, KeyRound, RefreshCw, Trash2, Upload } from "lucide-react";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import ProviderManager from "./ProviderManager";
-import { PROVIDER_PRESETS, CODEX_PROVIDER_PRESETS } from "./providerPresets";
+import { PROVIDER_PRESETS, CODEX_PROVIDER_PRESETS, effectiveModelsUrl } from "./providerPresets";
 import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
+import { useProviderModels } from "../../hooks/useProviderModels";
 import { openExternal } from "../../util/openExternal";
 import ClaudeMascot from "./ClaudeMascot";
 import CodexMascot from "./CodexMascot";
@@ -75,6 +76,9 @@ export default function PersonaEditor({
   const [keyToken, setKeyToken] = useState("");
   const [keyModel, setKeyModel] = useState("");
   const [enabling, setEnabling] = useState(false);
+  // Inline note in the key panel (e.g. "paste a key before Refresh").
+  const [keyPanelMsg, setKeyPanelMsg] = useState<string | null>(null);
+  const keyInputRef = useRef<HTMLInputElement>(null);
   // null = closed; {} = open to the list; otherwise open straight into a form
   // (the advanced "Manage providers…" path for custom endpoints).
   const [providerMgr, setProviderMgr] =
@@ -103,6 +107,7 @@ export default function PersonaEditor({
         label: cfg?.label ?? preset.label,
         model: cfg?.model ?? preset.model,
         models: preset.models,
+        models_url: preset.models_url ?? null,
         keyUrl: preset.keyUrl,
         base_url: cfg?.base_url ?? preset.base_url,
         wire_api: cfg?.wire_api ?? preset.wire_api ?? null,
@@ -122,6 +127,7 @@ export default function PersonaEditor({
         label: p.label,
         model: p.model,
         models: [p.model],
+        models_url: null,
         keyUrl: "",
         base_url: p.base_url,
         wire_api: p.wire_api ?? null,
@@ -211,6 +217,45 @@ export default function PersonaEditor({
     } finally {
       setEnabling(false);
     }
+  };
+
+  // Live model list for the row whose key panel is open (Kimi/DeepSeek/Ollama…).
+  const keyRow = baseModelRows.find((r) => r.id === keyRowId) ?? null;
+  const keyModelsUrl = keyRow ? effectiveModelsUrl(keyRow) : null;
+  const {
+    models: keyModelOptions,
+    loading: keyModelsLoading,
+    error: keyModelsError,
+    refresh: refreshKeyModels,
+    reset: resetKeyModels,
+  } = useProviderModels(keyRow?.models ?? []);
+
+  // When the key panel opens, drop any prior list and auto-load when the endpoint
+  // is reachable without the user typing a key (configured = stored key; local =
+  // no key). For a fresh cloud provider, the "Refresh" button fetches once a key
+  // is pasted.
+  useEffect(() => {
+    resetKeyModels();
+    setKeyPanelMsg(null);
+    if (keyRow && keyModelsUrl && (keyRow.configured || keyRow.local)) {
+      void refreshKeyModels(keyModelsUrl, keyRow.id, undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyRowId]);
+
+  // Refresh the live model list, but if the provider needs a key and none is
+  // available (not local, no stored key, nothing typed) prompt for it instead of
+  // firing a request that would just 401.
+  const tryRefreshKeyModels = async (row: BaseModelRow) => {
+    setKeyPanelMsg(null);
+    if (!row.local && !row.hasToken && !keyToken.trim()) {
+      setKeyPanelMsg("Paste your API key first, then Refresh.");
+      keyInputRef.current?.focus();
+      return;
+    }
+    const ids = await refreshKeyModels(keyModelsUrl, row.id, keyToken);
+    // After a successful refresh, default-select the first model in the list.
+    if (ids && ids.length) setKeyModel(ids[0]);
   };
 
   // Two-step delete: first click arms (auto-disarms after 3s), second confirms.
@@ -501,15 +546,33 @@ export default function PersonaEditor({
                       </div>
                       {editingKey && (
                         <div className="basemodel-keypanel">
-                          {row.models.length > 1 && (
+                          {(keyModelOptions.length > 1 || keyModelsUrl) && (
                             <label className="basemodel-keypanel-field">
-                              <span>Model</span>
+                              <span className="basemodel-keypanel-modelhead">
+                                <span>Model</span>
+                                {keyModelsUrl && (
+                                  <button
+                                    type="button"
+                                    className="basemodel-refresh"
+                                    onClick={() => void tryRefreshKeyModels(row)}
+                                    disabled={keyModelsLoading}
+                                    title="Refresh the model list from the provider"
+                                  >
+                                    <RefreshCw
+                                      size={11}
+                                      strokeWidth={2}
+                                      className={keyModelsLoading ? "spin" : undefined}
+                                    />
+                                    <span>{keyModelsLoading ? "Loading…" : "Refresh"}</span>
+                                  </button>
+                                )}
+                              </span>
                               <select
                                 className="agent-editor-input"
                                 value={keyModel}
                                 onChange={(e) => setKeyModel(e.target.value)}
                               >
-                                {[...new Set([keyModel, ...row.models].filter(Boolean))].map(
+                                {[...new Set([keyModel, ...keyModelOptions].filter(Boolean))].map(
                                   (m) => (
                                     <option key={m} value={m}>
                                       {m}
@@ -517,6 +580,15 @@ export default function PersonaEditor({
                                   ),
                                 )}
                               </select>
+                              {keyPanelMsg ? (
+                                <span className="basemodel-keypanel-note">{keyPanelMsg}</span>
+                              ) : (
+                                keyModelsError && (
+                                  <span className="basemodel-keypanel-err">
+                                    Couldn't load the live list — using defaults.
+                                  </span>
+                                )
+                              )}
                             </label>
                           )}
                           <label className="basemodel-keypanel-field">
@@ -525,6 +597,7 @@ export default function PersonaEditor({
                               {row.hasToken ? " (leave blank to keep)" : ""}
                             </span>
                             <input
+                              ref={keyInputRef}
                               className="agent-editor-input"
                               type="password"
                               autoComplete="off"
@@ -532,7 +605,10 @@ export default function PersonaEditor({
                                 row.hasToken ? "•••••• unchanged" : "Paste your API key (sk-…)"
                               }
                               value={keyToken}
-                              onChange={(e) => setKeyToken(e.target.value)}
+                              onChange={(e) => {
+                                setKeyToken(e.target.value);
+                                if (keyPanelMsg) setKeyPanelMsg(null);
+                              }}
                             />
                           </label>
                           <div className="basemodel-keypanel-actions">

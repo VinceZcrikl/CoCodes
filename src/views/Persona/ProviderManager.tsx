@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, ExternalLink, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useProviders, type Provider } from "../../hooks/usePersonas";
 import {
   PROVIDER_PRESETS,
@@ -7,8 +7,10 @@ import {
   BLANK_PROVIDER as BLANK,
   draftFromPreset,
   slugify,
+  effectiveModelsUrl,
   type ProviderPreset,
 } from "./providerPresets";
+import { useProviderModels } from "../../hooks/useProviderModels";
 import { openExternal } from "../../util/openExternal";
 
 /** Sentinel option in the Model dropdown that switches to free-text entry. */
@@ -62,9 +64,55 @@ export default function ProviderManager({
   // or the matching preset (by id) when editing. Empty → free-text model entry.
   const modelPreset = activePreset ?? presets.find((p) => p.id === draft?.id);
   const modelOptions = modelPreset?.models ?? [];
+  // Live model list (Kimi/DeepSeek/Ollama…), fetched from the provider's
+  // `…/models` endpoint and merged ahead of the static preset list.
+  const modelsUrl = modelPreset
+    ? effectiveModelsUrl(modelPreset)
+    : draft
+      ? effectiveModelsUrl(draft)
+      : null;
+  const {
+    models: liveModelOptions,
+    loading: modelsLoading,
+    error: modelsError,
+    refresh: refreshModels,
+    reset: resetModels,
+  } = useProviderModels(modelOptions);
+
   // A custom (non-preset) draft for this CLI: codex providers default to the
   // "chat" wire protocol; claude ones have no wire_api.
   const blankDraft = (): Provider => ({ ...BLANK, wire_api: isCodex ? "chat" : null });
+
+  // A keyless local endpoint (preset flag or a localhost URL).
+  const localProvider =
+    !!activePreset?.local || /localhost|127\.0\.0\.1/.test(draft?.base_url ?? "");
+
+  // Auto-load the live list when the endpoint is reachable without a freshly
+  // typed key: editing a configured provider (stored key) or a keyless local
+  // one. Fresh cloud adds use the "Refresh" button after pasting a key.
+  useEffect(() => {
+    resetModels();
+    if (!draft) return;
+    const url = modelPreset ? effectiveModelsUrl(modelPreset) : effectiveModelsUrl(draft);
+    if (url && (draft.has_token || localProvider)) {
+      void refreshModels(url, draft.id, undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft?.id, presetKey]);
+
+  // Refresh, but prompt for a key first if the provider needs one and none is
+  // available (avoids a guaranteed 401 + a confusing "couldn't load" message).
+  const tryRefreshModels = async () => {
+    if (!draft) return;
+    setError(null);
+    if (!localProvider && !draft.has_token && !token.trim()) {
+      setError("Enter the API key first, then Refresh.");
+      return;
+    }
+    const ids = await refreshModels(modelsUrl, draft.id, token);
+    // After a successful refresh, default-select the first model in the list.
+    if (ids && ids.length) setDraft((d) => (d ? { ...d, model: ids[0] } : d));
+  };
 
   // Adding opens pre-filled with the first preset, so the form is ready and the
   // user only pastes a key. Switching the dropdown re-fills every field.
@@ -313,8 +361,26 @@ export default function ProviderManager({
                 </label>
               )}
               <label className="agent-editor-label">
-                <span>Model</span>
-                {modelOptions.length > 0 && !modelCustom ? (
+                <span className="basemodel-keypanel-modelhead">
+                  <span>Model</span>
+                  {modelsUrl && !modelCustom && (
+                    <button
+                      type="button"
+                      className="basemodel-refresh"
+                      onClick={() => void tryRefreshModels()}
+                      disabled={modelsLoading}
+                      title="Refresh the model list from the provider"
+                    >
+                      <RefreshCw
+                        size={11}
+                        strokeWidth={2}
+                        className={modelsLoading ? "spin" : undefined}
+                      />
+                      <span>{modelsLoading ? "Loading…" : "Refresh"}</span>
+                    </button>
+                  )}
+                </span>
+                {liveModelOptions.length > 0 && !modelCustom ? (
                   <select
                     className="agent-editor-input"
                     value={draft.model}
@@ -326,9 +392,9 @@ export default function ProviderManager({
                       }
                     }}
                   >
-                    {/* The saved/default value plus the preset's options, deduped,
-                        then a "Custom…" escape hatch for unlisted ids. */}
-                    {[...new Set([draft.model, ...modelOptions].filter(Boolean))].map(
+                    {/* The saved/default value plus the live + preset options,
+                        deduped, then a "Custom…" escape hatch for unlisted ids. */}
+                    {[...new Set([draft.model, ...liveModelOptions].filter(Boolean))].map(
                       (m) => (
                         <option key={m} value={m}>
                           {m}
@@ -344,6 +410,11 @@ export default function ProviderManager({
                     onChange={(e) => setDraft({ ...draft, model: e.target.value })}
                     placeholder="deepseek-v4-flash"
                   />
+                )}
+                {modelsError && (
+                  <span className="basemodel-keypanel-err">
+                    Couldn't load the live list — using defaults.
+                  </span>
                 )}
               </label>
 

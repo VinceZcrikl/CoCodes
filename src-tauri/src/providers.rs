@@ -405,6 +405,68 @@ pub async fn claude_default_model() -> Option<String> {
     json.get("model")?.as_str().map(str::to_owned)
 }
 
+/// Fetch the live model list from a provider's OpenAI-compatible `…/models`
+/// endpoint so the UI dropdown reflects what the vendor actually offers (e.g.
+/// Kimi at `https://api.moonshot.ai/v1/models`). `token` is the key the user just
+/// typed; when blank, the stored key for `provider_id` is used. Returns the model
+/// ids — the caller falls back to its static preset list on any error.
+#[tauri::command]
+pub async fn provider_models(
+    models_url: String,
+    provider_id: Option<String>,
+    token: Option<String>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fetch_models_blocking(&models_url, provider_id.as_deref(), token.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn fetch_models_blocking(
+    models_url: &str,
+    provider_id: Option<&str>,
+    token: Option<&str>,
+) -> Result<Vec<String>, String> {
+    // Prefer the freshly-typed key; otherwise the stored one (token storage is
+    // kind-agnostic, so resolve_codex finds it for claude providers too).
+    let token = token
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            provider_id
+                .and_then(|id| resolve_codex(id).ok().flatten())
+                .and_then(|r| r.token)
+        });
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = client.get(models_url);
+    if let Some(t) = token.as_deref() {
+        req = req.bearer_auth(t);
+    }
+    let resp = req.send().map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        let code = resp.status().as_u16();
+        let body = resp.text().unwrap_or_default();
+        return Err(format!("{code} {}", body.chars().take(200).collect::<String>()));
+    }
+    let v: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
+    let ids = v
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.get("id").and_then(|x| x.as_str()).map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(ids)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
