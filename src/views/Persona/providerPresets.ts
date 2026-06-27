@@ -50,18 +50,20 @@ export function effectiveModelsUrl(p: {
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     key: "kimi",
-    label: "Kimi (Kimi Code)",
+    label: "Kimi (Moonshot)",
     id: "kimi",
-    // kimi.com/code/docs — kimi-for-coding is a stable alias auto-mapped to the
-    // latest Kimi model server-side.
-    base_url: "https://api.kimi.com/coding/",
-    model: "kimi-k2.7-code",
-    models: ["kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5"],
-    // The coding base URL isn't where the model list lives — Kimi/Moonshot's
-    // OpenAI-compatible list endpoint is on api.moonshot.ai.
+    // Moonshot's Anthropic-compatible endpoint (works with a platform key from
+    // platform.moonshot.ai). NOTE: this is NOT api.kimi.com/coding — that's the
+    // separate Kimi-Code subscription service with its own keys.
+    base_url: "https://api.moonshot.ai/anthropic",
+    // Default to k2.5: it works without extended thinking, so it's reliable for
+    // every Claude Code call. kimi-k2.7-code / k2.6 require `thinking=enabled`
+    // (they 400 otherwise), so only pick them with thinking turned on.
+    model: "kimi-k2.5",
+    models: ["kimi-k2.5", "kimi-k2.6", "kimi-k2.7-code"],
     models_url: "https://api.moonshot.ai/v1/models",
     small_fast_model: null,
-    keyUrl: "https://www.kimi.com/code",
+    keyUrl: "https://platform.moonshot.ai/console/api-keys",
   },
   {
     key: "zhipu",
