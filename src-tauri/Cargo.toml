@@ -22,6 +22,8 @@ tauri = { version = "2.1", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-window-state = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Open vendor API-key pages in the system browser ("Get key" buttons).
+tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"

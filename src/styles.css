@@ -3426,6 +3426,11 @@ select.agent-editor-input {
 }
 .basemodel-row {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.basemodel-row-head {
+  display: flex;
   align-items: stretch;
   gap: 6px;
 }
@@ -3474,6 +3479,83 @@ select.agent-editor-input {
 .basemodel-addkey:hover {
   background: color-mix(in srgb, var(--accent-gold) 18%, transparent);
   border-color: color-mix(in srgb, var(--accent-gold) 55%, transparent);
+}
+/* Inline "set up this provider" panel under a base-model row: pick model + paste
+ * key without leaving the persona editor. */
+.basemodel-keypanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 28%, transparent);
+  background: color-mix(in srgb, var(--accent-gold) 6%, transparent);
+}
+.basemodel-keypanel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-soft, rgba(255, 255, 255, 0.78));
+}
+.basemodel-keypanel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.basemodel-keypanel-spacer {
+  flex: 1;
+}
+
+/* Advanced disclosure (persona editor + provider form): collapses the
+ * prompt-engineering / endpoint knobs the common path doesn't need. */
+.agent-editor-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.agent-editor-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft, rgba(255, 255, 255, 0.7));
+  cursor: pointer;
+}
+.agent-editor-advanced-toggle:hover {
+  color: var(--text-primary, #fff);
+}
+.agent-editor-advanced-chevron {
+  transition: transform 140ms ease;
+}
+.agent-editor-advanced-chevron.open {
+  transform: rotate(90deg);
+}
+.agent-editor-advanced-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* "Get key" + storage note row under the API-key field. */
+.provider-key-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.agent-editor-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .provider-list,
 .provider-form {

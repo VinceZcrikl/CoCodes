@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { useProviders, type Provider } from "../../hooks/usePersonas";
 import {
   PROVIDER_PRESETS,
   CUSTOM_PRESET,
   BLANK_PROVIDER as BLANK,
   draftFromPreset,
+  slugify,
   type ProviderPreset,
 } from "./providerPresets";
+import { openExternal } from "../../util/openExternal";
 
 /** Sentinel option in the Model dropdown that switches to free-text entry. */
 const CUSTOM_MODEL = "__custom__";
@@ -51,6 +53,9 @@ export default function ProviderManager({
   // When true, the model is typed freely instead of picked from the preset's
   // dropdown (the "Custom…" option, or a provider with no known model list).
   const [modelCustom, setModelCustom] = useState(false);
+  // Technical fields (Base URL, wire note / small-fast model) live under an
+  // "Advanced" fold — collapsed for presets (prefilled), open for Custom.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const activePreset = presets.find((p) => p.key === presetKey);
   // Models offered for the current draft: the chosen preset's list when adding,
@@ -71,12 +76,14 @@ export default function ProviderManager({
     setToken("");
     setError(null);
     setModelCustom(!first);
+    setAdvancedOpen(!first);
   };
   const applyPreset = (key: string) => {
     setPresetKey(key);
     const preset = presets.find((p) => p.key === key);
     setDraft(preset ? draftFromPreset(preset) : blankDraft());
     setModelCustom(!preset);
+    setAdvancedOpen(!preset);
   };
   const startEdit = (p: Provider) => {
     setDraft({ ...p });
@@ -87,6 +94,7 @@ export default function ProviderManager({
     // Free-text unless the saved model is one this provider's preset lists.
     const preset = presets.find((x) => x.id === p.id);
     setModelCustom(!preset || !preset.models.includes(p.model));
+    setAdvancedOpen(!preset);
   };
   const cancelForm = () => {
     setDraft(undefined);
@@ -108,6 +116,7 @@ export default function ProviderManager({
       setToken("");
       setError(null);
       setModelCustom(!preset);
+      setAdvancedOpen(!preset);
     } else if (initialEditId) {
       const p = providers.find((x) => x.id === initialEditId);
       if (p) {
@@ -119,6 +128,7 @@ export default function ProviderManager({
         setError(null);
         const preset = presets.find((x) => x.id === p.id);
         setModelCustom(!preset || !preset.models.includes(p.model));
+        setAdvancedOpen(!preset);
       }
     }
   }, [initialEditId, initialPresetKey, providers]);
@@ -134,16 +144,21 @@ export default function ProviderManager({
   const submit = async () => {
     if (!draft) return;
     setError(null);
-    if (!draft.label.trim()) return setError("Label is required.");
-    if (isNew && !draft.id.trim()) return setError("Id is required.");
-    if (!draft.base_url.trim()) return setError("Base URL is required.");
+    if (!draft.label.trim()) return setError("Name is required.");
+    // Id is derived from the name for new custom providers (the field is hidden).
+    const id = isNew ? draft.id.trim() || slugify(draft.label) : draft.id.trim();
+    if (!id) return setError("Name must contain letters or numbers.");
+    if (!draft.base_url.trim()) {
+      setAdvancedOpen(true);
+      return setError("Base URL is required.");
+    }
     if (!draft.model.trim()) return setError("Model is required.");
     setBusy(true);
     try {
       await save(
         {
           ...draft,
-          id: draft.id.trim(),
+          id,
           small_fast_model: draft.small_fast_model?.trim() || null,
         },
         token.trim() ? token.trim() : null,
@@ -251,14 +266,13 @@ export default function ProviderManager({
                       activePreset.local ? (
                         <>
                           Endpoint &amp; model pre-filled for {activePreset.label} —
-                          no API key needed. Install it from{" "}
-                          <span className="provider-key-url">{activePreset.keyUrl}</span>
+                          no API key needed (install it first).
                         </>
                       ) : (
                         <>
-                          Endpoint &amp; model pre-filled from {activePreset.label}'s
-                          docs — just paste your API key below. Get a key at{" "}
-                          <span className="provider-key-url">{activePreset.keyUrl}</span>
+                          Endpoint &amp; model pre-filled for {activePreset.label} —
+                          just pick a model and paste your API key below ("Get
+                          key" opens the page).
                         </>
                       )
                     ) : isCodex ? (
@@ -270,49 +284,34 @@ export default function ProviderManager({
                 </label>
               )}
               <label className="agent-editor-label">
-                <span>Label</span>
+                <span>Name</span>
                 <input
                   className="agent-editor-input"
                   value={draft.label}
-                  onChange={(e) => setDraft({ ...draft, label: e.target.value })}
+                  onChange={(e) => {
+                    const label = e.target.value;
+                    // New custom providers derive their id from the name, so the
+                    // user never sees the id field. Presets keep their fixed id.
+                    setDraft({
+                      ...draft,
+                      label,
+                      ...(isNew && presetKey === CUSTOM_PRESET
+                        ? { id: slugify(label) }
+                        : {}),
+                    });
+                  }}
                   placeholder="DeepSeek"
                 />
               </label>
-              <label className="agent-editor-label">
-                <span>Id</span>
-                <input
-                  className="agent-editor-input"
-                  value={draft.id}
-                  onChange={(e) => setDraft({ ...draft, id: e.target.value })}
-                  placeholder="deepseek"
-                  disabled={!isNew}
-                />
-              </label>
               {!isNew && (
-                <p className="agent-editor-hint">
-                  The id is tied to the stored token key and can't be changed.
-                </p>
+                <label className="agent-editor-label">
+                  <span>Id</span>
+                  <input className="agent-editor-input" value={draft.id} disabled />
+                  <p className="agent-editor-hint">
+                    The id is tied to the stored key and can't be changed.
+                  </p>
+                </label>
               )}
-              <label className="agent-editor-label">
-                <span>
-                  Base URL —{" "}
-                  {isCodex
-                    ? "OpenAI-compatible endpoint"
-                    : "Anthropic-compatible endpoint"}
-                </span>
-                <input
-                  className="agent-editor-input"
-                  value={draft.base_url}
-                  onChange={(e) =>
-                    setDraft({ ...draft, base_url: e.target.value })
-                  }
-                  placeholder={
-                    isCodex
-                      ? "http://localhost:11434/v1"
-                      : "https://api.deepseek.com/anthropic"
-                  }
-                />
-              </label>
               <label className="agent-editor-label">
                 <span>Model</span>
                 {modelOptions.length > 0 && !modelCustom ? (
@@ -347,34 +346,76 @@ export default function ProviderManager({
                   />
                 )}
               </label>
-              {isCodex ? (
-                <p className="agent-editor-hint">
-                  Codex only speaks OpenAI's Responses API, while this endpoint
-                  speaks Chat Completions. CoCodes runs a local translator proxy
-                  that bridges the two automatically — just give the Chat
-                  Completions base URL (ending in <code>/v1</code>) above.
-                </p>
-              ) : (
-                <label className="agent-editor-label">
-                  <span>Small / fast model (optional — defaults to Model)</span>
-                  <input
-                    className="agent-editor-input"
-                    value={draft.small_fast_model ?? ""}
-                    onChange={(e) =>
-                      setDraft({ ...draft, small_fast_model: e.target.value })
-                    }
-                    placeholder="deepseek-chat"
+
+              {/* Advanced — endpoint & protocol details, prefilled for presets. */}
+              <div className="agent-editor-advanced">
+                <button
+                  type="button"
+                  className="agent-editor-advanced-toggle"
+                  aria-expanded={advancedOpen}
+                  onClick={() => setAdvancedOpen((v) => !v)}
+                >
+                  <ChevronRight
+                    size={14}
+                    strokeWidth={2}
+                    className={`agent-editor-advanced-chevron${advancedOpen ? " open" : ""}`}
                   />
-                </label>
-              )}
+                  <span>Advanced</span>
+                </button>
+                {advancedOpen && (
+                  <div className="agent-editor-advanced-body">
+                    <label className="agent-editor-label">
+                      <span>
+                        Base URL —{" "}
+                        {isCodex
+                          ? "OpenAI-compatible endpoint"
+                          : "Anthropic-compatible endpoint"}
+                      </span>
+                      <input
+                        className="agent-editor-input"
+                        value={draft.base_url}
+                        onChange={(e) =>
+                          setDraft({ ...draft, base_url: e.target.value })
+                        }
+                        placeholder={
+                          isCodex
+                            ? "http://localhost:11434/v1"
+                            : "https://api.deepseek.com/anthropic"
+                        }
+                      />
+                    </label>
+                    {isCodex ? (
+                      <p className="agent-editor-hint">
+                        Codex only speaks OpenAI's Responses API, while this
+                        endpoint speaks Chat Completions. CoCodes runs a local
+                        translator proxy that bridges the two automatically — just
+                        give the Chat Completions base URL (ending in{" "}
+                        <code>/v1</code>) above.
+                      </p>
+                    ) : (
+                      <label className="agent-editor-label">
+                        <span>Small / fast model (optional — defaults to Model)</span>
+                        <input
+                          className="agent-editor-input"
+                          value={draft.small_fast_model ?? ""}
+                          onChange={(e) =>
+                            setDraft({ ...draft, small_fast_model: e.target.value })
+                          }
+                          placeholder="deepseek-chat"
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
               <label className="agent-editor-label">
                 <span>
-                  API token{" "}
+                  API key{" "}
                   <span className="provider-token-state">
                     {isCodex && isNew
                       ? "(optional — local providers need none)"
                       : isNew
-                        ? "(sent as ANTHROPIC_AUTH_TOKEN)"
+                        ? "(stored locally, sent only to the provider)"
                         : draft.has_token
                           ? "(stored — leave blank to keep)"
                           : "(not set)"}
@@ -385,13 +426,25 @@ export default function ProviderManager({
                   type="password"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder={draft.has_token ? "•••••• unchanged" : "sk-…"}
+                  placeholder={draft.has_token ? "•••••• unchanged" : "Paste your API key (sk-…)"}
                   autoComplete="off"
                 />
+                <div className="provider-key-actions">
+                  {activePreset && !activePreset.local && (
+                    <button
+                      type="button"
+                      className="agent-editor-link"
+                      onClick={() => void openExternal(activePreset.keyUrl)}
+                    >
+                      <ExternalLink size={12} strokeWidth={2} />
+                      <span>Get key</span>
+                    </button>
+                  )}
+                  <span className="agent-editor-hint">
+                    Stored in ~/.cocodes/.env, never shown again.
+                  </span>
+                </div>
               </label>
-              <p className="agent-editor-hint">
-                Stored in ~/.cocodes/.env, never shown again.
-              </p>
               {error && <div className="modal-status error">{error}</div>}
             </div>
           )}

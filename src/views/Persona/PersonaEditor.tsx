@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { KeyRound, Trash2, Upload } from "lucide-react";
+import { ChevronRight, ExternalLink, KeyRound, Trash2, Upload } from "lucide-react";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import ProviderManager from "./ProviderManager";
 import { PROVIDER_PRESETS, CODEX_PROVIDER_PRESETS } from "./providerPresets";
 import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
+import { openExternal } from "../../util/openExternal";
 import ClaudeMascot from "./ClaudeMascot";
 import CodexMascot from "./CodexMascot";
 import GrokMascot from "./GrokMascot";
@@ -40,9 +41,11 @@ interface Props {
 /** The default persona is the fallback identity and isn't deletable. */
 const DEFAULT_PERSONA_ID = "claude";
 
-/** Create / edit a persona: name + SOUL (system prompt) + MEMORY + USER. SOUL,
- *  MEMORY and USER are injected into the embedded terminal via
- *  `--append-system-prompt-file`. Ported from orb's AgentEditor design. */
+/** Create / edit a persona. Essentials (name, assistant, model, SOUL) are shown
+ *  up front; prompt-engineering knobs (Identity mode, MEMORY, USER) live under an
+ *  "Advanced" disclosure so the common path stays approachable. A persona's
+ *  third-party model + API key can be set inline here, without the separate
+ *  provider dialog. Ported from orb's AgentEditor design. */
 export default function PersonaEditor({
   editId,
   load,
@@ -63,8 +66,17 @@ export default function PersonaEditor({
   const [user, setUser] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Prompt-engineering knobs are collapsed by default; auto-opened when editing a
+  // persona that already uses any of them (so existing content is never hidden).
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Inline "set up a third-party model" panel: which row is expanded, plus its
+  // draft key + model. Replaces the bounce out to the provider dialog.
+  const [keyRowId, setKeyRowId] = useState<string | null>(null);
+  const [keyToken, setKeyToken] = useState("");
+  const [keyModel, setKeyModel] = useState("");
+  const [enabling, setEnabling] = useState(false);
   // null = closed; {} = open to the list; otherwise open straight into a form
-  // (the "Add key" shortcut on a base-model row).
+  // (the advanced "Manage providers…" path for custom endpoints).
   const [providerMgr, setProviderMgr] =
     useState<{ editId?: string; presetKey?: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -80,9 +92,8 @@ export default function PersonaEditor({
 
   // Every supported base-model provider, configured or not: the preset catalog
   // first (in catalog order, merged with any saved overrides), then any custom
-  // providers the user added that aren't in the catalog. Keyless rows expose an
-  // "Add key" shortcut instead of being silently unusable (local codex providers
-  // need no key and are usable as soon as they're picked).
+  // providers the user added that aren't in the catalog. Each row carries enough
+  // (models, keyUrl, base_url…) to set the provider up inline.
   const baseModelRows = useMemo(() => {
     const byId = new Map(providers.map((p) => [p.id, p]));
     const rows = catalog.map((preset) => {
@@ -91,6 +102,8 @@ export default function PersonaEditor({
         id: preset.id,
         label: cfg?.label ?? preset.label,
         model: cfg?.model ?? preset.model,
+        models: preset.models,
+        keyUrl: preset.keyUrl,
         base_url: cfg?.base_url ?? preset.base_url,
         wire_api: cfg?.wire_api ?? preset.wire_api ?? null,
         context_window: cfg?.context_window ?? preset.context_window ?? null,
@@ -98,7 +111,6 @@ export default function PersonaEditor({
         local: preset.local ?? false,
         hasToken: cfg?.has_token ?? false,
         configured: !!cfg,
-        presetKey: preset.key as string | undefined,
       };
     });
     for (const p of providers) {
@@ -109,6 +121,8 @@ export default function PersonaEditor({
         id: p.id,
         label: p.label,
         model: p.model,
+        models: [p.model],
+        keyUrl: "",
         base_url: p.base_url,
         wire_api: p.wire_api ?? null,
         context_window: p.context_window ?? null,
@@ -116,7 +130,6 @@ export default function PersonaEditor({
         local: false,
         hasToken: p.has_token,
         configured: true,
-        presetKey: undefined,
       });
     }
     return rows;
@@ -128,14 +141,17 @@ export default function PersonaEditor({
   // once a token is stored.
   const rowUsableWithoutKey = (row: BaseModelRow) => row.local;
 
-  const openAddKey = (row: BaseModelRow) =>
-    setProviderMgr(
-      row.configured ? { editId: row.id } : { presetKey: row.presetKey },
-    );
+  // Open the inline key/model panel for a row (add a key, or change key/model).
+  const openKeyPanel = (row: BaseModelRow) => {
+    setKeyRowId(row.id);
+    setKeyModel(row.model);
+    setKeyToken("");
+    setError(null);
+  };
 
-  // Selecting a row: an unconfigured keyless local provider is persisted in one
-  // click (so the backend can resolve it); an unconfigured cloud provider opens
-  // the "Add key" form; anything already usable is selected directly.
+  // Selecting a row: a keyless local provider is persisted in one click; an
+  // unconfigured cloud provider opens the inline key panel; anything already
+  // usable is selected directly.
   const selectRow = async (row: BaseModelRow) => {
     if (!row.configured && rowUsableWithoutKey(row)) {
       try {
@@ -160,11 +176,43 @@ export default function PersonaEditor({
       return;
     }
     if (!row.configured && !row.hasToken) {
-      openAddKey(row);
+      openKeyPanel(row);
       return;
     }
     setBaseModel(row.id);
   };
+
+  // Save the provider from the inline panel (preset-derived endpoint + chosen
+  // model + pasted key), then select it. A blank key on an already-configured
+  // provider keeps the stored one (backend preserves it).
+  const enableProvider = async (row: BaseModelRow) => {
+    setEnabling(true);
+    setError(null);
+    try {
+      await saveProvider(
+        {
+          id: row.id,
+          label: row.label,
+          base_url: row.base_url,
+          model: keyModel || row.model,
+          small_fast_model: null,
+          wire_api: row.wire_api ?? null,
+          context_window: row.context_window,
+          max_output_tokens: row.max_output_tokens,
+          has_token: false,
+        },
+        keyToken.trim() ? keyToken.trim() : null,
+      );
+      setBaseModel(row.id);
+      setKeyRowId(null);
+      setKeyToken("");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setEnabling(false);
+    }
+  };
+
   // Two-step delete: first click arms (auto-disarms after 3s), second confirms.
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -184,6 +232,12 @@ export default function PersonaEditor({
       setSoul(doc.soul);
       setMemory(doc.memory);
       setUser(doc.user);
+      // Reveal Advanced if this persona already uses any of its knobs.
+      setShowAdvanced(
+        doc.prompt_mode === "replace" ||
+          !!doc.memory?.trim() ||
+          !!doc.user?.trim(),
+      );
     });
     return () => {
       cancelled = true;
@@ -264,11 +318,12 @@ export default function PersonaEditor({
         <header className="modal-header">
           <h2>{heading}</h2>
           <p className="modal-subtitle">
-            SOUL, memory and user notes are injected into the terminal as the
-            CLI's system prompt.
+            A persona is a named assistant with its own look, model and
+            personality. Only a name is required — everything else is optional.
           </p>
         </header>
         <div className="modal-body">
+          {/* ── Avatar ─────────────────────────────────────────────── */}
           <div className="agent-editor-label">
             <span>Avatar</span>
             <div className="avatar-picker">
@@ -341,6 +396,25 @@ export default function PersonaEditor({
             </div>
           </div>
 
+          {/* ── Name (required) ────────────────────────────────────── */}
+          <label className="agent-editor-label">
+            <span>Name</span>
+            <input
+              type="text"
+              className="agent-editor-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Frontend helper"
+              disabled={isEdit}
+            />
+            <p className="agent-editor-hint">
+              {isEdit
+                ? "The name is tied to the persona's folder on disk and can't be changed here."
+                : "What you'll call this persona."}
+            </p>
+          </label>
+
+          {/* ── CLI / assistant ────────────────────────────────────── */}
           <div className="agent-editor-label">
             <span>CLI</span>
             <div className="cli-picker">
@@ -352,7 +426,10 @@ export default function PersonaEditor({
                   onClick={() => {
                     // A base-model preset is CLI-specific; clear it on switch so a
                     // claude provider can't leak onto a codex persona (or vice versa).
-                    if (opt.id !== cli) setBaseModel("");
+                    if (opt.id !== cli) {
+                      setBaseModel("");
+                      setKeyRowId(null);
+                    }
                     setCli(opt.id);
                   }}
                   title={opt.hint}
@@ -362,8 +439,12 @@ export default function PersonaEditor({
                 </button>
               ))}
             </div>
+            <p className="agent-editor-hint">
+              Which AI assistant this persona runs.
+            </p>
           </div>
 
+          {/* ── Base model (+ inline key/model setup) ──────────────── */}
           {showBaseModel && (
             <div className="agent-editor-label">
               <span>Base model</span>
@@ -386,54 +467,115 @@ export default function PersonaEditor({
                 </button>
                 {baseModelRows.map((row) => {
                   const needsKey = !row.hasToken && !rowUsableWithoutKey(row);
+                  const editingKey = keyRowId === row.id;
                   return (
                     <div
                       key={row.id}
-                      className={`basemodel-row${baseModel === row.id ? " active" : ""}`}
+                      className={`basemodel-row${baseModel === row.id ? " active" : ""}${editingKey ? " editing" : ""}`}
                     >
-                      <button
-                        type="button"
-                        className="basemodel-row-main"
-                        onClick={() => void selectRow(row)}
-                        title={row.model}
-                      >
-                        <span className="cli-picker-label">{row.label}</span>
-                        <span className="cli-picker-hint">
-                          {row.model}
-                          {row.local ? " · local" : ""}
-                          {needsKey ? " · needs key" : ""}
-                        </span>
-                      </button>
-                      {needsKey && (
+                      <div className="basemodel-row-head">
                         <button
                           type="button"
-                          className="basemodel-addkey"
-                          onClick={() => openAddKey(row)}
-                          title="Add an API key for this provider"
+                          className="basemodel-row-main"
+                          onClick={() => void selectRow(row)}
+                          title={row.model}
                         >
-                          <KeyRound size={12} strokeWidth={2} />
-                          <span>Add key</span>
+                          <span className="cli-picker-label">{row.label}</span>
+                          <span className="cli-picker-hint">
+                            {row.model}
+                            {row.local ? " · local" : ""}
+                            {needsKey ? " · needs key" : ""}
+                          </span>
                         </button>
+                        {!row.local && (needsKey || row.configured) && (
+                          <button
+                            type="button"
+                            className="basemodel-addkey"
+                            onClick={() => openKeyPanel(row)}
+                            title={needsKey ? "Add an API key" : "Change key or model"}
+                          >
+                            <KeyRound size={12} strokeWidth={2} />
+                            <span>{needsKey ? "Add key" : "Key"}</span>
+                          </button>
+                        )}
+                      </div>
+                      {editingKey && (
+                        <div className="basemodel-keypanel">
+                          {row.models.length > 1 && (
+                            <label className="basemodel-keypanel-field">
+                              <span>Model</span>
+                              <select
+                                className="agent-editor-input"
+                                value={keyModel}
+                                onChange={(e) => setKeyModel(e.target.value)}
+                              >
+                                {[...new Set([keyModel, ...row.models].filter(Boolean))].map(
+                                  (m) => (
+                                    <option key={m} value={m}>
+                                      {m}
+                                    </option>
+                                  ),
+                                )}
+                              </select>
+                            </label>
+                          )}
+                          <label className="basemodel-keypanel-field">
+                            <span>
+                              API key
+                              {row.hasToken ? " (leave blank to keep)" : ""}
+                            </span>
+                            <input
+                              className="agent-editor-input"
+                              type="password"
+                              autoComplete="off"
+                              placeholder={
+                                row.hasToken ? "•••••• unchanged" : "Paste your API key (sk-…)"
+                              }
+                              value={keyToken}
+                              onChange={(e) => setKeyToken(e.target.value)}
+                            />
+                          </label>
+                          <div className="basemodel-keypanel-actions">
+                            {row.keyUrl && (
+                              <button
+                                type="button"
+                                className="agent-editor-link"
+                                onClick={() => void openExternal(row.keyUrl)}
+                              >
+                                <ExternalLink size={12} strokeWidth={2} />
+                                <span>Get key</span>
+                              </button>
+                            )}
+                            <span className="basemodel-keypanel-spacer" />
+                            <button
+                              type="button"
+                              className="modal-btn"
+                              onClick={() => {
+                                setKeyRowId(null);
+                                setKeyToken("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="modal-btn primary"
+                              disabled={enabling || (!row.hasToken && !keyToken.trim())}
+                              onClick={() => void enableProvider(row)}
+                            >
+                              {enabling ? "Saving…" : "Enable"}
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   );
                 })}
               </div>
               <p className="agent-editor-hint">
-                {isCodex ? (
-                  <>
-                    Routes this persona's <code>codex</code> at a Chat
-                    Completions model (DeepSeek, Qwen, local Ollama / LM Studio)
-                    through CoCodes's built-in Responses↔Chat translator. Other
-                    personas — and the default — keep your Codex sign-in.
-                  </>
-                ) : (
-                  <>
-                    Routes this persona's <code>claude</code> at a third-party
-                    Anthropic-compatible endpoint. Other personas — and the
-                    default — stay on your Claude subscription.
-                  </>
-                )}{" "}
+                The model it uses. Default uses your{" "}
+                {isCodex ? "Codex sign-in" : "Claude subscription"}; pick a
+                provider to use a different model (paste its key right here).{" "}
                 <button
                   type="button"
                   className="agent-editor-link"
@@ -445,91 +587,102 @@ export default function PersonaEditor({
             </div>
           )}
 
-          {cli === "claude" && (
-            <div className="agent-editor-label">
-              <span>Identity</span>
-              <div className="cli-picker">
-                <button
-                  type="button"
-                  className={`cli-picker-btn${promptMode !== "replace" ? " active" : ""}`}
-                  onClick={() => setPromptMode("append")}
-                >
-                  <span className="cli-picker-label">Augment</span>
-                  <span className="cli-picker-hint">Claude Code + SOUL</span>
-                </button>
-                <button
-                  type="button"
-                  className={`cli-picker-btn${promptMode === "replace" ? " active" : ""}`}
-                  onClick={() => setPromptMode("replace")}
-                >
-                  <span className="cli-picker-label">Replace</span>
-                  <span className="cli-picker-hint">SOUL only · pure persona</span>
-                </button>
-              </div>
-              <p className="agent-editor-hint">
-                <strong>Replace</strong> makes the SOUL the entire system prompt —
-                best for writing / character personas and third-party models that
-                ignore an appended persona. <strong>Augment</strong> keeps Claude
-                Code's coding identity and appends the SOUL.
-              </p>
-            </div>
-          )}
-
+          {/* ── SOUL (personality) ─────────────────────────────────── */}
           <label className="agent-editor-label">
-            <span>Name</span>
-            <input
-              type="text"
-              className="agent-editor-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="dev-bot"
-              disabled={isEdit}
-            />
-          </label>
-          {isEdit && (
-            <p className="agent-editor-hint">
-              The name is tied to the persona's folder on disk and can't be
-              changed here.
-            </p>
-          )}
-
-          <label className="agent-editor-label">
-            <span>SOUL — system prompt (optional)</span>
+            <span>SOUL</span>
             <textarea
               className="agent-editor-input agent-editor-soul"
               value={soul}
               onChange={(e) => setSoul(e.target.value)}
-              rows={7}
+              rows={6}
               placeholder="You are a terse, senior Rust engineer…"
             />
-            {cli === "claude" && !soul.trim() && (
-              <p className="agent-editor-hint">
-                Leave blank to use Claude Code's default system prompt.
-              </p>
+            <p className="agent-editor-hint">
+              System prompt — this persona's personality &amp; behaviour.{" "}
+              {cli === "claude" && !soul.trim()
+                ? "Leave blank to use Claude Code's default."
+                : "Optional."}
+            </p>
+          </label>
+
+          {/* ── Advanced (collapsed) ───────────────────────────────── */}
+          <div className="agent-editor-advanced">
+            <button
+              type="button"
+              className="agent-editor-advanced-toggle"
+              aria-expanded={showAdvanced}
+              onClick={() => setShowAdvanced((v) => !v)}
+            >
+              <ChevronRight
+                size={14}
+                strokeWidth={2}
+                className={`agent-editor-advanced-chevron${showAdvanced ? " open" : ""}`}
+              />
+              <span>Advanced</span>
+            </button>
+            {showAdvanced && (
+              <div className="agent-editor-advanced-body">
+                {cli === "claude" && (
+                  <div className="agent-editor-label">
+                    <span>Identity</span>
+                    <div className="cli-picker">
+                      <button
+                        type="button"
+                        className={`cli-picker-btn${promptMode !== "replace" ? " active" : ""}`}
+                        onClick={() => setPromptMode("append")}
+                      >
+                        <span className="cli-picker-label">Augment</span>
+                        <span className="cli-picker-hint">Claude Code + SOUL</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`cli-picker-btn${promptMode === "replace" ? " active" : ""}`}
+                        onClick={() => setPromptMode("replace")}
+                      >
+                        <span className="cli-picker-label">Replace</span>
+                        <span className="cli-picker-hint">SOUL only · pure persona</span>
+                      </button>
+                    </div>
+                    <p className="agent-editor-hint">
+                      <strong>Replace</strong> makes the SOUL the entire system
+                      prompt — best for writing / character personas and
+                      third-party models that ignore an appended persona.{" "}
+                      <strong>Augment</strong> keeps Claude Code's coding identity
+                      and appends the SOUL.
+                    </p>
+                  </div>
+                )}
+
+                <label className="agent-editor-label">
+                  <span>MEMORY</span>
+                  <textarea
+                    className="agent-editor-input agent-editor-soul"
+                    value={memory}
+                    onChange={(e) => setMemory(e.target.value)}
+                    rows={4}
+                    placeholder="The project is CoCodes, a Tauri cockpit…"
+                  />
+                  <p className="agent-editor-hint">
+                    Facts it should always remember (e.g. about your project).
+                  </p>
+                </label>
+
+                <label className="agent-editor-label">
+                  <span>USER</span>
+                  <textarea
+                    className="agent-editor-input agent-editor-soul"
+                    value={user}
+                    onChange={(e) => setUser(e.target.value)}
+                    rows={3}
+                    placeholder="Prefers concise answers and minimal dependencies."
+                  />
+                  <p className="agent-editor-hint">
+                    About you, so it tailors its answers.
+                  </p>
+                </label>
+              </div>
             )}
-          </label>
-
-          <label className="agent-editor-label">
-            <span>MEMORY — what the CLI should remember (optional)</span>
-            <textarea
-              className="agent-editor-input agent-editor-soul"
-              value={memory}
-              onChange={(e) => setMemory(e.target.value)}
-              rows={4}
-              placeholder="The project is CoCodes, a Tauri cockpit…"
-            />
-          </label>
-
-          <label className="agent-editor-label">
-            <span>USER — about you (optional)</span>
-            <textarea
-              className="agent-editor-input agent-editor-soul"
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
-              rows={3}
-              placeholder="Prefers concise answers and minimal dependencies."
-            />
-          </label>
+          </div>
 
           {error && <div className="modal-status error">{error}</div>}
         </div>

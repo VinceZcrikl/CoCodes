@@ -132,6 +132,17 @@ export const CODEX_PROVIDER_PRESETS: ProviderPreset[] = [
   },
 ];
 
+/** Filesystem/env-safe provider id derived from a label — mirrors the backend's
+ *  `sanitize_provider_id` (lowercased alphanumerics + dash/underscore). Lets the
+ *  form auto-fill the Id so users never see that field. */
+export function slugify(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 /** The sentinel dropdown value for "fill nothing, I'll type it myself". */
 export const CUSTOM_PRESET = "";
 
