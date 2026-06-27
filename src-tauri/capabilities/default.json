@@ -23,6 +23,6 @@
     "core:webview:default",
     "updater:default",
     "process:default",
-    "opener:allow-open-url"
+    "opener:default"
   ]
 }
