@@ -7,6 +7,7 @@ import {
   sortPersonasByCli,
   CLI_LABELS,
 } from "../../hooks/usePersonas";
+import { useModelActivity } from "../../hooks/useModelActivity";
 import { useProfileStore } from "../../state/profileStore";
 import PersonaAvatar, { personaColor } from "./PersonaAvatar";
 import {
@@ -47,6 +48,9 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
   const { personas, get } = usePersonas();
   const activeId = useProfileStore((s) => s.activeProfileId);
   const setActive = useProfileStore((s) => s.setActiveProfile);
+  // Live base-model pulse: blinks the indicator when the switched model is
+  // actually used (Codex proxy request / Claude session launch).
+  const activity = useModelActivity();
   const [hover, setHover] = useState<HoverState | null>(null);
   const [ghost, setGhost] = useState<GhostState | null>(null);
   // Full SOUL bodies, fetched lazily on first hover (the list summaries only
@@ -189,7 +193,16 @@ export default function ProfileConstellation({ activeModel, onEdit, onNew }: Pro
                 <span className="window-chat-constellation-brandmeta">
                   <span className="window-chat-constellation-brandname">{p.name}</span>
                   {activeModel && (
-                    <span className="window-chat-constellation-brandmodel">{activeModel}</span>
+                    <span className="window-chat-constellation-brandmodel">
+                      {activeModel}
+                      {activity.live && activity.model === activeModel && (
+                        <span
+                          className="model-live-dot"
+                          title={`${activeModel} is live — just used`}
+                          aria-label="model active"
+                        />
+                      )}
+                    </span>
                   )}
                 </span>
               ) : (

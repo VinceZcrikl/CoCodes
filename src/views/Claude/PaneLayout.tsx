@@ -17,7 +17,8 @@ import {
   type SplitNode,
 } from "../../hooks/useClaudeSessions";
 import { draggingPersona } from "../../state/dragState";
-import { personaColor } from "../Persona/PersonaAvatar";
+import PersonaAvatar, { personaColor } from "../Persona/PersonaAvatar";
+import { usePersonaModel } from "../../hooks/usePersonaModel";
 import PalettePanel from "../Cockpit/PalettePanel";
 import TriondaBall from "../Cockpit/TriondaBall";
 import LaurelWreath from "../Cockpit/LaurelWreath";
@@ -143,6 +144,10 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   // use its own profileId; otherwise fall back to the session-level one.
   const effectiveProfileId = node.profileId ?? ctx.profileId;
 
+  // Persona avatar + real model label for this pane's header, so each terminal
+  // visibly shows who/what it's running.
+  const identity = usePersonaModel(effectiveProfileId, node.cli);
+
   // The directory this pane spawns/resumes in. Once a pane has started, its cwd
   // is pinned (recorded at first spawn — `null` means home), so `--resume` runs
   // in the same project dir Claude saved the conversation under. Only a pane
@@ -187,6 +192,12 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
       onPointerLeave={() => setDropOver(false)}
     >
       <div className="pane-header">
+        <PersonaAvatar
+          id={effectiveProfileId}
+          name={identity.name}
+          avatar={identity.avatar}
+          className="pane-header-avatar"
+        />
         {editing ? (
           <input
             className="pane-header-title-input"
@@ -211,6 +222,14 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
             onClick={(e) => { e.stopPropagation(); setEditing(true); }}
           >
             {displayTitle}
+          </span>
+        )}
+        {!editing && (
+          <span
+            className="pane-header-model"
+            title={`${identity.name} · ${identity.model}`}
+          >
+            {identity.model}
           </span>
         )}
         <span className="pane-header-spacer" />

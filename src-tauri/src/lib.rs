@@ -66,6 +66,9 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             set_macos_dock_icon();
+            // Register the app handle so the Codex proxy / Claude launch can emit
+            // `model-activity` events to the cockpit's live base-model indicator.
+            codex_proxy::init(app.handle());
             // Carry over data from the pre-rename home before anything reads it.
             persona::migrate_legacy_home();
             tauri::async_runtime::spawn(persona::seed_default_personas());

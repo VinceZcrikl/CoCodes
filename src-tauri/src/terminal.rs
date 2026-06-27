@@ -614,6 +614,10 @@ pub async fn terminal_open(
         // Keep AUTH_TOKEN the sole Bearer source: a stale ANTHROPIC_API_KEY
         // inherited from the parent shell would otherwise compete with the token.
         cmd.env_remove("ANTHROPIC_API_KEY");
+        // Pulse the cockpit's live indicator at launch (Claude talks straight to
+        // the endpoint, so there's no per-request hook — this is the activation
+        // signal).
+        crate::codex_proxy::emit_activity("claude", &p.name, &p.model);
     }
 
     // Per-persona base-model substitution for Codex. Modern Codex speaks only
@@ -629,7 +633,7 @@ pub async fn terminal_open(
     if cli_name == "codex" {
         if let Some(preset_id) = crate::persona::base_model_for(profile_id.as_deref()) {
             match crate::providers::resolve_codex(&preset_id) {
-                Ok(Some(p)) => match crate::codex_proxy::ensure_started() {
+                Ok(Some(p)) => match crate::codex_proxy::ensure_started(&app) {
                     Ok(port) => {
                         let prov = format!("cocodes_{}", preset_id.replace('-', "_"));
                         let base_url = crate::codex_proxy::base_url_for(port, &preset_id);

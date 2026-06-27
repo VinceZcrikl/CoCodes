@@ -8,7 +8,11 @@ export interface ProviderPreset {
   label: string;
   id: string;
   base_url: string;
+  /** The recommended (default) model — must be one of `models`. */
   model: string;
+  /** Selectable models for this provider, shown as a dropdown in the form. The
+   *  picker also offers a "Custom…" escape hatch for ids not listed here. */
+  models: string[];
   small_fast_model: string | null;
   keyUrl: string;
   /** OpenAI/Codex wire protocol ("chat" | "responses"); set on Codex presets,
@@ -36,6 +40,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     // latest Kimi model server-side.
     base_url: "https://api.kimi.com/coding/",
     model: "kimi-for-coding",
+    models: ["kimi-for-coding", "kimi-k2-thinking", "kimi-k2-0905-preview"],
     small_fast_model: null,
     keyUrl: "https://www.kimi.com/code",
   },
@@ -46,6 +51,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     // docs.z.ai — Claude Code endpoint; Opus/Sonnet → glm-4.7, Haiku → glm-4.5-air.
     base_url: "https://api.z.ai/api/anthropic",
     model: "glm-4.7",
+    models: ["glm-4.7", "glm-4.6", "glm-4.5-air"],
     small_fast_model: "glm-4.5-air",
     keyUrl: "https://z.ai/manage-apikey/apikey-list",
   },
@@ -57,6 +63,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     // the latest agentic coding model.
     base_url: "https://api.stepfun.ai/step_plan",
     model: "step-3.7-flash",
+    models: ["step-3.7-flash", "step-3.7"],
     small_fast_model: null,
     keyUrl: "https://platform.stepfun.ai",
   },
@@ -65,7 +72,8 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     label: "DeepSeek",
     id: "deepseek",
     base_url: "https://api.deepseek.com/anthropic",
-    model: "deepseek-chat",
+    model: "deepseek-v4-flash",
+    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
     small_fast_model: null,
     keyUrl: "https://platform.deepseek.com/api_keys",
   },
@@ -84,6 +92,7 @@ export const CODEX_PROVIDER_PRESETS: ProviderPreset[] = [
     // Codex `--oss` default; gpt-oss:20b is the recommended local coding model.
     base_url: "http://localhost:11434/v1",
     model: "gpt-oss:20b",
+    models: ["gpt-oss:20b", "gpt-oss:120b", "qwen2.5-coder:32b"],
     small_fast_model: null,
     wire_api: "chat",
     local: true,
@@ -97,6 +106,7 @@ export const CODEX_PROVIDER_PRESETS: ProviderPreset[] = [
     id: "lmstudio-oss",
     base_url: "http://localhost:1234/v1",
     model: "gpt-oss-20b",
+    models: ["gpt-oss-20b", "gpt-oss-120b", "qwen2.5-coder-32b"],
     small_fast_model: null,
     wire_api: "chat",
     local: true,
@@ -111,10 +121,11 @@ export const CODEX_PROVIDER_PRESETS: ProviderPreset[] = [
     // platform.deepseek.com — OpenAI-compatible endpoint (note: `/v1`, vs the
     // `/anthropic` endpoint the claude preset uses).
     base_url: "https://api.deepseek.com/v1",
-    model: "deepseek-chat",
+    model: "deepseek-v4-flash",
+    models: ["deepseek-v4-flash", "deepseek-v4-pro"],
     small_fast_model: null,
     wire_api: "chat",
-    // deepseek-chat (DeepSeek V3.x): 128K context, 8K max output.
+    // DeepSeek V4: 128K context, 8K max output.
     context_window: 131072,
     max_output_tokens: 8192,
     keyUrl: "https://platform.deepseek.com/api_keys",

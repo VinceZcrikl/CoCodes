@@ -25,6 +25,7 @@ use std::io::{self, BufRead, BufReader, Read};
 use std::sync::{Mutex, OnceLock};
 
 use serde_json::{json, Value};
+use tauri::{AppHandle, Emitter};
 use tiny_http::{Header, Response, Server, StatusCode};
 
 use crate::providers;
@@ -33,11 +34,15 @@ use crate::providers;
 static PORT: OnceLock<u16> = OnceLock::new();
 /// Serializes the one-time bind so concurrent first launches don't race.
 static START_LOCK: Mutex<()> = Mutex::new(());
+/// App handle for emitting `model-activity` events to the UI live indicator.
+static APP: OnceLock<AppHandle> = OnceLock::new();
 
 /// Ensure the proxy is running and return its loopback port. Idempotent: the
 /// first caller binds `127.0.0.1:0` and spawns the accept loop; later callers
-/// get the cached port.
-pub fn ensure_started() -> Result<u16, String> {
+/// get the cached port. The `app` handle is stored on first call so request
+/// handlers can emit live-activity events to the cockpit indicator.
+pub fn ensure_started(app: &AppHandle) -> Result<u16, String> {
+    let _ = APP.set(app.clone());
     if let Some(p) = PORT.get() {
         return Ok(*p);
     }
@@ -66,6 +71,25 @@ pub fn ensure_started() -> Result<u16, String> {
 /// re-resolve the upstream endpoint + key per request.
 pub fn base_url_for(port: u16, provider_id: &str) -> String {
     format!("http://127.0.0.1:{port}/p/{provider_id}/v1")
+}
+
+/// Register the app handle once at startup so `emit_activity` can reach the UI
+/// even on the Claude path (which never starts the proxy).
+pub fn init(app: &AppHandle) {
+    let _ = APP.set(app.clone());
+}
+
+/// Emit a `model-activity` event that pulses the cockpit's live indicator —
+/// proof to the user that a switched base model is actually being used. `cli` is
+/// `"codex"` (per proxied request) or `"claude"` (per session launch). No-op if
+/// no app handle has been registered yet.
+pub fn emit_activity(cli: &str, provider: &str, model: &str) {
+    if let Some(app) = APP.get() {
+        let _ = app.emit(
+            "model-activity",
+            json!({ "cli": cli, "provider": provider, "model": model }),
+        );
+    }
 }
 
 fn accept_loop(server: Server) {
@@ -134,6 +158,9 @@ fn handle(mut request: tiny_http::Request) {
          (auth={})",
         if resolved.token.is_some() { "key" } else { "none" }
     );
+    // Pulse the cockpit's live indicator — a per-request, no-logs-needed signal
+    // that the switched model is actually being used.
+    emit_activity("codex", &provider_id, &model);
 
     let client = match reqwest::blocking::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))

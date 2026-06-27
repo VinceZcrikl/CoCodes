@@ -9,6 +9,9 @@ import {
   type ProviderPreset,
 } from "./providerPresets";
 
+/** Sentinel option in the Model dropdown that switches to free-text entry. */
+const CUSTOM_MODEL = "__custom__";
+
 interface Props {
   onClose: () => void;
   /** Which CLI's providers to manage — selects the preset catalog and copy.
@@ -45,8 +48,15 @@ export default function ProviderManager({
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // When true, the model is typed freely instead of picked from the preset's
+  // dropdown (the "Custom…" option, or a provider with no known model list).
+  const [modelCustom, setModelCustom] = useState(false);
 
   const activePreset = presets.find((p) => p.key === presetKey);
+  // Models offered for the current draft: the chosen preset's list when adding,
+  // or the matching preset (by id) when editing. Empty → free-text model entry.
+  const modelPreset = activePreset ?? presets.find((p) => p.id === draft?.id);
+  const modelOptions = modelPreset?.models ?? [];
   // A custom (non-preset) draft for this CLI: codex providers default to the
   // "chat" wire protocol; claude ones have no wire_api.
   const blankDraft = (): Provider => ({ ...BLANK, wire_api: isCodex ? "chat" : null });
@@ -60,11 +70,13 @@ export default function ProviderManager({
     setIsNew(true);
     setToken("");
     setError(null);
+    setModelCustom(!first);
   };
   const applyPreset = (key: string) => {
     setPresetKey(key);
     const preset = presets.find((p) => p.key === key);
     setDraft(preset ? draftFromPreset(preset) : blankDraft());
+    setModelCustom(!preset);
   };
   const startEdit = (p: Provider) => {
     setDraft({ ...p });
@@ -72,6 +84,9 @@ export default function ProviderManager({
     setPresetKey(CUSTOM_PRESET);
     setToken("");
     setError(null);
+    // Free-text unless the saved model is one this provider's preset lists.
+    const preset = presets.find((x) => x.id === p.id);
+    setModelCustom(!preset || !preset.models.includes(p.model));
   };
   const cancelForm = () => {
     setDraft(undefined);
@@ -92,6 +107,7 @@ export default function ProviderManager({
       setIsNew(true);
       setToken("");
       setError(null);
+      setModelCustom(!preset);
     } else if (initialEditId) {
       const p = providers.find((x) => x.id === initialEditId);
       if (p) {
@@ -101,6 +117,8 @@ export default function ProviderManager({
         setPresetKey(CUSTOM_PRESET);
         setToken("");
         setError(null);
+        const preset = presets.find((x) => x.id === p.id);
+        setModelCustom(!preset || !preset.models.includes(p.model));
       }
     }
   }, [initialEditId, initialPresetKey, providers]);
@@ -297,12 +315,37 @@ export default function ProviderManager({
               </label>
               <label className="agent-editor-label">
                 <span>Model</span>
-                <input
-                  className="agent-editor-input"
-                  value={draft.model}
-                  onChange={(e) => setDraft({ ...draft, model: e.target.value })}
-                  placeholder="deepseek-chat"
-                />
+                {modelOptions.length > 0 && !modelCustom ? (
+                  <select
+                    className="agent-editor-input"
+                    value={draft.model}
+                    onChange={(e) => {
+                      if (e.target.value === CUSTOM_MODEL) {
+                        setModelCustom(true);
+                      } else {
+                        setDraft({ ...draft, model: e.target.value });
+                      }
+                    }}
+                  >
+                    {/* The saved/default value plus the preset's options, deduped,
+                        then a "Custom…" escape hatch for unlisted ids. */}
+                    {[...new Set([draft.model, ...modelOptions].filter(Boolean))].map(
+                      (m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ),
+                    )}
+                    <option value={CUSTOM_MODEL}>Custom…</option>
+                  </select>
+                ) : (
+                  <input
+                    className="agent-editor-input"
+                    value={draft.model}
+                    onChange={(e) => setDraft({ ...draft, model: e.target.value })}
+                    placeholder="deepseek-v4-flash"
+                  />
+                )}
               </label>
               {isCodex ? (
                 <p className="agent-editor-hint">

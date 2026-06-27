@@ -786,6 +786,31 @@ body {
   background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
   color: var(--text-primary, #fff);
 }
+/* Persona avatar (before the title) + model (after it), so each terminal header
+   reads avatar · title · model and visibly declares who/what it's running. */
+.pane-header-avatar.persona-avatar {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex: none;
+  font-size: 9px;
+  line-height: 14px;
+}
+.pane-header-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.pane-header-model {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--text-dim, rgba(255, 255, 255, 0.5));
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .pane-header-title-input {
   font-size: 10px;
   letter-spacing: 0.04em;
@@ -2527,6 +2552,30 @@ body {
   margin: 0 4px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 1px;
+}
+
+/* Live base-model indicator — blinks next to the active model label whenever the
+   switched model is actually used (Codex proxy request / Claude session launch). */
+.model-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #34d399;
+  vertical-align: middle;
+  animation: model-live-pulse 1.2s ease-out infinite;
+}
+@keyframes model-live-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
 }
 
 .window-chat-constellation-cell {
