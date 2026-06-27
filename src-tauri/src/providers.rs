@@ -53,6 +53,9 @@ pub struct Provider {
 /// The strings [`terminal_open`](crate::terminal) injects for a persona's chosen
 /// provider.
 pub struct Resolved {
+    /// Human-readable provider label (e.g. "DeepSeek"), used to tell the model
+    /// its true identity in the persona system prompt.
+    pub name: String,
     pub base_url: String,
     pub auth_token: String,
     pub model: String,
@@ -238,6 +241,7 @@ fn resolve_in(base: &Path, id: &str) -> Result<Option<Resolved>, String> {
         return Ok(None);
     };
     Ok(Some(Resolved {
+        name: if p.label.trim().is_empty() { p.id.clone() } else { p.label.clone() },
         base_url: p.base_url,
         auth_token: token,
         model: p.model,

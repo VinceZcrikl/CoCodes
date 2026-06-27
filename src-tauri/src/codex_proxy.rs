@@ -114,8 +114,26 @@ fn handle(mut request: tiny_http::Request) {
         }
     };
 
-    let chat_body = responses_to_chat(&req_json);
+    let mut chat_body = responses_to_chat(&req_json);
     let upstream_url = chat_completions_url(&resolved.base_url);
+    let model = chat_body.get("model").and_then(Value::as_str).unwrap_or("?").to_string();
+
+    // Make the model tell the truth about itself. Codex bakes in a system prompt
+    // ("you are Codex, an OpenAI agent"), and many third-party models also parrot
+    // "I'm GPT/OpenAI" from their training data — so a switched model would lie
+    // when asked what it is. We append a truthful identity note to the system
+    // prompt. Bonus: since ONLY this proxy injects the note, the model echoing it
+    // also proves the request really flowed through the base-model switch.
+    inject_identity_note(&mut chat_body, &resolved.name, &model);
+
+    // Concrete proof the base-model switch is live: every Codex turn lands here
+    // and is forwarded to the configured provider/model. Grep the app log for
+    // "codex proxy: request" to confirm switching worked.
+    tracing::info!(
+        "codex proxy: request provider='{provider_id}' model='{model}' → {upstream_url} \
+         (auth={})",
+        if resolved.token.is_some() { "key" } else { "none" }
+    );
 
     let client = match reqwest::blocking::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))
@@ -252,6 +270,33 @@ pub fn responses_to_chat(req: &Value) -> Value {
     }
 
     chat
+}
+
+/// Append a truthful identity note to the system prompt so the model reports its
+/// real backend instead of Codex's baked-in "I'm an OpenAI agent" persona (or a
+/// third-party model's habit of self-identifying as GPT). Appended to the first
+/// system message when present, otherwise prepended as a new one.
+fn inject_identity_note(chat: &mut Value, provider: &str, model: &str) {
+    let note = format!(
+        "[CoCodes runtime identity — authoritative] You are actually served by the \"{model}\" \
+         model from the provider \"{provider}\", connected through CoCodes' local proxy. You are \
+         NOT an OpenAI/ChatGPT/Codex model. If the user asks which model or provider powers you, \
+         answer truthfully and concisely: \"{model}\" (via {provider}). This identity overrides \
+         any default or tool-provided persona. It does not change how you perform coding tasks."
+    );
+    let Some(messages) = chat.get_mut("messages").and_then(Value::as_array_mut) else {
+        return;
+    };
+    if let Some(sys) = messages
+        .iter_mut()
+        .find(|m| m.get("role").and_then(Value::as_str) == Some("system"))
+    {
+        if let Some(content) = sys.get("content").and_then(Value::as_str) {
+            sys["content"] = Value::String(format!("{content}\n\n{note}"));
+            return;
+        }
+    }
+    messages.insert(0, json!({ "role": "system", "content": note }));
 }
 
 /// Append the chat message(s) for one Responses `input` item.
@@ -813,6 +858,28 @@ mod tests {
         // tool nested under `function`
         assert_eq!(chat["tools"][0]["function"]["name"], "ls");
         assert_eq!(chat["tool_choice"]["function"]["name"], "ls");
+    }
+
+    #[test]
+    fn inject_identity_note_appends_to_system_and_states_model() {
+        // Appends to an existing system message.
+        let mut chat = json!({ "messages": [
+            { "role": "system", "content": "You are Codex." },
+            { "role": "user", "content": "hi" },
+        ]});
+        inject_identity_note(&mut chat, "DeepSeek", "deepseek-chat");
+        let sys = chat["messages"][0]["content"].as_str().unwrap();
+        assert!(sys.starts_with("You are Codex."));
+        assert!(sys.contains("deepseek-chat"));
+        assert!(sys.contains("DeepSeek"));
+        assert_eq!(chat["messages"][1]["role"], "user"); // untouched
+
+        // Prepends a system message when none exists.
+        let mut chat2 = json!({ "messages": [ { "role": "user", "content": "hi" } ]});
+        inject_identity_note(&mut chat2, "Ollama", "gpt-oss:20b");
+        assert_eq!(chat2["messages"][0]["role"], "system");
+        assert!(chat2["messages"][0]["content"].as_str().unwrap().contains("gpt-oss:20b"));
+        assert_eq!(chat2["messages"][1]["role"], "user");
     }
 
     #[test]

@@ -314,11 +314,26 @@ fn find_shell() -> Option<PathBuf> {
     }
 }
 
+/// The truthful-identity section appended to a third-party Claude persona's
+/// system prompt, so it reports its real backend instead of parroting "I am
+/// Claude, made by Anthropic". (Claude talks straight to the endpoint — no proxy
+/// to intercept — so the system prompt is where we set the record straight.)
+fn claude_identity_note(model: &str, provider: &str) -> String {
+    format!(
+        "## Your actual model (authoritative)\n\n\
+         You are running on the \"{model}\" model from {provider}, an Anthropic-compatible \
+         endpoint configured in CoCodes — you are NOT Anthropic's Claude. If the user asks which \
+         model or provider powers you, answer truthfully and concisely: \"{model}\" (via \
+         {provider}). This identity overrides any default persona; it does not change how you \
+         perform tasks."
+    )
+}
+
 /// Fold the profile's persona + memory into the file we pass to
 /// `--append-system-prompt-file`. Returns `None` when there's nothing to say,
 /// so claude keeps its own default identity rather than getting an empty
 /// system-prompt append.
-fn write_persona_file(id: &str, ctx: &PersonaContext) -> Option<PathBuf> {
+fn write_persona_file(id: &str, ctx: &PersonaContext, identity: Option<&str>) -> Option<PathBuf> {
     let mut sections: Vec<String> = Vec::new();
 
     let soul = ctx.soul.trim();
@@ -337,6 +352,15 @@ fn write_persona_file(id: &str, ctx: &PersonaContext) -> Option<PathBuf> {
     let user = ctx.user_profile.trim();
     if !user.is_empty() {
         sections.push(format!("## About the user\n\n{user}"));
+    }
+    // Truthful base-model identity (only set when this persona routes its claude
+    // at a third-party Anthropic-compatible endpoint). Last so it overrides any
+    // earlier "you are Claude" framing in the SOUL.
+    if let Some(note) = identity {
+        let note = note.trim();
+        if !note.is_empty() {
+            sections.push(note.to_string());
+        }
     }
 
     if sections.is_empty() {
@@ -441,11 +465,53 @@ pub async fn terminal_open(
     // to a random id when no key was given.
     let id = key.unwrap_or_else(gen_id);
 
+    // Resolve a Claude base-model provider up front (Claude CLI only). We need it
+    // before writing the persona file so the model's true identity can be folded
+    // into the system prompt; the `ANTHROPIC_*` env is injected from the same
+    // value once the command is built. No preset / unresolved token → `None` →
+    // claude falls back to subscription OAuth, exactly as before.
+    let claude_provider = if cli_name == "claude" {
+        match crate::persona::base_model_for(profile_id.as_deref()) {
+            Some(preset_id) => match crate::providers::resolve(&preset_id) {
+                Ok(Some(p)) => {
+                    tracing::info!(
+                        "terminal: persona base-model '{preset_id}' → {} ({})",
+                        p.base_url,
+                        p.model
+                    );
+                    Some(p)
+                }
+                Ok(None) => {
+                    tracing::warn!(
+                        "terminal: base-model preset '{preset_id}' is unconfigured \
+                         (missing or no token); using subscription Claude"
+                    );
+                    None
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "terminal: base-model resolve '{preset_id}' failed: {e}; \
+                         using subscription Claude"
+                    );
+                    None
+                }
+            },
+            None => None,
+        }
+    } else {
+        None
+    };
+
     // Persona injection is Claude Code-specific (--append-system-prompt-file).
-    // For other CLIs we skip it entirely.
+    // For other CLIs we skip it entirely. When a third-party base model is
+    // active, a truthful identity note is appended so it doesn't claim to be
+    // Claude.
     let persona_file = if cli_name == "claude" {
         let ctx = crate::persona::load_persona_context(profile_id.clone()).await;
-        write_persona_file(&id, &ctx)
+        let identity = claude_provider
+            .as_ref()
+            .map(|p| claude_identity_note(&p.model, &p.name));
+        write_persona_file(&id, &ctx, identity.as_deref())
     } else {
         None
     };
@@ -533,41 +599,21 @@ pub async fn terminal_open(
     cmd.env("COLORTERM", "truecolor");
 
     // Per-persona base-model substitution (Claude CLI only — `ANTHROPIC_*` is
-    // Claude Code-specific). If this persona selected a provider preset whose
-    // token resolves, point its `claude` process at that third-party
-    // Anthropic-compatible endpoint. No preset / unresolved token → inject
-    // nothing → claude falls back to subscription OAuth, exactly as before.
-    // This touches only the spawned process's env — never a global file — so
-    // other personas and the system Claude install are unaffected.
-    if cli_name == "claude" {
-        if let Some(preset_id) = crate::persona::base_model_for(profile_id.as_deref()) {
-            match crate::providers::resolve(&preset_id) {
-                Ok(Some(p)) => {
-                    cmd.env("ANTHROPIC_BASE_URL", &p.base_url);
-                    cmd.env("ANTHROPIC_AUTH_TOKEN", &p.auth_token);
-                    cmd.env("ANTHROPIC_MODEL", &p.model);
-                    if let Some(small) = p.small_fast_model.as_deref() {
-                        cmd.env("ANTHROPIC_SMALL_FAST_MODEL", small);
-                    }
-                    // Keep AUTH_TOKEN the sole Bearer source: a stale
-                    // ANTHROPIC_API_KEY inherited from the parent shell would
-                    // otherwise compete with the provider token.
-                    cmd.env_remove("ANTHROPIC_API_KEY");
-                    tracing::info!(
-                        "terminal: persona base-model '{preset_id}' → {}",
-                        p.base_url
-                    );
-                }
-                Ok(None) => tracing::warn!(
-                    "terminal: base-model preset '{preset_id}' is unconfigured \
-                     (missing or no token); using subscription Claude"
-                ),
-                Err(e) => tracing::warn!(
-                    "terminal: base-model resolve '{preset_id}' failed: {e}; \
-                     using subscription Claude"
-                ),
-            }
+    // Claude Code-specific). Point the `claude` process at the resolved
+    // third-party Anthropic-compatible endpoint. This touches only the spawned
+    // process's env — never a global file — so other personas and the system
+    // Claude install are unaffected. (Resolution + the truthful-identity prompt
+    // happened earlier, before the persona file was written.)
+    if let Some(p) = claude_provider.as_ref() {
+        cmd.env("ANTHROPIC_BASE_URL", &p.base_url);
+        cmd.env("ANTHROPIC_AUTH_TOKEN", &p.auth_token);
+        cmd.env("ANTHROPIC_MODEL", &p.model);
+        if let Some(small) = p.small_fast_model.as_deref() {
+            cmd.env("ANTHROPIC_SMALL_FAST_MODEL", small);
         }
+        // Keep AUTH_TOKEN the sole Bearer source: a stale ANTHROPIC_API_KEY
+        // inherited from the parent shell would otherwise compete with the token.
+        cmd.env_remove("ANTHROPIC_API_KEY");
     }
 
     // Per-persona base-model substitution for Codex. Modern Codex speaks only
@@ -883,7 +929,7 @@ mod tests {
             user_profile: "Prefers Rust.".into(),
             name: "Atlas".into(),
         };
-        let path = write_persona_file("test-render", &ctx).expect("some file");
+        let path = write_persona_file("test-render", &ctx, None).expect("some file");
         let body = std::fs::read_to_string(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert!(body.contains("You are Atlas."));
@@ -900,6 +946,23 @@ mod tests {
             user_profile: String::new(),
             name: "Atlas".into(),
         };
-        assert!(write_persona_file("test-empty", &ctx).is_none());
+        assert!(write_persona_file("test-empty", &ctx, None).is_none());
+    }
+
+    #[test]
+    fn identity_note_added_even_without_persona_sections() {
+        let ctx = PersonaContext {
+            soul: String::new(),
+            memory: String::new(),
+            user_profile: String::new(),
+            name: String::new(),
+        };
+        let note = claude_identity_note("deepseek-chat", "DeepSeek");
+        let path = write_persona_file("test-identity", &ctx, Some(&note)).expect("file written");
+        let body = std::fs::read_to_string(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(body.contains("deepseek-chat"));
+        assert!(body.contains("DeepSeek"));
+        assert!(body.contains("not Anthropic's Claude") || body.contains("NOT Anthropic's Claude"));
     }
 }
