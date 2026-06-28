@@ -51,6 +51,7 @@ export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props
     sessions,
     groups,
     activeId,
+    loading,
     newSession,
     select,
     remove,
@@ -71,11 +72,13 @@ export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props
     removeGroup,
   } = useClaudeSessions(profileId, cli);
 
-  // Create a first session only once this panel is actually opened.
+  // Create a first session only once this panel is actually opened — and only
+  // after the store has loaded, so the async backend read doesn't momentarily
+  // look empty and spawn a spurious session that clobbers the restored list.
   useEffect(() => {
-    if (visible && sessions.length === 0) newSession();
+    if (visible && !loading && sessions.length === 0) newSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, sessions.length, profileId]);
+  }, [visible, loading, sessions.length, profileId]);
 
   // Handle persona-drop events: find which session owns the pane and reassign.
   useEffect(() => {

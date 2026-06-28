@@ -11,6 +11,7 @@ pub mod git;
 pub mod persona;
 pub mod providers;
 pub mod screenshot;
+pub mod sessions;
 pub mod terminal;
 
 /// Set the dock icon from the embedded app icon. Needed because `tauri dev`
@@ -143,6 +144,9 @@ pub fn run() {
             persona::persona_get,
             persona::persona_save,
             persona::persona_delete,
+            sessions::sessions_load,
+            sessions::sessions_save,
+            sessions::sessions_delete,
             providers::provider_list,
             providers::provider_save,
             providers::provider_delete,

@@ -142,6 +142,9 @@ export function usePersonas() {
   }, []);
   const remove = useCallback(async (id: string) => {
     await invoke("persona_delete", { id });
+    // Drop the persona's session stores too, so they don't linger as orphans
+    // (which previously left "ghost" groups unreachable in the sidebar).
+    void invoke("sessions_delete", { profileId: id }).catch(() => {});
     void emit(PERSONAS_CHANGED);
   }, []);
 

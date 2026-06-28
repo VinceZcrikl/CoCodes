@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 /** A leaf in the split layout: one terminal pane running its own CLI session.
  *  `convId` is the Claude conversation UUID handed to `--session-id`, so every
@@ -92,26 +93,59 @@ interface Store {
   groups: ClaudeGroup[];
 }
 
-// cli defaults to "claude" so existing localStorage keys are unchanged.
-const KEY = (profileId: string, cli = "claude") =>
+// Legacy localStorage key — read only, to migrate older installs into the
+// backend store under ~/.cocodes. New writes never touch localStorage.
+const LEGACY_KEY = (profileId: string, cli = "claude") =>
   `cocodes.${cli}.sessions.${profileId}`;
 
-function load(profileId: string, cli = "claude"): Store {
+function normalize(parsed: unknown): Store {
+  // Back-compat: the original schema persisted a bare ClaudeSession[].
+  if (Array.isArray(parsed)) {
+    return { sessions: parsed.map(migrate), groups: [] };
+  }
+  const obj = (parsed ?? {}) as Partial<Store>;
+  return {
+    sessions: Array.isArray(obj.sessions) ? obj.sessions.map(migrate) : [],
+    groups: Array.isArray(obj.groups) ? obj.groups : [],
+  };
+}
+
+/** Read the legacy localStorage store for this persona+CLI (empty if absent). */
+function loadLegacy(profileId: string, cli = "claude"): Store {
   try {
-    const raw = localStorage.getItem(KEY(profileId, cli));
-    if (!raw) return { sessions: [], groups: [] };
-    const parsed = JSON.parse(raw) as unknown;
-    // Back-compat: the original schema persisted a bare ClaudeSession[].
-    if (Array.isArray(parsed)) {
-      return { sessions: parsed.map(migrate), groups: [] };
-    }
-    const obj = parsed as Partial<Store>;
-    return {
-      sessions: Array.isArray(obj.sessions) ? obj.sessions.map(migrate) : [],
-      groups: Array.isArray(obj.groups) ? obj.groups : [],
-    };
+    const raw = localStorage.getItem(LEGACY_KEY(profileId, cli));
+    return raw ? normalize(JSON.parse(raw) as unknown) : { sessions: [], groups: [] };
   } catch {
     return { sessions: [], groups: [] };
+  }
+}
+
+/** Load the session store from the backend (`~/.cocodes/sessions/...`). On the
+ *  first read for an install that predates the backend store, fall back to the
+ *  legacy localStorage copy and migrate it to disk so it's durable thereafter. */
+async function loadStore(profileId: string, cli = "claude"): Promise<Store> {
+  try {
+    const fromFs = await invoke<Store | null>("sessions_load", { profileId, cli });
+    if (fromFs && (Array.isArray(fromFs.sessions) || Array.isArray(fromFs.groups))) {
+      return normalize(fromFs);
+    }
+  } catch (e) {
+    console.error("sessions_load failed", e);
+  }
+  const legacy = loadLegacy(profileId, cli);
+  if (legacy.sessions.length || legacy.groups.length) {
+    // Migrate the legacy blob to the backend (fire-and-forget).
+    void invoke("sessions_save", { profileId, cli, store: legacy }).catch(() => {});
+  }
+  return legacy;
+}
+
+/** Persist the session store to the backend. */
+async function saveStore(profileId: string, cli: string, store: Store): Promise<void> {
+  try {
+    await invoke("sessions_save", { profileId, cli, store });
+  } catch (e) {
+    console.error("sessions_save failed", e);
   }
 }
 
@@ -261,37 +295,66 @@ function markStartedNode(node: LayoutNode, paneId: string, cwd: string | null): 
   };
 }
 
-function save(profileId: string, store: Store, cli = "claude") {
-  try {
-    localStorage.setItem(KEY(profileId, cli), JSON.stringify(store));
-  } catch {
-    /* storage full / unavailable — non-fatal */
-  }
-}
-
 function newId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
   return `${Date.now().toString(16)}-${Math.floor(Math.random() * 1e9).toString(16)}`;
 }
 
-/** Per-profile, per-CLI store of terminal sessions + groups, persisted to
- *  localStorage. Supports rename, pin, grouping and "history" (the list).
- *  `cli` defaults to "claude" so existing call-sites work without changes. */
+/** Per-profile, per-CLI store of terminal sessions + groups, persisted by the
+ *  backend under `~/.cocodes/sessions/<cli>/<profileId>.json`. Supports rename,
+ *  pin, grouping and "history" (the list). `cli` defaults to "claude" so existing
+ *  call-sites work without changes. Loads asynchronously — read `loading` to
+ *  avoid acting on an empty store before the file has been read. */
 export function useClaudeSessions(profileId: string, cli = "claude") {
-  const [store, setStore] = useState<Store>(() => load(profileId, cli));
+  const [store, setStore] = useState<Store>({ sessions: [], groups: [] });
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  // Backend I/O is async + debounced; these refs let a profile switch / unmount
+  // flush a pending write and stop writes from racing ahead of the initial load.
+  const loadedRef = useRef(false);
+  const latestRef = useRef<Store>(store);
+  const saveTimer = useRef<number>(0);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
-    const loaded = load(profileId, cli);
-    setStore(loaded);
-    setActiveId(loaded.sessions.length ? mostRecent(loaded.sessions).id : null);
+    let cancelled = false;
+    loadedRef.current = false;
+    setLoading(true);
+    void loadStore(profileId, cli).then((loaded) => {
+      if (cancelled) return;
+      latestRef.current = loaded;
+      setStore(loaded);
+      setActiveId(loaded.sessions.length ? mostRecent(loaded.sessions).id : null);
+      loadedRef.current = true;
+      setLoading(false);
+    });
+    // On switch/unmount, flush any pending debounced write for THIS persona+cli
+    // (captured in the closure) so the last edit isn't dropped when we navigate.
+    return () => {
+      cancelled = true;
+      window.clearTimeout(saveTimer.current);
+      if (dirtyRef.current) {
+        dirtyRef.current = false;
+        void saveStore(profileId, cli, latestRef.current);
+      }
+    };
   }, [profileId, cli]);
 
   const update = useCallback(
     (fn: (s: Store) => Store) => {
       setStore((prev) => {
         const next = fn(prev);
-        save(profileId, next, cli);
+        latestRef.current = next;
+        // Never write before the initial load resolves, or we'd clobber the
+        // file with the transient empty store.
+        if (loadedRef.current) {
+          dirtyRef.current = true;
+          window.clearTimeout(saveTimer.current);
+          saveTimer.current = window.setTimeout(() => {
+            dirtyRef.current = false;
+            void saveStore(profileId, cli, latestRef.current);
+          }, 250);
+        }
         return next;
       });
     },
@@ -610,6 +673,7 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     groups: store.groups,
     activeId,
     active,
+    loading,
     newSession,
     select,
     remove,
