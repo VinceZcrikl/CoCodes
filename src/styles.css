@@ -1205,6 +1205,13 @@ body {
   font-size: 11px;
   color: rgba(220, 214, 200, 0.42);
 }
+/* Light theme: the cream defaults vanish on the pale pane backdrop — flip to ink. */
+[data-palette-mode="light"] .empty-pane-title {
+  color: color-mix(in srgb, var(--orb-accent) 34%, #1f1d18);
+}
+[data-palette-mode="light"] .empty-pane-hint {
+  color: rgba(31, 29, 24, 0.58);
+}
 
 /* Release-to-summon indicator (during persona drag-over). */
 .empty-pane-drop-hint {
@@ -1306,7 +1313,10 @@ body {
   overflow-y: auto;
 }
 
-.persona-card {
+/* Scoped under .persona-picker so these don't collide with PersonaManager's
+   own `.persona-card*` rules (which live later in this file and would otherwise
+   override the name colour → invisible dark text on the dark picker). */
+.persona-picker .persona-card {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1326,19 +1336,19 @@ body {
   from { opacity: 0; transform: translateX(-10px); }
   to   { opacity: 1; transform: none; }
 }
-.persona-card:hover {
+.persona-picker .persona-card:hover {
   border-color: color-mix(in srgb, var(--card-accent) 60%, transparent);
   background: color-mix(in srgb, var(--card-accent) 10%, transparent);
   transform: translateX(3px);
 }
-.persona-card:active { transform: translateX(3px) scale(0.99); }
-.persona-card-avatar-wrap {
+.persona-picker .persona-card:active { transform: translateX(3px) scale(0.99); }
+.persona-picker .persona-card-avatar-wrap {
   position: relative;
   flex-shrink: 0;
   display: grid;
   place-items: center;
 }
-.persona-card-avatar-wrap::before {
+.persona-picker .persona-card-avatar-wrap::before {
   content: "";
   position: absolute;
   inset: -3px;
@@ -1347,20 +1357,20 @@ body {
   opacity: 0;
   transition: opacity 0.16s ease;
 }
-.persona-card:hover .persona-card-avatar-wrap::before { opacity: 1; }
-.persona-card-avatar {
+.persona-picker .persona-card:hover .persona-card-avatar-wrap::before { opacity: 1; }
+.persona-picker .persona-card-avatar {
   width: 34px;
   height: 34px;
   font-size: 15px;
 }
-.persona-card-meta {
+.persona-picker .persona-card-meta {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.persona-card-name {
+.persona-picker .persona-card-name {
   font-size: 13px;
   font-weight: 600;
   color: #ece6da;
@@ -1368,14 +1378,14 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.persona-card-soul {
+.persona-picker .persona-card-soul {
   font-size: 11px;
   color: rgba(214, 208, 196, 0.46);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.persona-card-cli {
+.persona-picker .persona-card-cli {
   flex-shrink: 0;
   font-size: 10px;
   font-weight: 600;
@@ -1385,6 +1395,12 @@ body {
   color: color-mix(in srgb, var(--card-accent) 80%, #fff);
   background: color-mix(in srgb, var(--card-accent) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--card-accent) 34%, transparent);
+}
+/* The picker panel is always dark — so even in light theme its cards want a
+   faint *light* fill (the global light-mode `.persona-card` rule would make them
+   a near-invisible dark tint). Higher specificity keeps the intended look. */
+[data-palette-mode="light"] .persona-picker .persona-card {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 /* ── Pane zoom — card-style overlay ───────────────────────────────── */
