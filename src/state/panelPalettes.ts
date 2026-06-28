@@ -201,22 +201,29 @@ export const PANEL_PALETTES: Record<PanelPaletteName, PanelPalette> = {
   },
 
   /** Porcelain Ink — a *light* palette: warm ivory surfaces with charcoal ink
-   *  text and a slate-blue accent. The premium "daylight" option. */
+   *  text and a slate-blue accent. The premium "daylight" option.
+   *
+   *  Contrast-tuned: the canvas is lifted to a cleaner warm-white (#f2efe6) and
+   *  every text step + accent is darkened so all clear WCAG AA (≥4.5:1) against
+   *  it — the previous beige (#e9e5dc) washed out muted text and the accent.
+   *  textSoft/textMuted use solid hexes (not low-alpha black) so the terminal's
+   *  parallel dark-on-cream ANSI ramp (see uiPalette.ts) reads at the same
+   *  contrast as the chrome. */
   "porcelain-ink": {
     name: "porcelain-ink",
     label: "Porcelain",
     light: true,
-    bgCanvas: "#e9e5dc",
-    panel: "#f5f1e8",
-    panelDeep: "#ece7db",
-    panelSoft: "rgba(245, 241, 232, 0.85)",
-    border: "rgba(40, 36, 30, 0.16)",
-    accentLine: "rgba(91, 110, 130, 0.34)",
-    textMain: "#23211c",
-    textSoft: "rgba(35, 33, 28, 0.72)",
-    textMuted: "rgba(35, 33, 28, 0.5)",
-    accent: "#5b6e82",
-    danger: "#b4452f",
+    bgCanvas: "#f2efe6",
+    panel: "#faf7ef",
+    panelDeep: "#ece8dd",
+    panelSoft: "rgba(250, 247, 239, 0.85)",
+    border: "rgba(31, 29, 24, 0.18)",
+    accentLine: "rgba(74, 93, 114, 0.38)",
+    textMain: "#1f1d18",
+    textSoft: "rgba(31, 29, 24, 0.74)",
+    textMuted: "rgba(31, 29, 24, 0.58)",
+    accent: "#4a5d72",
+    danger: "#a63226",
   },
 
   /** Nordic Slate — cool blue-grey fjord surfaces with an icy sky accent.

@@ -405,6 +405,10 @@ pub async fn terminal_open(
     // remounts with the same key and the PTY is still alive, we reconnect to it
     // rather than spawning a new process — so the running task keeps going.
     key: Option<String>,
+    // True when the active panel palette is a light one. Drives COLORFGBG so a
+    // CLI's TUI renders in light mode (dark text on light) rather than painting
+    // an explicit dark background our xterm theme can't override.
+    light: Option<bool>,
     app: AppHandle,
     reg: State<'_, TerminalRegistry>,
 ) -> Result<OpenResult, TerminalError> {
@@ -597,6 +601,17 @@ pub async fn terminal_open(
     // Force a real terminal type so every CLI's TUI renders correctly in xterm.
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+
+    // Background-luminance hint for TUI theme detection. `COLORFGBG="fg;bg"`
+    // is the long-standing convention (rxvt/iTerm/Konsole): a high bg index
+    // means a light terminal. Many CLIs (and the libraries they use — e.g.
+    // termenv/chroma) read this to pick a light vs dark palette. Without it
+    // they assume dark and hard-paint a dark background that our xterm light
+    // theme can't override. "0;15" = black-on-white → light; "15;0" → dark.
+    cmd.env(
+        "COLORFGBG",
+        if light.unwrap_or(false) { "0;15" } else { "15;0" },
+    );
 
     // Per-persona base-model substitution (Claude CLI only — `ANTHROPIC_*` is
     // Claude Code-specific). Point the `claude` process at the resolved

@@ -15,7 +15,11 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { usePaletteStore } from "../../state/paletteStore";
 import { xtermThemeForPalette } from "../../state/uiPalette";
-import type { PanelPaletteName, AccentName } from "../../state/panelPalettes";
+import {
+  PANEL_PALETTES,
+  type PanelPaletteName,
+  type AccentName,
+} from "../../state/panelPalettes";
 import { PERSONA_RESTART_EVENT } from "../../hooks/usePersonas";
 
 /** Imperative handle the parent view uses to drive the terminal — composer
@@ -327,6 +331,13 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       let spawned = false;
       let spawnedAt = 0;
       const SPAWN_GRACE_MS = 1000;
+      // How long after spawn we scan output for Claude's session-startup errors.
+      // Those errors abort the process within ~1-2s of launch, so a short window
+      // catches them — while ensuring ordinary conversation later (which may
+      // legitimately contain phrases like "No conversation found with session
+      // ID", e.g. when editing this very file) is NEVER treated as a control
+      // signal that respawns the pane and drops history.
+      const CONFLICT_SCAN_MS = 8000;
 
       const doFit = (delay: number) => {
         window.clearTimeout(settleTimer);
@@ -359,6 +370,12 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
               cli,
               // Stable key → reconnect to a still-running PTY across remounts.
               key: terminalKey,
+              // Light palette → tell the CLI's TUI to render dark-on-light via
+              // COLORFGBG so its own theme detection picks light mode, instead
+              // of painting an explicit dark background that ignores our xterm
+              // background. (xterm's background alone can't override a TUI that
+              // hard-paints dark cells.)
+              light: !!PANEL_PALETTES[effPalette]?.light,
             })
               .then(({ id, replay }) => {
                 if (disposed) {
@@ -437,24 +454,30 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       // Subscribe to PTY output before opening so we don't drop the banner.
       // Also scan for two Claude Code session errors that both recover by
       // respawning the pane with a fresh conversation id:
-      //   • "...is already in use" — a stale lock or duplicate `--session-id`.
+      //   • "Session ID … is already in use" — a stale lock or duplicate id.
       //   • "No conversation found with session ID" — a `--resume` of a session
-      //     that was marked started but never actually persisted by claude
-      //     (e.g. an empty session, or one created before the resume change).
-      // The "already in use" pattern is kept narrow (requires "Session" nearby)
-      // so Node's EADDRINUSE ("address already in use") can't trigger a false
-      // positive. The null guard prevents the ~300ms startup window (before
-      // terminal_open resolves and sessionIdRef is set) from processing other
-      // terminals' data.
+      //     that was marked started but never actually persisted by claude.
+      // BOTH only occur at startup (claude aborts immediately), so we only scan
+      // within CONFLICT_SCAN_MS of spawn. Scanning the whole session would let
+      // ordinary conversation that merely MENTIONS these phrases (e.g. when you
+      // ask claude about — or it edits — this terminal code) masquerade as a
+      // real error and silently respawn the pane, dropping the conversation.
+      // Patterns require the literal "Session ID"/"session ID" form so prose is
+      // far less likely to match. The null guard also skips the ~300ms before
+      // terminal_open resolves (when sessionIdRef isn't set yet).
       let conflictFired = false;
       void listen<DataEvent>("terminal://data", (ev) => {
         if (!sessionIdRef.current || ev.payload.id !== sessionIdRef.current) return;
         const bytes = decodeBase64(ev.payload.data);
         term.write(bytes);
-        if (!conflictFired) {
+        if (
+          !conflictFired &&
+          spawnedAt > 0 &&
+          Date.now() - spawnedAt < CONFLICT_SCAN_MS
+        ) {
           const text = new TextDecoder().decode(bytes);
           if (
-            /[Ss]ession.*is already in use|is already in use.*session/i.test(text) ||
+            /Session ID \S+ is already in use/i.test(text) ||
             /No conversation found with session ID/i.test(text)
           ) {
             conflictFired = true;

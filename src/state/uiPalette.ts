@@ -63,26 +63,30 @@ export function xtermThemeForPalette(
     selectionBackground: `color-mix(in srgb, ${a} 24%, transparent)`,
   };
   if (p.light) {
-    // Dark, saturated ANSI for a light canvas. `brightBlack` is the dim/faint
-    // grey used by TUIs for de-emphasised lines ("+19 lines…") — kept dark
-    // enough to read on cream. `white`/`brightWhite` stay near the surface so
+    // Dark, saturated ANSI for a light canvas. Every hue is contrast-tuned to
+    // clear WCAG AA (≥4.5:1) against the light surface — the prior ramp's
+    // "bright" variants (bright green/yellow/cyan) washed out to ~3:1 and were
+    // unreadable. On a light canvas "bright" can't mean lighter, so each bright
+    // hue is kept as dark as (or darker than) its base while staying distinct.
+    // `brightBlack` is the dim/faint grey TUIs use for de-emphasised lines
+    // ("+19 lines…"). `white`/`brightWhite` stay near the surface so
     // inverse/selection blocks still look right.
     return {
       ...base,
-      black: "#2b2822",
-      brightBlack: "#6b6660",
-      red: "#b4452f",
-      brightRed: "#c8503a",
-      green: "#2f7d52",
-      brightGreen: "#3c9362",
-      yellow: "#9a7320",
-      brightYellow: "#b0852c",
-      blue: "#3a5e88",
-      brightBlue: "#4a72a0",
-      magenta: "#8a4d92",
-      brightMagenta: "#9d5ca5",
-      cyan: "#2a7d78",
-      brightCyan: "#348d88",
+      black: "#23211c",
+      brightBlack: "#5f5b54",
+      red: "#a63226",
+      brightRed: "#b83c2c",
+      green: "#1f6e44",
+      brightGreen: "#23764a",
+      yellow: "#8a6310",
+      brightYellow: "#876010",
+      blue: "#2f5180",
+      brightBlue: "#3a6092",
+      magenta: "#7a3d83",
+      brightMagenta: "#8c4a95",
+      cyan: "#1d6c68",
+      brightCyan: "#1f7770",
       white: p.panelDeep,
       brightWhite: p.bgCanvas,
     };
