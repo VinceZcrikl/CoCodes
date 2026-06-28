@@ -7,15 +7,15 @@ import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaEditor from "../Persona/PersonaEditor";
 import PalettePanel from "./PalettePanel";
 import UpdateButton, { checkForUpdate } from "./UpdateButton";
-import TriondaBall from "./TriondaBall";
-import LaurelWreath from "./LaurelWreath";
-import TempleFrame from "./TempleFrame";
+import RingIcon from "./RingIcon";
+import ThemeFrame from "./ThemeFrame";
 import GoalConfetti from "./GoalConfetti";
-import OracleDescent from "./OracleDescent";
+import ThemeCelebrate from "./ThemeCelebrate";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
 import { usePaletteStore, installPaletteSync } from "../../state/paletteStore";
 import { PANEL_PALETTES, resolveAccentColor } from "../../state/panelPalettes";
+import { THEME_DECOR } from "../../state/themeDecor";
 import { applyPaletteVars } from "../../state/uiPalette";
 import { useWindowStore } from "../../state/windowStore";
 import { useShellStore } from "../../state/shellStore";
@@ -54,11 +54,12 @@ export default function Cockpit() {
   const accentColor = resolveAccentColor(PANEL_PALETTES[paletteName], accent);
   const mini = useWindowStore((s) => s.mini);
 
-  // The World Cup theme swaps the palette dot for the Trionda ball and unlocks
-  // the festive chrome (the rest is CSS, scoped to [data-palette]). The CoCodes ·
-  // Olympus theme does the same with a laurel-wreathed orb + Greek chrome.
+  // Every theme carries a decoration config (THEME_DECOR): a signature ring
+  // glyph for the palette dot, a premium frame + wordmark, and a switch-in
+  // celebration — all scoped under [data-palette]. World Cup alone keeps its
+  // bespoke confetti; the rest flow through the generalised ThemeCelebrate.
+  const decor = THEME_DECOR[paletteName];
   const isWorldCup = paletteName === "world-cup-2026";
-  const isCoCodes = paletteName === "cocodes";
   const [celebrate, setCelebrate] = useState(false);
 
   const profileId = useProfileStore((s) => s.activeProfileId);
@@ -186,8 +187,7 @@ export default function Cockpit() {
   // relaunch that's already in it. The overlay rendered is chosen by palette.
   const prevPalette = useRef(paletteName);
   useEffect(() => {
-    const decorated = paletteName === "world-cup-2026" || paletteName === "cocodes";
-    if (decorated && prevPalette.current !== paletteName) {
+    if (prevPalette.current !== paletteName) {
       setCelebrate(true);
     }
     prevPalette.current = paletteName;
@@ -210,8 +210,10 @@ export default function Cockpit() {
   return (
     <div className={`cockpit${mini ? " mini" : ""}`}>
       <div className="cockpit-frame" aria-hidden="true" data-tauri-drag-region />
-      {/* Greek-temple facade around the panel (cocodes theme only, not in mini). */}
-      {isCoCodes && !mini && <TempleFrame />}
+      {/* Premium frame + wordmark + signature motif for the active theme (not in
+          mini). The motif echoes the theme — palmettes + constellation for
+          Olympus, ivy for forest, snow for nordic, … */}
+      {!mini && <ThemeFrame scope={paletteName} />}
       <div className="cockpit-panel">
         {mini ? (
           <div className="cockpit-mini-bar" data-tauri-drag-region>
@@ -242,25 +244,19 @@ export default function Cockpit() {
                     aria-label="Choose panel palette"
                     aria-expanded={paletteOpen}
                     style={{
-                      // The Trionda ball and laurel-ringed orb both want a
-                      // neutral disc to pop against; plain orb keeps the accent
-                      // fill it tints itself from.
-                      background: isWorldCup || isCoCodes ? "#15151b" : accentColor,
+                      // The ringed orb wants a neutral disc to pop against; the
+                      // ring icon tints itself from `color` (the accent).
+                      background: "#15151b",
                       color: accentColor,
                     }}
                   >
-                    {isWorldCup ? (
-                      <TriondaBall className="cockpit-theme-ball" />
-                    ) : isCoCodes ? (
-                      <span className="cockpit-theme-laurel-wrap">
-                        {/* Cool celestial core so the gold laurel reads against
-                            it (a gold orb + gold laurel would wash out). */}
-                        <PersonaOrb color="#cdd9f2" reactive={false} spin={0.5} />
-                        <LaurelWreath className="cockpit-theme-laurel" />
-                      </span>
-                    ) : (
-                      <PersonaOrb color={accentColor} reactive={false} spin={0.5} />
-                    )}
+                    <span className="cockpit-theme-ring-wrap">
+                      {/* A core sized to read against the ring — Olympus uses a
+                          cool celestial core so the gold laurel doesn't wash out;
+                          others sit the ring over a faint accent core. */}
+                      <PersonaOrb color={decor.ringCore} reactive={false} spin={0.5} />
+                      <RingIcon kind={decor.ringIcon} className="cockpit-theme-ring" />
+                    </span>
                   </button>
                   {paletteOpen && (
                     <PalettePanel onClose={() => setPaletteOpen(false)} />
@@ -335,9 +331,9 @@ export default function Cockpit() {
       {celebrate &&
         (isWorldCup ? (
           <GoalConfetti onDone={() => setCelebrate(false)} />
-        ) : isCoCodes ? (
-          <OracleDescent onDone={() => setCelebrate(false)} />
-        ) : null)}
+        ) : (
+          <ThemeCelebrate name={paletteName} onDone={() => setCelebrate(false)} />
+        ))}
     </div>
   );
 }
