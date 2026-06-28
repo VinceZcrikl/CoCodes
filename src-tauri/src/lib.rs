@@ -8,6 +8,7 @@ pub mod codex_proxy;
 pub mod directory;
 pub mod fs;
 pub mod git;
+pub mod notify_hooks;
 pub mod persona;
 pub mod providers;
 pub mod screenshot;
@@ -65,12 +66,19 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             #[cfg(target_os = "macos")]
             set_macos_dock_icon();
             // Register the app handle so the Codex proxy / Claude launch can emit
             // `model-activity` events to the cockpit's live base-model indicator.
             codex_proxy::init(app.handle());
+            // Start the loopback listener that turns CLI permission-prompt hooks
+            // into `cocodes://needs-attention` events (tray notifications). Best
+            // effort: a failure just means no attention notifications.
+            if let Err(e) = notify_hooks::ensure_started(app.handle()) {
+                tracing::warn!("notify-hooks: failed to start: {e}");
+            }
             // Carry over data from the pre-rename home before anything reads it.
             persona::migrate_legacy_home();
             tauri::async_runtime::spawn(persona::seed_default_personas());

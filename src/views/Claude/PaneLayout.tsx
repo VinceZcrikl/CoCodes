@@ -10,6 +10,12 @@ import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
 import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2 } from "lucide-react";
 import { INJECT_PANE_EVENT, type InjectPaneDetail } from "../../state/delegationMonitor";
 import {
+  registerTerminal,
+  unregisterTerminal,
+  noteTerminalFocus,
+} from "../../state/terminalRegistry";
+import { useAttentionStore } from "../../state/attentionStore";
+import {
   findPane,
   forEachPane,
   type LayoutNode,
@@ -333,8 +339,22 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
       <ClaudeTerminal
         key={`${node.paneId}:${ctx.reloadKey}`}
         ref={(h) => {
-          if (h) ctx.handles.current.set(node.paneId, h);
-          else ctx.handles.current.delete(node.paneId);
+          const tk = `${node.paneId}:${node.convId}`;
+          if (h) {
+            ctx.handles.current.set(node.paneId, h);
+            // Register so a `needs-attention` event can resolve + jump to this
+            // exact pane (the backend tags its hook URL with this same key).
+            registerTerminal(tk, {
+              profileId: effectiveProfileId,
+              cli: node.cli,
+              sessionId: ctx.sessionId,
+              paneId: node.paneId,
+              focus: () => h.focus(),
+            });
+          } else {
+            ctx.handles.current.delete(node.paneId);
+            unregisterTerminal(tk);
+          }
         }}
         profileId={effectiveProfileId}
         claudeSessionId={node.convId}
@@ -347,7 +367,13 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         onMissingCli={ctx.onMissingCli}
         onOpened={() => ctx.onPaneStarted(node.paneId, effectiveCwd)}
         onSessionConflict={() => ctx.onRespawn(node.paneId)}
-        onFocus={() => ctx.setActive(node.paneId)}
+        onFocus={() => {
+          ctx.setActive(node.paneId);
+          // Looking at this pane clears any pending attention for it.
+          const tk = `${node.paneId}:${node.convId}`;
+          noteTerminalFocus(tk);
+          useAttentionStore.getState().resolve(tk);
+        }}
         onKeyEvent={ctx.makeKeyHandler(node.paneId)}
       />
     </div>

@@ -308,6 +308,84 @@ body {
   position: relative;
 }
 
+/* Attention queue: sessions waiting on the user's authorization. Bottom-right
+   stack, newest at the bottom; each row jumps to its waiting pane on click. */
+.attention-banner {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+.attention-item {
+  display: flex;
+  align-items: stretch;
+  background: color-mix(in srgb, var(--panel-deep) 94%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 55%, var(--border));
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  animation: delegation-toast-in 0.18s ease both;
+}
+.attention-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+}
+.attention-item-main:hover {
+  background: color-mix(in srgb, var(--accent-gold) 12%, transparent);
+}
+.attention-bell {
+  color: var(--accent-gold);
+  flex: none;
+  animation: attention-bell-ring 1.6s ease-in-out infinite;
+}
+@keyframes attention-bell-ring {
+  0%, 70%, 100% { transform: rotate(0); }
+  75% { transform: rotate(-12deg); }
+  85% { transform: rotate(10deg); }
+  92% { transform: rotate(-6deg); }
+}
+.attention-label {
+  font-size: 12px;
+  font-weight: 700;
+  flex: none;
+}
+.attention-msg {
+  font-size: 11px;
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.attention-dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--text);
+  opacity: 0.6;
+}
+.attention-dismiss:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
 /* Delegation toast — appears bottom-right when a task is routed to a pane. */
 .delegation-toast {
   position: absolute;
