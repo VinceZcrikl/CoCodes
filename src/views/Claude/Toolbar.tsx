@@ -237,7 +237,7 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
         )}
         {version && (
           <span className="cli-status-model" title={`CoCodes v${version}`}>
-            v{version}
+            CoCodes v{version}
           </span>
         )}
       </div>
