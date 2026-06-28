@@ -24,6 +24,8 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 # Open vendor API-key pages in the system browser ("Get key" buttons).
 tauri-plugin-opener = "2"
+# Tray notifications when a CLI session is waiting on the user's authorization.
+tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"

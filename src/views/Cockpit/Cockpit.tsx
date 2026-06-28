@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import ClaudeTab from "../Claude/ClaudeTab";
 import WindowControls from "./WindowControls";
@@ -7,6 +7,8 @@ import ProfileConstellation from "../Persona/ProfileConstellation";
 import PersonaEditor from "../Persona/PersonaEditor";
 import PalettePanel from "./PalettePanel";
 import UpdateButton, { checkForUpdate } from "./UpdateButton";
+import AttentionCenter from "./AttentionCenter";
+import { NAV_CLI_EVENT, type NavCliDetail } from "../../state/attentionNav";
 import RingIcon from "./RingIcon";
 import ThemeFrame from "./ThemeFrame";
 import GoalConfetti from "./GoalConfetti";
@@ -60,7 +62,16 @@ export default function Cockpit() {
   // bespoke confetti; the rest flow through the generalised ThemeCelebrate.
   const decor = THEME_DECOR[paletteName];
   const isWorldCup = paletteName === "world-cup-2026";
-  const [celebrate, setCelebrate] = useState(false);
+  // A monotonically rising "ticket": each theme switch bumps it, which both
+  // turns the celebration on and (via `key`) forces a fresh remount so the new
+  // theme's particles are rebuilt — even when switching again mid-celebration.
+  // 0 = no celebration showing.
+  const [celebrateTick, setCelebrateTick] = useState(0);
+  // Stable so the celebration's self-unmount timer isn't reset by the cockpit's
+  // frequent re-renders (terminals update constantly) — an unstable onDone in
+  // the child's timer effect deps would clear+restart the timer every render and
+  // it would never fire.
+  const endCelebrate = useCallback(() => setCelebrateTick(0), []);
 
   const profileId = useProfileStore((s) => s.activeProfileId);
   const setActiveProfile = useProfileStore((s) => s.setActiveProfile);
@@ -150,6 +161,19 @@ export default function Cockpit() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePersona?.id, activePersona?.cli]);
 
+  // Attention navigation: a tray notification (or in-app banner) for a session
+  // waiting on the user's authorization switches the persona + CLI tab here; the
+  // matching ClaudeTab then selects the waiting session.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { profileId: pid, cli } = (e as CustomEvent<NavCliDetail>).detail;
+      setActiveProfile(pid);
+      if (CLIS.find((c) => c.id === cli && c.ready)) setActiveCli(cli);
+    };
+    window.addEventListener(NAV_CLI_EVENT, handler);
+    return () => window.removeEventListener(NAV_CLI_EVENT, handler);
+  }, [setActiveProfile]);
+
   // Persist chosen tab so the cockpit reopens on the same CLI.
   useEffect(() => {
     try { localStorage.setItem(CLI_STORAGE_KEY, activeCli); } catch { /* ignore */ }
@@ -188,7 +212,7 @@ export default function Cockpit() {
   const prevPalette = useRef(paletteName);
   useEffect(() => {
     if (prevPalette.current !== paletteName) {
-      setCelebrate(true);
+      setCelebrateTick((n) => n + 1);
     }
     prevPalette.current = paletteName;
   }, [paletteName]);
@@ -200,7 +224,7 @@ export default function Cockpit() {
     try {
       if (!localStorage.getItem("cocodes:wc2026-celebrated")) {
         localStorage.setItem("cocodes:wc2026-celebrated", "1");
-        setCelebrate(true);
+        setCelebrateTick((n) => n + 1);
       }
     } catch { /* localStorage unavailable; skip the kickoff */ }
     // Run once on mount — the transition effect above covers later switches.
@@ -328,12 +352,14 @@ export default function Cockpit() {
         />
       )}
 
-      {celebrate &&
+      {celebrateTick > 0 &&
         (isWorldCup ? (
-          <GoalConfetti onDone={() => setCelebrate(false)} />
+          <GoalConfetti key={celebrateTick} onDone={endCelebrate} />
         ) : (
-          <ThemeCelebrate name={paletteName} onDone={() => setCelebrate(false)} />
+          <ThemeCelebrate key={celebrateTick} name={paletteName} onDone={endCelebrate} />
         ))}
+
+      <AttentionCenter />
     </div>
   );
 }

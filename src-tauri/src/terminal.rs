@@ -583,6 +583,14 @@ pub async fn terminal_open(
             }
             cmd.arg(sid);
         }
+        // Attach a Notification hook (via an extra in-memory settings doc) so a
+        // tool-approval prompt pings CoCodes's loopback listener, which raises a
+        // tray notification that jumps back to this pane. Tagged with the
+        // terminal key (`id`) so the cockpit can resolve which pane is waiting.
+        if let Some(settings) = crate::notify_hooks::claude_settings_arg(&id) {
+            cmd.arg("--settings");
+            cmd.arg(settings);
+        }
     }
 
     // Resolve working directory for all CLIs.
@@ -671,6 +679,17 @@ pub async fn terminal_open(
     // `~/.codex/config.toml` is never touched. The provider id is namespaced
     // (`cocodes_*`) to avoid Codex's reserved ids (`openai`/`ollama`/`lmstudio`).
     if cli_name == "codex" {
+        // Attach a PermissionRequest hook so Codex's command-approval prompt
+        // pings CoCodes's loopback listener (tray notification → jump to pane).
+        // Codex's `hooks` config is an inline TOML table (HooksToml) — NOT a file
+        // path — so we pass it as a `-c hooks.PermissionRequest=…` override with
+        // the pane key baked into the hook URL. `--dangerously-bypass-hook-trust`
+        // is safe here: the hook command is one we generated ourselves.
+        if let Some(hooks_arg) = crate::notify_hooks::codex_hooks_config_arg(&id) {
+            cmd.arg("-c");
+            cmd.arg(hooks_arg);
+            cmd.arg("--dangerously-bypass-hook-trust");
+        }
         if let Some(preset_id) = crate::persona::base_model_for(profile_id.as_deref()) {
             match crate::providers::resolve_codex(&preset_id) {
                 Ok(Some(p)) => match crate::codex_proxy::ensure_started(&app) {

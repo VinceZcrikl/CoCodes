@@ -4,6 +4,7 @@ import ClaudeSidebar from "./ClaudeSidebar";
 import ClaudeTerminalView from "./ClaudeTerminalView";
 import { useSidebarStore } from "../../state/sidebarStore";
 import { PERSONA_DROP_EVENT, type PersonaDropDetail } from "../../state/dragState";
+import { NAV_SELECT_EVENT, type NavSelectDetail } from "../../state/attentionNav";
 import {
   startDelegationMonitor,
   stopDelegationMonitor,
@@ -79,6 +80,20 @@ export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props
     if (visible && !loading && sessions.length === 0) newSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, loading, sessions.length, profileId]);
+
+  // Attention navigation: when a tray notification / banner jumps to a waiting
+  // session, the matching (persona, cli) tab selects it so its pane mounts and
+  // can be focused.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { profileId: pid, cli: navCli, sessionId } =
+        (e as CustomEvent<NavSelectDetail>).detail;
+      if (pid !== profileId || navCli !== cli) return;
+      if (sessions.some((s) => s.id === sessionId)) select(sessionId);
+    };
+    window.addEventListener(NAV_SELECT_EVENT, handler);
+    return () => window.removeEventListener(NAV_SELECT_EVENT, handler);
+  }, [profileId, cli, sessions, select]);
 
   // Handle persona-drop events: find which session owns the pane and reassign.
   useEffect(() => {
