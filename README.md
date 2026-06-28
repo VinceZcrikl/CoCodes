@@ -1,5 +1,6 @@
 # CoCodes
-<img width="3480" height="2024" alt="image" src="https://github.com/user-attachments/assets/5be50f18-9b44-4ce3-a4fd-7bb228216127" />
+<img width="4214" height="2274" alt="image" src="https://github.com/user-attachments/assets/a6481941-6b79-4002-bbc3-f1056e290319" />
+
 
 > **Agent coding cockpit** — a terminal-native desktop home for your AI coding CLIs.
 
