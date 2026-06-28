@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import {
   Camera,
   FolderOpen,
@@ -24,11 +25,12 @@ interface Props {
   busy?: boolean;
   /** "claude" | "codex" | "grok" — hides Claude-specific controls for other CLIs. */
   cli?: string;
-  /** Model the active persona runs — shown in the right-side status strip. */
+  /** Kept for call-site compatibility; the status strip now shows the app
+   *  version instead of the model. */
   modelLabel?: string;
 }
 
-export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude", modelLabel }: Props) {
+export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" }: Props) {
   const { cwd, setCwd } = useDirectoryStore();
   const shellOpen = useShellStore((s) => s.open);
   const toggleShell = useShellStore((s) => s.toggle);
@@ -37,9 +39,15 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude",
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
   const branch = useBranch();
+  const [version, setVersion] = useState<string | null>(null);
   const [dropOpen, setDropOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement | null>(null);
+
+  // App version (from tauri.conf.json) — shown in the right status strip.
+  useEffect(() => {
+    void getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   // Close the file finder on outside click.
   useEffect(() => {
@@ -203,7 +211,7 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude",
         </div>
       </div>
 
-      {/* ── Right: read-only global status (R2) — branch + model ── */}
+      {/* ── Right: read-only global status (R2) — branch + app version ── */}
       <div className="cli-toolbar-right">
         {branch && (
           <Tooltip
@@ -227,9 +235,9 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude",
             </button>
           </Tooltip>
         )}
-        {modelLabel && (
-          <span className="cli-status-model" title={`Model: ${modelLabel}`}>
-            {modelLabel}
+        {version && (
+          <span className="cli-status-model" title={`CoCodes v${version}`}>
+            v{version}
           </span>
         )}
       </div>
