@@ -1073,6 +1073,41 @@ body {
   z-index: 10;
 }
 
+/* Session row dragged from the sidebar onto a pane — drops the conversation in
+ * for the pane to --resume. Distinct accent from persona/file drops. */
+.session-drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -120%);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--accent-gold, #e5b53f);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.pane-leaf.pane-session-drop-over {
+  outline: 2px solid var(--accent-gold, #e5b53f);
+  outline-offset: -2px;
+}
+.pane-leaf.pane-session-drop-over::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent-gold, #e5b53f) 12%, transparent);
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 10;
+}
+
 /* ── Empty pane — persona invite for a freshly-split, unbound pane ──── */
 .empty-pane {
   position: relative;

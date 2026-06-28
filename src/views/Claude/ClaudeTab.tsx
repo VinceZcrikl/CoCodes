@@ -3,7 +3,12 @@ import { useClaudeSessions, forEachPane } from "../../hooks/useClaudeSessions";
 import ClaudeSidebar from "./ClaudeSidebar";
 import ClaudeTerminalView from "./ClaudeTerminalView";
 import { useSidebarStore } from "../../state/sidebarStore";
-import { PERSONA_DROP_EVENT, type PersonaDropDetail } from "../../state/dragState";
+import {
+  PERSONA_DROP_EVENT,
+  type PersonaDropDetail,
+  SESSION_DROP_EVENT,
+  type SessionDropDetail,
+} from "../../state/dragState";
 import { NAV_SELECT_EVENT, type NavSelectDetail } from "../../state/attentionNav";
 import {
   startDelegationMonitor,
@@ -63,6 +68,7 @@ export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props
     setSplitRatio,
     markPaneStarted,
     assignPaneProfile,
+    loadConvIntoPane,
     respawnPane,
     renamePane,
     setPanePalette,
@@ -114,6 +120,43 @@ export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props
     window.addEventListener(PERSONA_DROP_EVENT, handler);
     return () => window.removeEventListener(PERSONA_DROP_EVENT, handler);
   }, [sessions, assignPaneProfile]);
+
+  // Handle session-drop events: a session dragged from the sidebar onto a pane
+  // reloads that conversation into the pane (restart + --resume), replacing
+  // whatever it was running.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      if (!visibleRef.current) return;
+      const { paneId, convId, cwd, cli: dropCli } =
+        (e as CustomEvent<SessionDropDetail>).detail;
+      // Locate the session that owns the target pane (the unsplit default pane
+      // shares the session id).
+      let owningSessionId: string | null = null;
+      let alreadyHere = false;
+      for (const s of sessions) {
+        if (!s.layout) {
+          if (s.id === paneId) {
+            owningSessionId = s.id;
+            alreadyHere = s.id === convId;
+          }
+        } else {
+          forEachPane(s.layout, (p) => {
+            if (p.paneId === paneId) {
+              owningSessionId = s.id;
+              if (p.convId === convId) alreadyHere = true;
+            }
+          });
+        }
+        if (owningSessionId) break;
+      }
+      // No-op when dropping a conversation onto the pane already running it.
+      if (owningSessionId && !alreadyHere) {
+        loadConvIntoPane(owningSessionId, paneId, convId, dropCli, cwd);
+      }
+    };
+    window.addEventListener(SESSION_DROP_EVENT, handler);
+    return () => window.removeEventListener(SESSION_DROP_EVENT, handler);
+  }, [sessions, loadConvIntoPane]);
 
   // Start the PTY output monitor that watches for [TASK→<cli>] delegation
   // blocks. Reference-counted so multiple tabs share one Tauri listener.
@@ -189,6 +232,7 @@ export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props
         <ClaudeSidebar
           sessions={sessions}
           groups={groups}
+          cli={cli}
           activeId={activeId}
           onNew={newSession}
           onSelect={select}

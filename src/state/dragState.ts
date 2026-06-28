@@ -23,3 +23,37 @@ export interface PersonaDropDetail {
   profileId: string;
   cli: string;
 }
+
+/** Ephemeral state for a session being dragged out of the sidebar onto a pane.
+ *  Mirrored here (same reasoning as draggingPersona) so PaneLeaf can show a
+ *  drop highlight during hover without prop drilling. */
+export interface DraggingSession {
+  /** The dragged session's id (its Claude conversation UUID / `--resume` arg). */
+  convId: string;
+  /** Working dir the conversation was recorded under — `--resume` must run from
+   *  it, since Claude stores conversations per project dir. null → home. */
+  cwd: string | null;
+  /** Which CLI the session runs, so the target pane resumes the right binary. */
+  cli: string;
+  /** Title, for the drag ghost label. */
+  title: string;
+}
+
+export let draggingSession: DraggingSession | null = null;
+
+export function setDraggingSession(s: DraggingSession | null): void {
+  draggingSession = s;
+}
+
+/** Dispatched on window when a session is dropped onto a pane. ClaudeTab listens
+ *  and reloads that conversation into the target pane (restart + --resume). */
+export const SESSION_DROP_EVENT = "terminus:session-drop";
+
+export interface SessionDropDetail {
+  /** The target pane to reload. */
+  paneId: string;
+  /** The dragged conversation to resume into it. */
+  convId: string;
+  cwd: string | null;
+  cli: string;
+}

@@ -22,7 +22,7 @@ import {
   type PaneNode,
   type SplitNode,
 } from "../../hooks/useClaudeSessions";
-import { draggingPersona } from "../../state/dragState";
+import { draggingPersona, draggingSession } from "../../state/dragState";
 import Tooltip from "../../components/Tooltip";
 import EmptyPane from "./EmptyPane";
 import PersonaAvatar, { personaColor } from "../Persona/PersonaAvatar";
@@ -167,7 +167,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   // Build CSS class string.
   let cls = "pane-leaf";
   if (active) cls += " active";
-  if (dropOver) cls += " pane-drop-over";
+  if (dropOver) cls += draggingSession ? " pane-session-drop-over" : " pane-drop-over";
   if (isFileDragOver) cls += " pane-file-drop-over";
   if (isZoomed && !isExiting) cls += " pane-zoomed";
   if (isExiting) cls += " pane-zoom-exiting";
@@ -201,7 +201,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
           else ctx.leafEls.current.delete(node.paneId);
         }}
         onMouseDownCapture={() => ctx.setActive(node.paneId)}
-        onPointerEnter={() => { if (draggingPersona) setDropOver(true); }}
+        onPointerEnter={() => { if (draggingPersona || draggingSession) setDropOver(true); }}
         onPointerLeave={() => setDropOver(false)}
       >
         {ctx.multi && !isZoomed && (
