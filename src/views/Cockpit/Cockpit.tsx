@@ -70,6 +70,21 @@ export default function Cockpit() {
   const activePersona = personas.find((p) => p.id === profileId);
   const activeName = activePersona?.name ?? profileId;
 
+  // Recover from a stale active-profile that points at a persona which no longer
+  // exists (e.g. one deleted in a past session — `cocodes:active-profile` was
+  // never cleared). That left the constellation with NOTHING selected ("all
+  // personas unselected") while the sidebar still showed the dead persona's
+  // sessions; selecting any real persona then switched the per-persona session
+  // store and the old group/sessions vanished with no way back. Once the list
+  // has loaded, snap the active profile to a real persona (the default Claude
+  // Code persona, else the first) so the UI is always in a consistent state.
+  useEffect(() => {
+    if (personas.length === 0) return; // list not loaded yet
+    if (personas.some((p) => p.id === profileId)) return; // already valid
+    const fallback = personas.find((p) => p.id === "claude") ?? personas[0];
+    if (fallback) setActiveProfile(fallback.id);
+  }, [personas, profileId, setActiveProfile]);
+
   // Full doc for the active persona — gives us its base-model for the model
   // label. Refetched when the persona changes or the library is edited.
   const [activeDoc, setActiveDoc] = useState<PersonaDoc | null>(null);
@@ -270,7 +285,12 @@ export default function Cockpit() {
                   key={`${pid}::${cli.id}`}
                   style={{ display: isVisible ? "contents" : "none" }}
                 >
-                  <ClaudeTab cli={cli.id} profileId={pid} visible={isVisible} />
+                  <ClaudeTab
+                    cli={cli.id}
+                    profileId={pid}
+                    visible={isVisible}
+                    modelLabel={isVisible ? modelLabel : undefined}
+                  />
                 </div>
               );
             }),

@@ -17,6 +17,7 @@ import {
   type SplitNode,
 } from "../../hooks/useClaudeSessions";
 import { draggingPersona } from "../../state/dragState";
+import Tooltip from "../../components/Tooltip";
 import PersonaAvatar, { personaColor } from "../Persona/PersonaAvatar";
 import { usePersonaModel } from "../../hooks/usePersonaModel";
 import PalettePanel from "../Cockpit/PalettePanel";
@@ -234,47 +235,56 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         )}
         <span className="pane-header-spacer" />
         {ctx.multi && !isZoomed && (
-          <button
-            type="button"
-            className={`pane-header-btn${relayMiss ? " relay-miss" : ""}`}
-            title="Select text in terminal, then click to relay to the next pane"
-            onClick={() => {
-              const ok = ctx.onRelay(node.paneId);
-              if (!ok) {
-                setRelayMiss(true);
-                window.setTimeout(() => setRelayMiss(false), 500);
-              }
-            }}
-          >
-            <Send size={12} strokeWidth={1.75} />
-          </button>
+          <Tooltip label="Select text in terminal, then click to relay to the next pane">
+            <button
+              type="button"
+              className={`pane-header-btn${relayMiss ? " relay-miss" : ""}`}
+              aria-label="Relay selection to next pane"
+              onClick={() => {
+                const ok = ctx.onRelay(node.paneId);
+                if (!ok) {
+                  setRelayMiss(true);
+                  window.setTimeout(() => setRelayMiss(false), 500);
+                }
+              }}
+            >
+              <Send size={12} strokeWidth={1.75} />
+            </button>
+          </Tooltip>
         )}
         {!isZoomed && (
           <>
-            <button
-              type="button"
-              className="pane-header-btn"
-              title="Split right (Ctrl+B %) · Shift+click to fork conversation"
-              onClick={(e) => ctx.onSplit(node.paneId, "row", e.shiftKey ? node.convId : undefined)}
-            >
-              <SplitSquareHorizontal size={13} strokeWidth={1.75} />
-            </button>
-            <button
-              type="button"
-              className="pane-header-btn"
-              title='Split down (Ctrl+B ") · Shift+click to fork conversation'
-              onClick={(e) => ctx.onSplit(node.paneId, "col", e.shiftKey ? node.convId : undefined)}
-            >
-              <SplitSquareVertical size={13} strokeWidth={1.75} />
-            </button>
+            {/* Single-pane: split buttons are secondary, so they sit dimmed
+                until hover (R7) — keeps them clear of the window controls. */}
+            <Tooltip label="Split right (Ctrl+B %) · Shift+click to fork conversation">
+              <button
+                type="button"
+                className={`pane-header-btn${ctx.multi ? "" : " ghost"}`}
+                aria-label="Split pane right"
+                onClick={(e) => ctx.onSplit(node.paneId, "row", e.shiftKey ? node.convId : undefined)}
+              >
+                <SplitSquareHorizontal size={13} strokeWidth={1.75} />
+              </button>
+            </Tooltip>
+            <Tooltip label={'Split down (Ctrl+B ") · Shift+click to fork conversation'}>
+              <button
+                type="button"
+                className={`pane-header-btn${ctx.multi ? "" : " ghost"}`}
+                aria-label="Split pane down"
+                onClick={(e) => ctx.onSplit(node.paneId, "col", e.shiftKey ? node.convId : undefined)}
+              >
+                <SplitSquareVertical size={13} strokeWidth={1.75} />
+              </button>
+            </Tooltip>
           </>
         )}
         {!isZoomed && (
           <div className="pane-palette-wrap">
+            <Tooltip label="Recolour this terminal">
             <button
               type="button"
               className={`pane-header-btn${hasOverride ? " has-override" : ""}`}
-              title="Recolour this terminal"
+              aria-label="Recolour this terminal"
               onClick={(e) => { e.stopPropagation(); setPaletteOpen((v) => !v); }}
             >
               {effPalette === "world-cup-2026" ? (
@@ -286,6 +296,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
               )}
               <span className="pane-palette-dot" style={{ background: paneDotColor }} />
             </button>
+            </Tooltip>
             {paletteOpen && (
               <PalettePanel
                 onClose={() => setPaletteOpen(false)}
@@ -300,25 +311,29 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
             )}
           </div>
         )}
-        <button
-          type="button"
-          className="pane-header-btn"
-          title={isZoomed ? "Collapse pane (Esc)" : "Zoom pane"}
-          onClick={() => isZoomed ? ctx.onUnzoom() : ctx.onZoom(node.paneId)}
-        >
-          {isZoomed
-            ? <Minimize2 size={13} strokeWidth={1.75} />
-            : <Maximize2 size={13} strokeWidth={1.75} />}
-        </button>
-        {ctx.multi && !isZoomed && (
+        <Tooltip label={isZoomed ? "Collapse pane (Esc)" : "Zoom pane"}>
           <button
             type="button"
-            className="pane-header-btn close"
-            title="Close pane (Ctrl+B x)"
-            onClick={() => ctx.onClose(node.paneId)}
+            className="pane-header-btn"
+            aria-label={isZoomed ? "Collapse pane" : "Zoom pane"}
+            onClick={() => isZoomed ? ctx.onUnzoom() : ctx.onZoom(node.paneId)}
           >
-            <X size={13} strokeWidth={1.75} />
+            {isZoomed
+              ? <Minimize2 size={13} strokeWidth={1.75} />
+              : <Maximize2 size={13} strokeWidth={1.75} />}
           </button>
+        </Tooltip>
+        {ctx.multi && !isZoomed && (
+          <Tooltip label="Close pane (Ctrl+B x)">
+            <button
+              type="button"
+              className="pane-header-btn close"
+              aria-label="Close pane"
+              onClick={() => ctx.onClose(node.paneId)}
+            >
+              <X size={13} strokeWidth={1.75} />
+            </button>
+          </Tooltip>
         )}
       </div>
       <ClaudeTerminal

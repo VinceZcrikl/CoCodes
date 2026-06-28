@@ -69,6 +69,7 @@ export default function ClaudeTerminalView({
   onRespawnPane,
   onRenamePane,
   onSetPanePalette,
+  modelLabel,
 }: {
   profileId: string;
   activeId: string | null;
@@ -88,6 +89,8 @@ export default function ClaudeTerminalView({
   onRespawnPane: (sessionId: string, paneId: string) => void;
   onRenamePane: (sessionId: string, paneId: string, title: string) => void;
   onSetPanePalette: (sessionId: string, paneId: string, palette?: string, accent?: string) => void;
+  /** Model label of the active persona — passed to the toolbar status strip. */
+  modelLabel?: string;
 }) {
   // One PaneLayout handle per session; the toolbar drives the active one.
   const paneRefs = useRef<Map<string, ClaudeTerminalHandle>>(new Map());
@@ -268,6 +271,7 @@ export default function ClaudeTerminalView({
         onCwdChange={onCwdChange}
         onCommand={onCommand}
         cli={cli}
+        modelLabel={modelLabel}
       />
     </div>
   );

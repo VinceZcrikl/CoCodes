@@ -26,11 +26,13 @@ interface Props {
   /** True only for the active (persona, cli) panel; the rest stay mounted but
    *  hidden. Gates global event handlers + terminal spawning. */
   visible: boolean;
+  /** Model the active persona runs — surfaced in the toolbar status strip. */
+  modelLabel?: string;
 }
 
 /** A full CLI tab: session rail + the live embedded terminals, bound to one
  *  (persona, cli). Kept mounted by Cockpit across switches for keep-alive. */
-export default function ClaudeTab({ cli, profileId, visible }: Props) {
+export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props) {
   const [delegationToast, setDelegationToast] = useState<string | null>(null);
   // Tracks the last CLI we delegated to so the return toast can name it.
   const lastDelegatedCliRef = useRef<string>("agent");
@@ -198,6 +200,7 @@ export default function ClaudeTab({ cli, profileId, visible }: Props) {
             onRespawnPane={respawnPane}
             onRenamePane={renamePane}
             onSetPanePalette={setPanePalette}
+            modelLabel={modelLabel}
           />
         )}
       </div>

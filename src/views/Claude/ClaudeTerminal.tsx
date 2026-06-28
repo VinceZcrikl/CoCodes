@@ -343,7 +343,19 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         window.clearTimeout(settleTimer);
         settleTimer = window.setTimeout(() => {
           try {
-            fit.fit();
+            // Guard against transient mis-measurements: while a pane is being
+            // split (or the layout is mid-animation) the host can momentarily
+            // report a near-zero width, and FitAddon would resize the grid down
+            // to 1-2 columns. In Claude's fullscreen TUI that doesn't reflow —
+            // it garbles every line down the left edge. Skip clearly-bogus sizes
+            // and wait for the settled measurement instead.
+            const dims = fit.proposeDimensions();
+            if (!dims || dims.cols < 10 || dims.rows < 3) {
+              return;
+            }
+            if (dims.cols !== term.cols || dims.rows !== term.rows) {
+              term.resize(dims.cols, dims.rows);
+            }
           } catch {
             return;
           }

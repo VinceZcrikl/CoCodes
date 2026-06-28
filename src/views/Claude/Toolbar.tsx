@@ -12,6 +12,8 @@ import { useShellStore } from "../../state/shellStore";
 import { useGitStore } from "../../state/gitStore";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
 import { useSidebarStore } from "../../state/sidebarStore";
+import { useBranch } from "../../hooks/useBranch";
+import Tooltip from "../../components/Tooltip";
 import CommandPalette from "./CommandPalette";
 import FileFinder from "./FileFinder";
 
@@ -22,9 +24,11 @@ interface Props {
   busy?: boolean;
   /** "claude" | "codex" | "grok" — hides Claude-specific controls for other CLIs. */
   cli?: string;
+  /** Model the active persona runs — shown in the right-side status strip. */
+  modelLabel?: string;
 }
 
-export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" }: Props) {
+export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude", modelLabel }: Props) {
   const { cwd, setCwd } = useDirectoryStore();
   const shellOpen = useShellStore((s) => s.open);
   const toggleShell = useShellStore((s) => s.toggle);
@@ -32,6 +36,7 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
   const toggleGit = useGitStore((s) => s.toggle);
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
+  const branch = useBranch();
   const [dropOpen, setDropOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const dropRef = useRef<HTMLDivElement | null>(null);
@@ -73,113 +78,161 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
       />
 
       <div className="cli-toolbar-left">
-        {/* ── Sidebar toggle ── */}
-        <button
-          type="button"
-          className="cli-tool-btn"
-          onClick={toggleSidebar}
-          title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-          aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
-          aria-pressed={sidebarCollapsed}
-        >
-          {sidebarCollapsed ? (
-            <PanelLeftOpen size={15} strokeWidth={1.75} />
-          ) : (
-            <PanelLeftClose size={15} strokeWidth={1.75} />
-          )}
-        </button>
+        {/* ── Group 1: context anchor (R6) — working directory + sidebar ── */}
+        <div className="cli-tool-group">
+          {/* Directory picker — the global context every command runs against,
+              so it leads the toolbar as the context anchor. */}
+          <div className="dir-picker" ref={dropRef}>
+            <button
+              type="button"
+              className="dir-picker-btn"
+              onClick={() => setDropOpen((v) => !v)}
+              aria-haspopup="dialog"
+              aria-expanded={dropOpen}
+              aria-label="Working directory — browse files"
+            >
+              <FolderOpen size={12} strokeWidth={1.75} />
+              <span className="dir-picker-label">{label}</span>
+              <ChevronDown
+                size={10}
+                strokeWidth={2.2}
+                className={`dir-picker-chevron${dropOpen ? " open" : ""}`}
+              />
+            </button>
 
-        {/* ── Directory picker ── */}
-        <div className="dir-picker" ref={dropRef}>
-          <button
-            type="button"
-            className="dir-picker-btn"
-            title={cwd ?? "Home directory — click to browse files"}
-            onClick={() => setDropOpen((v) => !v)}
-            aria-haspopup="dialog"
-            aria-expanded={dropOpen}
-          >
-            <FolderOpen size={12} strokeWidth={1.75} />
-            <span className="dir-picker-label">{label}</span>
-            <ChevronDown
-              size={10}
-              strokeWidth={2.2}
-              className={`dir-picker-chevron${dropOpen ? " open" : ""}`}
-            />
-          </button>
+            {dropOpen && (
+              <FileFinder
+                cwd={cwd}
+                onInsertPath={insertPath}
+                onSetCwd={(dir) => setCwd(dir)}
+                onClose={() => setDropOpen(false)}
+              />
+            )}
+          </div>
 
-          {dropOpen && (
-            <FileFinder
-              cwd={cwd}
-              onInsertPath={insertPath}
-              onSetCwd={(dir) => setCwd(dir)}
-              onClose={() => setDropOpen(false)}
-            />
-          )}
+          <Tooltip label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}>
+            <button
+              type="button"
+              className="cli-tool-btn"
+              onClick={toggleSidebar}
+              aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+              aria-pressed={sidebarCollapsed}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeftOpen size={15} strokeWidth={1.75} />
+              ) : (
+                <PanelLeftClose size={15} strokeWidth={1.75} />
+              )}
+            </button>
+          </Tooltip>
         </div>
 
-        {/* ── Slash command palette trigger (Claude only) ── */}
+        <span className="cli-tool-sep" aria-hidden="true" />
+
+        {/* ── Group 2: terminal input — slash commands (Claude only) ── */}
         {cli === "claude" && (
-          <button
-            type="button"
-            data-panel-toggle="commands"
-            className={`cmd-trigger${paletteOpen ? " open" : ""}`}
-            onClick={() => setPaletteOpen((v) => !v)}
-            aria-label="Open command palette"
-            aria-expanded={paletteOpen}
-            title="Slash commands"
-          >
-            <span className="cmd-trigger-slash">/</span>
-            <span className="cmd-trigger-label">Commands</span>
-            <ChevronDown
-              size={10}
-              strokeWidth={2.2}
-              className={`cmd-trigger-chevron${paletteOpen ? " open" : ""}`}
-            />
-          </button>
+          <div className="cli-tool-group">
+            <button
+              type="button"
+              data-panel-toggle="commands"
+              className={`cmd-trigger${paletteOpen ? " open" : ""}`}
+              onClick={() => setPaletteOpen((v) => !v)}
+              aria-label="Open command palette"
+              aria-expanded={paletteOpen}
+              title="Slash commands"
+            >
+              <span className="cmd-trigger-slash">/</span>
+              <span className="cmd-trigger-label">Commands</span>
+              <ChevronDown
+                size={10}
+                strokeWidth={2.2}
+                className={`cmd-trigger-chevron${paletteOpen ? " open" : ""}`}
+              />
+            </button>
+          </div>
         )}
 
-        {/* ── Screenshot ── */}
-        <button
-          type="button"
-          className="cli-tool-btn"
-          onClick={onScreenshot}
-          disabled={busy}
-          title="Screenshot — drag a region or press Space for a window"
-          aria-label="Screenshot"
-        >
-          <Camera size={15} strokeWidth={1.75} />
-        </button>
+        {cli === "claude" && <span className="cli-tool-sep" aria-hidden="true" />}
 
-        {/* ── Shell toggle ── opens a floating shell window over the panel
-            (does not replace the CLI terminal); active while it's showing. */}
-        <button
-          type="button"
-          data-panel-toggle="shell"
-          className={`cli-tool-btn${shellOpen ? " active" : ""}`}
-          onClick={toggleShell}
-          title={shellOpen ? "Hide shell" : "Open shell"}
-          aria-label={shellOpen ? "Hide shell" : "Open shell"}
-          aria-pressed={shellOpen}
-        >
-          <Terminal size={15} strokeWidth={1.75} />
-        </button>
+        {/* ── Group 3: panels (R3 labelled) — shell · git ── */}
+        <div className="cli-tool-group">
+          <Tooltip label={shellOpen ? "Hide shell" : "Open a shell over this panel"}>
+            <button
+              type="button"
+              data-panel-toggle="shell"
+              className={`cli-tool-btn labelled${shellOpen ? " active" : ""}`}
+              onClick={toggleShell}
+              aria-label={shellOpen ? "Hide shell" : "Open shell"}
+              aria-pressed={shellOpen}
+            >
+              <Terminal size={15} strokeWidth={1.75} />
+              <span className="cli-tool-label">Shell</span>
+            </button>
+          </Tooltip>
 
-        {/* ── Git panel toggle ── floating read-only source-control window. */}
-        <button
-          type="button"
-          data-panel-toggle="git"
-          className={`cli-tool-btn${gitOpen ? " active" : ""}`}
-          onClick={toggleGit}
-          title={gitOpen ? "Hide Git panel" : "Git panel"}
-          aria-label={gitOpen ? "Hide Git panel" : "Git panel"}
-          aria-pressed={gitOpen}
-        >
-          <GitBranch size={15} strokeWidth={1.75} />
-        </button>
+          <Tooltip label={gitOpen ? "Hide Git panel" : "Open the Git panel"}>
+            <button
+              type="button"
+              data-panel-toggle="git"
+              className={`cli-tool-btn labelled${gitOpen ? " active" : ""}`}
+              onClick={toggleGit}
+              aria-label={gitOpen ? "Hide Git panel" : "Git panel"}
+              aria-pressed={gitOpen}
+            >
+              <GitBranch size={15} strokeWidth={1.75} />
+              <span className="cli-tool-label">Git</span>
+            </button>
+          </Tooltip>
+        </div>
+
+        <span className="cli-tool-sep" aria-hidden="true" />
+
+        {/* ── Group 4: one-shot action — screenshot ── */}
+        <div className="cli-tool-group">
+          <Tooltip label="Screenshot — drag a region or press Space for a window">
+            <button
+              type="button"
+              className="cli-tool-btn"
+              onClick={onScreenshot}
+              disabled={busy}
+              aria-label="Screenshot"
+            >
+              <Camera size={15} strokeWidth={1.75} />
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
-      <div className="cli-toolbar-right" />
+      {/* ── Right: read-only global status (R2) — branch + model ── */}
+      <div className="cli-toolbar-right">
+        {branch && (
+          <Tooltip
+            label={
+              branch.dirty
+                ? `On ${branch.branch} · uncommitted changes`
+                : `On ${branch.branch}`
+            }
+          >
+            <button
+              type="button"
+              className="cli-status-chip"
+              onClick={() => !gitOpen && toggleGit()}
+              aria-label={`Branch ${branch.branch}${branch.dirty ? ", uncommitted changes" : ""}`}
+            >
+              <GitBranch size={12} strokeWidth={1.75} />
+              <span className="cli-status-branch">{branch.branch}</span>
+              {branch.dirty && <span className="cli-status-dirty" aria-hidden="true" />}
+              {branch.ahead > 0 && <span className="cli-status-count">↑{branch.ahead}</span>}
+              {branch.behind > 0 && <span className="cli-status-count">↓{branch.behind}</span>}
+            </button>
+          </Tooltip>
+        )}
+        {modelLabel && (
+          <span className="cli-status-model" title={`Model: ${modelLabel}`}>
+            {modelLabel}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
