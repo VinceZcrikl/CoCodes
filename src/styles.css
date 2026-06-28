@@ -1073,6 +1073,320 @@ body {
   z-index: 10;
 }
 
+/* ── Empty pane — persona invite for a freshly-split, unbound pane ──── */
+.empty-pane {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      120% 90% at 50% 38%,
+      color-mix(in srgb, var(--orb-accent) 7%, transparent) 0%,
+      transparent 64%
+    );
+  transition: background 0.25s ease;
+}
+.empty-pane.drop-active {
+  background:
+    radial-gradient(
+      120% 90% at 50% 42%,
+      color-mix(in srgb, var(--drop-accent, var(--orb-accent)) 18%, transparent) 0%,
+      transparent 68%
+    );
+}
+
+/* A large, slowly-drifting theme motif behind the invite — barely-there. */
+.empty-pane-aura {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--orb-accent);
+  opacity: 0.05;
+  animation: empty-aura-drift 14s ease-in-out infinite;
+}
+.empty-pane-aura-ring {
+  width: 230px;
+  height: 230px;
+}
+@keyframes empty-aura-drift {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); opacity: 0.045; }
+  50%      { transform: translateY(-10px) rotate(6deg) scale(1.04); opacity: 0.075; }
+}
+
+.empty-pane-invite {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+  text-align: center;
+  animation: empty-invite-in 0.4s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+@keyframes empty-invite-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The big add button — an orb with a halo pulse, themed to --orb-accent. */
+.empty-pane-add {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.empty-pane-add-orb {
+  position: relative;
+  z-index: 1;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--orb-accent) 92%, #fff);
+  background:
+    radial-gradient(
+      120% 120% at 30% 25%,
+      color-mix(in srgb, var(--orb-accent) 34%, rgba(10, 22, 22, 0.4)) 0%,
+      color-mix(in srgb, var(--orb-accent) 14%, rgba(6, 16, 16, 0.55)) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--orb-accent) 55%, transparent);
+  box-shadow:
+    inset 0 0 18px -6px color-mix(in srgb, var(--orb-accent) 60%, transparent),
+    0 8px 26px -10px color-mix(in srgb, var(--orb-accent) 55%, transparent);
+  transition: transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1),
+              box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.empty-pane-add:hover .empty-pane-add-orb {
+  transform: scale(1.08) rotate(90deg);
+  border-color: var(--orb-accent);
+  box-shadow:
+    inset 0 0 22px -5px color-mix(in srgb, var(--orb-accent) 75%, transparent),
+    0 12px 34px -8px color-mix(in srgb, var(--orb-accent) 70%, transparent);
+}
+.empty-pane-add:active .empty-pane-add-orb {
+  transform: scale(0.96) rotate(90deg);
+}
+/* Concentric halo that keeps pulsing to draw the eye. */
+.empty-pane-add-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--orb-accent) 50%, transparent);
+  animation: empty-add-pulse 2.4s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes empty-add-pulse {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  70%  { transform: scale(1.45); opacity: 0; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+.empty-pane-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--orb-accent) 30%, #e8e2d6);
+}
+.empty-pane-hint {
+  font-size: 11px;
+  color: rgba(220, 214, 200, 0.42);
+}
+
+/* Release-to-summon indicator (during persona drag-over). */
+.empty-pane-drop-hint {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--drop-accent, var(--orb-accent));
+}
+.empty-pane-burst {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px dashed color-mix(in srgb, var(--drop-accent, var(--orb-accent)) 70%, transparent);
+  color: var(--drop-accent, var(--orb-accent));
+  animation: empty-burst-bob 0.9s ease-in-out infinite;
+}
+@keyframes empty-burst-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-5px) scale(1.06); }
+}
+.empty-pane-drop-text {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.pane-header.pane-header-empty {
+  background: transparent;
+  border-bottom: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+}
+
+/* ── Persona picker — card chooser opened from the empty pane ───────── */
+.persona-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 10, 10, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: pane-backdrop-in 0.18s ease both;
+}
+.persona-picker {
+  width: min(440px, 90%);
+  max-height: 82%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--orb-accent) 8%, rgba(12, 26, 26, 0.92)) 0%,
+      color-mix(in srgb, var(--orb-accent) 3%, rgba(6, 16, 16, 0.94)) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--orb-accent) 26%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 30px 80px -20px rgba(0, 0, 0, 0.8),
+    inset 0 0 40px -16px color-mix(in srgb, var(--orb-accent) 24%, transparent);
+  overflow: hidden;
+  animation: persona-picker-in 0.26s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+@keyframes persona-picker-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+.persona-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 13px 16px 11px;
+  border-bottom: 1px solid color-mix(in srgb, var(--orb-accent) 14%, transparent);
+  color: color-mix(in srgb, var(--orb-accent) 40%, #ece6da);
+}
+.persona-picker-spark { color: var(--orb-accent); }
+.persona-picker-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.persona-picker-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.persona-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.018);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  /* Staggered entrance keyed off --card-i. */
+  animation: persona-card-in 0.34s cubic-bezier(0.34, 1.2, 0.64, 1) both;
+  animation-delay: calc(var(--card-i, 0) * 38ms);
+}
+@keyframes persona-card-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+.persona-card:hover {
+  border-color: color-mix(in srgb, var(--card-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--card-accent) 10%, transparent);
+  transform: translateX(3px);
+}
+.persona-card:active { transform: translateX(3px) scale(0.99); }
+.persona-card-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.persona-card-avatar-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--card-accent) 45%, transparent) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+.persona-card:hover .persona-card-avatar-wrap::before { opacity: 1; }
+.persona-card-avatar {
+  width: 34px;
+  height: 34px;
+  font-size: 15px;
+}
+.persona-card-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.persona-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ece6da;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.persona-card-soul {
+  font-size: 11px;
+  color: rgba(214, 208, 196, 0.46);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.persona-card-cli {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--card-accent) 80%, #fff);
+  background: color-mix(in srgb, var(--card-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--card-accent) 34%, transparent);
+}
+
 /* ── Pane zoom — card-style overlay ───────────────────────────────── */
 /* Semi-transparent backdrop that sits below the zoomed pane. Clicking it
  * collapses the pane back into the split layout. */

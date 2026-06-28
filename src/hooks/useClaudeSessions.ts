@@ -426,10 +426,10 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
   );
 
   /** Split `paneId` in `sessionId`, adding a fresh pane bound to a new
-   *  conversation UUID. The new pane inherits the source pane's cli + cwd.
-   *  When `forkConvId` is supplied the new pane sets `forkFromConvId` so its
-   *  first PTY spawn loads the source conversation history; subsequent restarts
-   *  use the pane's own fresh `convId` (no "already in use" conflict). */
+   *  conversation UUID. A fork-split (forkConvId supplied) inherits the source
+   *  pane's CLI and loads its conversation history; a plain split instead opens
+   *  an EMPTY, unbound pane (`cli: ""`) that prompts the user to pick a persona
+   *  (drag-drop or the card picker) before any terminal spawns. */
   const splitPane = useCallback(
     (sessionId: string, paneId: string, dir: "row" | "col", forkConvId?: string) => {
       update((s) => ({
@@ -443,7 +443,9 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
             paneId: newId(),
             convId: newId(),                    // always unique
             forkFromConvId: forkConvId,         // used once on first spawn
-            cli: source?.cli ?? cli,
+            // Fork keeps the source CLI (it resumes that conversation); a plain
+            // split starts empty so the user explicitly fills it.
+            cli: forkConvId ? (source?.cli ?? cli) : "",
             started: false,
             cwd: source?.cwd ?? null,
           };

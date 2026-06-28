@@ -24,6 +24,7 @@ import {
 } from "../../hooks/useClaudeSessions";
 import { draggingPersona } from "../../state/dragState";
 import Tooltip from "../../components/Tooltip";
+import EmptyPane from "./EmptyPane";
 import PersonaAvatar, { personaColor } from "../Persona/PersonaAvatar";
 import { usePersonaModel } from "../../hooks/usePersonaModel";
 import PalettePanel from "../Cockpit/PalettePanel";
@@ -183,6 +184,50 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   // so just this terminal's chrome + xterm theme change.
   if (hasOverride) {
     Object.assign(style, cssVarsForPalette(effPalette, effAccent));
+  }
+
+  // Unbound pane (created by a plain split): show the persona invite instead of
+  // spawning a terminal. Still a drop target — the outer div carries
+  // `data-pane-id` so a dragged persona drops here, and the picker calls the
+  // same assign path. A minimal header keeps zoom/close reachable.
+  if (!node.cli) {
+    return (
+      <div
+        className={cls}
+        style={Object.keys(style).length ? style : undefined}
+        data-pane-id={node.paneId}
+        ref={(el) => {
+          if (el) ctx.leafEls.current.set(node.paneId, el);
+          else ctx.leafEls.current.delete(node.paneId);
+        }}
+        onMouseDownCapture={() => ctx.setActive(node.paneId)}
+        onPointerEnter={() => { if (draggingPersona) setDropOver(true); }}
+        onPointerLeave={() => setDropOver(false)}
+      >
+        {ctx.multi && !isZoomed && (
+          <div className="pane-header pane-header-empty">
+            <span className="pane-header-spacer" />
+            <Tooltip label="Close pane (Ctrl+B x)">
+              <button
+                type="button"
+                className="pane-header-btn close"
+                aria-label="Close pane"
+                onClick={() => ctx.onClose(node.paneId)}
+              >
+                <X size={13} strokeWidth={1.75} />
+              </button>
+            </Tooltip>
+          </div>
+        )}
+        <EmptyPane
+          palette={effPalette}
+          dropActive={dropOver && !!draggingPersona}
+          onPick={(profileId, cli) =>
+            ctx.onAssignPaneProfile(node.paneId, profileId, cli)
+          }
+        />
+      </div>
+    );
   }
 
   return (
