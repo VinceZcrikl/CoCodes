@@ -7,7 +7,7 @@ import {
 } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
-import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2, Palette } from "lucide-react";
+import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2 } from "lucide-react";
 import { INJECT_PANE_EVENT, type InjectPaneDetail } from "../../state/delegationMonitor";
 import {
   findPane,
@@ -21,8 +21,8 @@ import Tooltip from "../../components/Tooltip";
 import PersonaAvatar, { personaColor } from "../Persona/PersonaAvatar";
 import { usePersonaModel } from "../../hooks/usePersonaModel";
 import PalettePanel from "../Cockpit/PalettePanel";
-import TriondaBall from "../Cockpit/TriondaBall";
-import LaurelWreath from "../Cockpit/LaurelWreath";
+import RingIcon from "../Cockpit/RingIcon";
+import { THEME_DECOR } from "../../state/themeDecor";
 import { usePaletteStore } from "../../state/paletteStore";
 import { cssVarsForPalette } from "../../state/uiPalette";
 import {
@@ -287,13 +287,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
               aria-label="Recolour this terminal"
               onClick={(e) => { e.stopPropagation(); setPaletteOpen((v) => !v); }}
             >
-              {effPalette === "world-cup-2026" ? (
-                <TriondaBall className="pane-header-ball" />
-              ) : effPalette === "cocodes" ? (
-                <LaurelWreath className="pane-header-laurel" />
-              ) : (
-                <Palette size={13} strokeWidth={1.75} />
-              )}
+              <RingIcon kind={THEME_DECOR[effPalette].ringIcon} className="pane-header-ring" />
               <span className="pane-palette-dot" style={{ background: paneDotColor }} />
             </button>
             </Tooltip>
