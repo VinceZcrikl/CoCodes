@@ -110,32 +110,33 @@ export default function Cockpit() {
     };
   }, [profileId, personas, get]);
 
-  // The real model the subscription `claude` CLI runs, read from
-  // ~/.claude/settings.json. null when no model is pinned there (Claude Code
-  // then picks one dynamically — no static answer), so we fall back to a label.
+  // The CLI's own configured model (claude settings.json / codex config.toml).
+  // null when the CLI picks dynamically with nothing pinned — then we show
+  // "default" rather than a hardcoded guess that drifts from reality.
   const [claudeModel, setClaudeModel] = useState<string | null>(null);
+  const [codexModel, setCodexModel] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
-    void invoke<string | null>("claude_default_model").then((m) => {
-      if (!cancelled) setClaudeModel(m);
-    });
+    void invoke<string | null>("claude_default_model").then(
+      (m) => !cancelled && setClaudeModel(m),
+    );
+    void invoke<string | null>("codex_default_model").then(
+      (m) => !cancelled && setCodexModel(m),
+    );
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // The real model the active persona runs: its base-model preset's model name
-  // when set; otherwise, for the subscription claude CLI, the model pinned in
-  // ~/.claude/settings.json; otherwise the CLI's labelled default.
+  // The real model the active persona runs: its base-model provider's model when
+  // set; otherwise the CLI's own configured model; otherwise "default".
   const activeCliId = activeDoc?.cli ?? activePersona?.cli ?? "claude";
   const provider = activeDoc?.base_model
     ? providers.find((p) => p.id === activeDoc.base_model)
     : undefined;
-  const modelLabel =
-    provider?.model ||
-    (activeCliId === "claude" ? claudeModel : null) ||
-    CLIS.find((c) => c.id === activeCliId)?.defaultModel ||
-    "ready";
+  const cliModel =
+    activeCliId === "claude" ? claudeModel : activeCliId === "codex" ? codexModel : null;
+  const modelLabel = provider?.model || cliModel || "default";
 
   // Keep a ClaudeTab alive for every persona we've visited (not just the
   // active one), so switching persona toggles visibility instead of tearing

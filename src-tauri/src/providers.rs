@@ -405,6 +405,32 @@ pub async fn claude_default_model() -> Option<String> {
     json.get("model")?.as_str().map(str::to_owned)
 }
 
+/// The default model the `codex` CLI runs, read from the top-level `model` key in
+/// `~/.codex/config.toml`. Returns `None` when unset. Used to label a default
+/// (no base-model) Codex persona with its real configured model instead of a
+/// hardcoded guess. Hand-parsed (no `toml` dep): top-level keys precede any
+/// `[section]`, so we scan until the first section header.
+#[tauri::command]
+pub async fn codex_default_model() -> Option<String> {
+    let path = dirs::home_dir()?.join(".codex").join("config.toml");
+    let raw = std::fs::read_to_string(path).ok()?;
+    for line in raw.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            break; // reached a [section]; top-level keys are done
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            if k.trim() == "model" {
+                let v = v.trim().trim_matches('"').trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Fetch the live model list from a provider's OpenAI-compatible `…/models`
 /// endpoint so the UI dropdown reflects what the vendor actually offers (e.g.
 /// Kimi at `https://api.moonshot.ai/v1/models`). `token` is the key the user just

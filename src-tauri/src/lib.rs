@@ -161,6 +161,7 @@ pub fn run() {
             providers::provider_save,
             providers::provider_delete,
             providers::claude_default_model,
+            providers::codex_default_model,
             providers::provider_models,
             screenshot::screenshot_open,
             screenshot::screenshot_cancel,

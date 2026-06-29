@@ -2,19 +2,13 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { usePersonas, useProviders, type PersonaDoc } from "./usePersonas";
 
-/** Fallback display model per CLI when no base-model provider is set (mirrors the
- *  cockpit's CLIS table). */
-const CLI_DEFAULT_MODEL: Record<string, string> = {
-  claude: "Opus 4.8",
-  codex: "GPT-5.5",
-  gemini: "Gemini 2.5 Pro",
-  grok: "Grok 4",
-  kimi: "Kimi K2.7",
-};
-
-/** Avatar, name and the real model label for a persona — the same resolution the
- *  cockpit header uses (base-model provider's model → claude's pinned model →
- *  the CLI's default), exposed for per-pane headers. */
+/** Avatar, name and the real model label for a persona. We never fabricate a
+ *  model name — it comes from a verifiable source or shows "default":
+ *    base-model provider's model  → the model we actually inject, or
+ *    the CLI's own configured model (claude settings.json / codex config.toml), or
+ *    "default" when the CLI picks dynamically and nothing is pinned.
+ *  (A hardcoded per-CLI guess used to drift from reality, e.g. claude showing
+ *  "Opus 4.8" while Claude Code ran something else.) */
 export function usePersonaModel(profileId: string, cliHint?: string) {
   const { personas, get } = usePersonas();
   const { providers } = useProviders();
@@ -35,13 +29,17 @@ export function usePersonaModel(profileId: string, cliHint?: string) {
     };
   }, [profileId, personas, get]);
 
+  // The CLI's own configured default model (claude settings.json / codex
+  // config.toml). null when the CLI picks dynamically with nothing pinned.
   const [claudeModel, setClaudeModel] = useState<string | null>(null);
+  const [codexModel, setCodexModel] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     void invoke<string | null>("claude_default_model")
-      .then((m) => {
-        if (!cancelled) setClaudeModel(m);
-      })
+      .then((m) => !cancelled && setClaudeModel(m))
+      .catch(() => {});
+    void invoke<string | null>("codex_default_model")
+      .then((m) => !cancelled && setCodexModel(m))
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -52,11 +50,8 @@ export function usePersonaModel(profileId: string, cliHint?: string) {
   const provider = doc?.base_model
     ? providers.find((p) => p.id === doc.base_model)
     : undefined;
-  const model =
-    provider?.model ||
-    (cli === "claude" ? claudeModel : null) ||
-    CLI_DEFAULT_MODEL[cli] ||
-    cli;
+  const cliModel = cli === "claude" ? claudeModel : cli === "codex" ? codexModel : null;
+  const model = provider?.model || cliModel || "default";
 
   return {
     avatar: summary?.avatar ?? "",
