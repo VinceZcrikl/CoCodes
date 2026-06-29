@@ -355,7 +355,7 @@ pub async fn persona_delete(id: String) -> Result<(), String> {
 
 /// Create the three built-in default personas if they don't already exist.
 /// Idempotent — only writes files that are missing, never overwrites user edits.
-pub async fn seed_default_personas() {
+pub fn seed_default_personas() {
     struct Seed {
         id: &'static str,
         name: &'static str,

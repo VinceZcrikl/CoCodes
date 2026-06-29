@@ -81,7 +81,9 @@ pub fn run() {
             }
             // Carry over data from the pre-rename home before anything reads it.
             persona::migrate_legacy_home();
-            tauri::async_runtime::spawn(persona::seed_default_personas());
+            // Seed synchronously so persona_list sees all four defaults on the
+            // very first frontend call (async spawn races the WebView load).
+            persona::seed_default_personas();
 
             use tauri::Manager;
             // tauri-plugin-window-state persists the visible flag for all
