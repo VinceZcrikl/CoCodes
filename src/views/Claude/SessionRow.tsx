@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { Pin, Pencil, FolderInput } from "lucide-react";
 import type { ClaudeSession } from "../../hooks/useClaudeSessions";
 import { formatItemTime } from "./formatTime";
+import {
+  setDraggingSession,
+  SESSION_DROP_EVENT,
+  type SessionDropDetail,
+} from "../../state/dragState";
 
 interface Props {
   session: ClaudeSession;
   active: boolean;
   busy?: boolean;
+  /** CLI this session's default pane runs — handed to the drop so the target
+   *  pane resumes the right binary. */
+  cli: string;
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -22,6 +31,7 @@ export default function SessionRow({
   session,
   active,
   busy,
+  cli,
   onSelect,
   onRename,
   onDelete,
@@ -31,8 +41,68 @@ export default function SessionRow({
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(session.title);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const confirmTimer = useRef<number | null>(null);
+
+  // Pointer-drag (not HTML5 DnD, to dodge Tauri's window-drag region) of this
+  // session onto a pane — drops the conversation in for the pane to --resume.
+  // Mirrors ProfileConstellation's persona drag. `didDrag` suppresses the click
+  // that pointerup would otherwise fire (select on a mere click).
+  const dragRef = useRef<{ startX: number; startY: number } | null>(null);
+  const didDragRef = useRef(false);
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      const dist = Math.hypot(e.clientX - d.startX, e.clientY - d.startY);
+      if (!didDragRef.current && dist > 5) {
+        didDragRef.current = true;
+        setDraggingSession({
+          convId: session.id,
+          cwd: session.cwd ?? null,
+          cli,
+          title: session.title,
+        });
+      }
+      if (didDragRef.current) setGhost({ x: e.clientX, y: e.clientY });
+    };
+
+    const onUp = (e: PointerEvent) => {
+      const d = dragRef.current;
+      dragRef.current = null;
+      if (!didDragRef.current || !d) {
+        setGhost(null);
+        setDraggingSession(null);
+        return;
+      }
+      setGhost(null);
+      setDraggingSession(null);
+      // Defer clearing didDrag so the row's onClick (fired right after pointerup)
+      // sees it set and skips selecting.
+      window.setTimeout(() => { didDragRef.current = false; }, 0);
+
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const paneEl = el?.closest("[data-pane-id]") as HTMLElement | null;
+      if (paneEl?.dataset.paneId) {
+        const detail: SessionDropDetail = {
+          paneId: paneEl.dataset.paneId,
+          convId: session.id,
+          cwd: session.cwd ?? null,
+          cli,
+        };
+        window.dispatchEvent(new CustomEvent(SESSION_DROP_EVENT, { detail }));
+      }
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [session.id, session.cwd, session.title, cli]);
 
   useEffect(() => {
     if (editing) {
@@ -94,8 +164,18 @@ export default function SessionRow({
     <div
       className={`session-row${active ? " active" : ""}${busy ? " running" : ""}`}
       onClick={() => {
+        // A drag just ended on this row — swallow the synthetic click.
+        if (didDragRef.current) return;
         if (active || editing) return;
         onSelect(session.id);
+      }}
+      onPointerDown={(e) => {
+        // Left-button only, and never start a drag from the action buttons or
+        // the rename input (they stopPropagation already, but be defensive).
+        if (e.button !== 0 || editing) return;
+        if ((e.target as HTMLElement).closest(".session-row-actions")) return;
+        dragRef.current = { startX: e.clientX, startY: e.clientY };
+        didDragRef.current = false;
       }}
       role="button"
       tabIndex={0}
@@ -178,6 +258,19 @@ export default function SessionRow({
           {confirmingDelete ? "Sure?" : "×"}
         </button>
       </div>
+
+      {/* Floating drag ghost — pointer-events:none so it doesn't block the drop. */}
+      {ghost &&
+        createPortal(
+          <div
+            className="session-drag-ghost"
+            style={{ left: ghost.x, top: ghost.y }}
+            aria-hidden="true"
+          >
+            {session.title}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

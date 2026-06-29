@@ -541,6 +541,45 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     [update, cli],
   );
 
+  /** Load an existing conversation (`convId` from a session dragged out of the
+   *  sidebar) into the pane `paneId`, replacing whatever it was running. Points
+   *  the pane at that conversation and marks it `started` with the conversation's
+   *  recorded `cwd`, so `ClaudeTerminal` respawns with `--resume <convId>` from
+   *  the right project dir — the pane takes over that session's history. */
+  const loadConvIntoPane = useCallback(
+    (
+      sessionId: string,
+      paneId: string,
+      convId: string,
+      newCli: string,
+      convCwd: string | null,
+    ) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          const layout = sess.layout ?? defaultLayout(sess, cli);
+          const patch = (node: LayoutNode): LayoutNode => {
+            if (node.type === "pane") {
+              if (node.paneId !== paneId) return node;
+              return {
+                ...node,
+                convId,
+                cli: newCli,
+                cwd: convCwd,
+                forkFromConvId: undefined,
+                started: true, // spawn with --resume on convId, not --session-id
+              };
+            }
+            return { ...node, children: [patch(node.children[0]), patch(node.children[1])] };
+          };
+          return { ...sess, layout: patch(layout) };
+        }),
+      }));
+    },
+    [update, cli],
+  );
+
   /** Rebind `paneId` to a new persona + CLI. Issues a fresh convId so the
    *  terminal respawns immediately with the new binary and persona context. */
   const assignPaneProfile = useCallback(
@@ -687,6 +726,7 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     setSplitRatio,
     markPaneStarted,
     assignPaneProfile,
+    loadConvIntoPane,
     respawnPane,
     renamePane,
     setPanePalette,

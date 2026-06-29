@@ -8,6 +8,9 @@ import { useTerminalBusy } from "../../hooks/useTerminalBusy";
 interface Props {
   sessions: ClaudeSession[];
   groups: ClaudeGroup[];
+  /** CLI of this tab — passed to each row so a dragged session resumes the
+   *  right binary in the target pane. */
+  cli: string;
   activeId: string | null;
   onNew: (groupId?: string | null) => void;
   onSelect: (id: string) => void;
@@ -30,6 +33,7 @@ function byRecent(a: ClaudeSession, b: ClaudeSession) {
 export default function ClaudeSidebar({
   sessions,
   groups,
+  cli,
   activeId,
   onNew,
   onSelect,
@@ -83,6 +87,7 @@ export default function ClaudeSidebar({
       session={s}
       active={s.id === activeId}
       busy={busySessions.has(s.id)}
+      cli={cli}
       onSelect={onSelect}
       onRename={onRename}
       onDelete={onDelete}
