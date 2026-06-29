@@ -6,6 +6,7 @@ import { formatItemTime } from "./formatTime";
 interface Props {
   session: ClaudeSession;
   active: boolean;
+  busy?: boolean;
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
@@ -20,6 +21,7 @@ const DELETE_CONFIRM_MS = 3000;
 export default function SessionRow({
   session,
   active,
+  busy,
   onSelect,
   onRename,
   onDelete,
@@ -90,7 +92,7 @@ export default function SessionRow({
 
   return (
     <div
-      className={`session-row${active ? " active" : ""}`}
+      className={`session-row${active ? " active" : ""}${busy ? " running" : ""}`}
       onClick={() => {
         if (active || editing) return;
         onSelect(session.id);

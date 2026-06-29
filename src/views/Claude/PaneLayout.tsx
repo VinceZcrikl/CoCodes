@@ -38,6 +38,7 @@ import {
   type PanelPaletteName,
   type AccentName,
 } from "../../state/panelPalettes";
+import { useTerminalBusy } from "../../hooks/useTerminalBusy";
 
 /** Ctrl+B — the tmux-style prefix. Sent to the PTY as 0x02 when the follow-up
  *  key isn't a pane command, so a real readline Ctrl+B still works. */
@@ -77,6 +78,8 @@ interface PaneCtx {
   makeKeyHandler: (paneId: string) => (e: KeyboardEvent) => boolean;
   /** >1 pane in the tree → show per-pane close buttons. */
   multi: boolean;
+  /** Set of paneIds that currently have a running agent (terminal output within last 4s). */
+  runningPaneIds: Set<string>;
 }
 
 interface Props {
@@ -167,6 +170,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   // Build CSS class string.
   let cls = "pane-leaf";
   if (active) cls += " active";
+  if (ctx.runningPaneIds.has(node.paneId)) cls += " running";
   if (dropOver) cls += " pane-drop-over";
   if (isFileDragOver) cls += " pane-file-drop-over";
   if (isZoomed && !isExiting) cls += " pane-zoomed";
@@ -500,6 +504,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
   },
   ref,
 ) {
+  const { busyPanes } = useTerminalBusy();
   const handles = useRef<Map<string, ClaudeTerminalHandle>>(new Map());
   const leafEls = useRef<Map<string, HTMLElement>>(new Map());
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
@@ -772,7 +777,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
       onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
       onAssignPaneProfile, onRelay, onRespawn, onRename, onSetPanePalette,
       ...zoomCtx,
-      makeKeyHandler, multi: false,
+      makeKeyHandler, multi: false, runningPaneIds: busyPanes,
     };
     return (
       <div className="pane-root">{pane ? <PaneLeaf node={pane} ctx={ctx} /> : null}</div>
@@ -785,7 +790,7 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
     onAssignPaneProfile, onRelay, onRespawn, onRename, onSetPanePalette,
     ...zoomCtx,
-    makeKeyHandler, multi: order.length > 1,
+    makeKeyHandler, multi: order.length > 1, runningPaneIds: busyPanes,
   };
 
   // The backdrop is rendered inline (NOT portaled) so it shares the same

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Pin, Plus, Trash2 } from "lucide-react";
 import type { ClaudeGroup, ClaudeSession } from "../../hooks/useClaudeSessions";
 import SessionRow from "./SessionRow";
 import GroupPickerModal from "./GroupPickerModal";
+import { useTerminalBusy } from "../../hooks/useTerminalBusy";
 
 interface Props {
   sessions: ClaudeSession[];
@@ -40,6 +41,7 @@ export default function ClaudeSidebar({
   onRenameGroup,
   onRemoveGroup,
 }: Props) {
+  const { busySessions } = useTerminalBusy();
   const [movingId, setMovingId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
@@ -80,6 +82,7 @@ export default function ClaudeSidebar({
       key={s.id}
       session={s}
       active={s.id === activeId}
+      busy={busySessions.has(s.id)}
       onSelect={onSelect}
       onRename={onRename}
       onDelete={onDelete}

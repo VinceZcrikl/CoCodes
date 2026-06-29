@@ -580,6 +580,30 @@ body {
   color: var(--text-main);
 }
 
+/* Running agent: left-edge vertical sweep — sidebar-native direction.
+ * border-radius: 8px + overflow: hidden auto-rounds the strip's ends. */
+.session-row.running {
+  position: relative;
+  overflow: hidden;
+}
+.session-row.running::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--orb-accent) 88%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 100% 50%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--orb-accent) 60%, transparent));
+  animation: td-sweep-v 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .session-row-body {
   flex: 1;
   min-width: 0;
@@ -840,6 +864,26 @@ body {
 }
 .pane-leaf.active {
   border-color: color-mix(in srgb, var(--accent-gold) 45%, transparent);
+}
+
+/* Running agent: top-edge horizontal sweep — same visual language as .cockpit-frame::before,
+ * but 3× faster to signal active processing rather than ambient decoration. */
+.pane-leaf.running::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--orb-accent) 90%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 34% 100%;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--orb-accent) 60%, transparent));
+  animation: td-sweep 4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .pane-header {
@@ -5139,6 +5183,13 @@ select.agent-editor-input {
   18% { opacity: 0.85; }
   82% { opacity: 0.85; }
   100% { background-position: 140% 0; opacity: 0; }
+}
+/* Vertical variant — for sidebar session rows where the sweep flows top→bottom. */
+@keyframes td-sweep-v {
+  0%   { background-position: 0 -100%; opacity: 0; }
+  18%  { opacity: 0.9; }
+  82%  { opacity: 0.9; }
+  100% { background-position: 0 200%; opacity: 0; }
 }
 .cockpit:not(.mini) .cockpit-frame::after {
   background: radial-gradient(
