@@ -27,6 +27,7 @@ import Tooltip from "../../components/Tooltip";
 import EmptyPane from "./EmptyPane";
 import PersonaAvatar, { personaColor } from "../Persona/PersonaAvatar";
 import { usePersonaModel } from "../../hooks/usePersonaModel";
+import { useLiveModels } from "../../state/liveModels";
 import PalettePanel from "../Cockpit/PalettePanel";
 import RingIcon from "../Cockpit/RingIcon";
 import { THEME_DECOR } from "../../state/themeDecor";
@@ -422,7 +423,11 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         onMissingCli={ctx.onMissingCli}
         onOpened={() => ctx.onPaneStarted(node.paneId, effectiveCwd)}
         onSessionConflict={() => ctx.onRespawn(node.paneId)}
-        onModel={setLiveModel}
+        onModel={(m) => {
+          setLiveModel(m);
+          // Publish for the cockpit header / constellation (active persona).
+          useLiveModels.getState().setModel(effectiveProfileId, m);
+        }}
         onFocus={() => {
           ctx.setActive(node.paneId);
           // Looking at this pane clears any pending attention for it.
