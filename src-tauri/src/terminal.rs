@@ -48,6 +48,10 @@ struct TerminalSession {
     /// Most-recent PTY output, replayed when an xterm view reconnects to this
     /// still-running session (after a reload / remount).
     buffer: Arc<Mutex<Vec<u8>>>,
+    /// The model parsed from the CLI's startup banner (e.g. "Opus 4.8"), once
+    /// seen. Lets a reconnecting view show the model the session is really
+    /// running, without re-probing the CLI. Set by the PTY pump thread.
+    detected_model: Arc<Mutex<Option<String>>>,
 }
 
 /// App-managed table of live terminal sessions keyed by the id we hand the
@@ -79,6 +83,17 @@ struct ExitEvent {
 pub struct OpenResult {
     id: String,
     replay: Option<String>,
+    /// Model parsed from the banner on a reconnect (None on a fresh open — the
+    /// banner hasn't rendered yet; the `terminal://model` event delivers it then).
+    model: Option<String>,
+}
+
+/// Emitted once the CLI's startup banner reveals which model it's running, so the
+/// pane header can show the real model instead of a config guess.
+#[derive(Clone, Serialize)]
+struct ModelEvent {
+    id: String,
+    model: String,
 }
 
 /// Structured failure the frontend can branch on. `CliNotFound` drives the
@@ -425,9 +440,11 @@ pub async fn terminal_open(
             } else {
                 Some(STANDARD.encode(&buf[..]))
             };
+            let model = session.detected_model.lock().unwrap().clone();
             return Ok(OpenResult {
                 id: k.clone(),
                 replay,
+                model,
             });
         }
     }
@@ -764,6 +781,7 @@ pub async fn terminal_open(
     drop(pair.slave);
 
     let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let detected_model: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     reg.sessions.lock().unwrap().insert(
         id.clone(),
         TerminalSession {
@@ -772,6 +790,7 @@ pub async fn terminal_open(
             child,
             persona_file,
             buffer: buffer.clone(),
+            detected_model: detected_model.clone(),
         },
     );
 
@@ -779,6 +798,7 @@ pub async fn terminal_open(
     // reconnecting view can catch up. Runs until EOF (claude exited) or error.
     let app_for_thread = app.clone();
     let id_for_thread = id.clone();
+    let model_for_thread = detected_model.clone();
     // Belt-and-suspenders: if ensure_claude_trusts() failed to pre-trust the
     // directory (e.g. path-separator mismatch), detect the dialog in the PTY
     // stream and answer "1\r" automatically so the user never sees it.
@@ -788,6 +808,12 @@ pub async fn terminal_open(
         let sig_len = trust_sig.len();
         let mut trust_tail: Vec<u8> = Vec::with_capacity(sig_len);
         let mut trust_sent = false;
+
+        // Accumulate the early output (the welcome banner) until we can read off
+        // the model the CLI is actually running, then stop scanning.
+        let mut banner_buf: Vec<u8> = Vec::new();
+        let mut model_done = false;
+        const BANNER_SCAN_MAX: usize = 32 * 1024;
 
         let mut buf = [0u8; 8192];
         loop {
@@ -829,6 +855,28 @@ pub async fn terminal_open(
                         data: STANDARD.encode(chunk),
                     };
                     let _ = app_for_thread.emit("terminal://data", payload);
+
+                    // Read the real model off the startup banner (zero extra cost
+                    // — it's already in the stream). Scan the early output until
+                    // found or the window is exhausted.
+                    if !model_done {
+                        banner_buf.extend_from_slice(chunk);
+                        if let Some(model) = extract_model_from_banner(&banner_buf) {
+                            model_done = true;
+                            banner_buf = Vec::new();
+                            *model_for_thread.lock().unwrap() = Some(model.clone());
+                            let _ = app_for_thread.emit(
+                                "terminal://model",
+                                ModelEvent {
+                                    id: id_for_thread.clone(),
+                                    model,
+                                },
+                            );
+                        } else if banner_buf.len() > BANNER_SCAN_MAX {
+                            model_done = true; // give up; keep buffer memory bounded
+                            banner_buf = Vec::new();
+                        }
+                    }
                 }
                 Err(_) => break,
             }
@@ -852,7 +900,75 @@ pub async fn terminal_open(
         );
     });
 
-    Ok(OpenResult { id, replay: None })
+    Ok(OpenResult { id, replay: None, model: None })
+}
+
+/// Strip ANSI/VT escape sequences from PTY text so banner parsing sees plain
+/// characters (the TUI repaints with colour + cursor moves).
+fn strip_ansi(s: &str) -> String {
+    // Char-based (not byte-based) so multi-byte UTF-8 — the `·` separator and the
+    // box-drawing chars in TUI banners — survives intact.
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek() {
+            Some('[') => {
+                // CSI: params/intermediates until a final byte 0x40..=0x7e.
+                chars.next();
+                while let Some(&n) = chars.peek() {
+                    chars.next();
+                    if ('\u{40}'..='\u{7e}').contains(&n) {
+                        break;
+                    }
+                }
+            }
+            Some(']') => {
+                // OSC: until BEL or ESC (ST).
+                chars.next();
+                while let Some(&n) = chars.peek() {
+                    if n == '\u{07}' || n == '\u{1b}' {
+                        chars.next();
+                        break;
+                    }
+                    chars.next();
+                }
+            }
+            _ => {
+                chars.next(); // ESC + single char
+            }
+        }
+    }
+    out
+}
+
+/// Pull the model name off a CLI's welcome banner. Both Claude Code and Codex
+/// print an identity line with a middle dot, e.g. `Opus 4.8 (1M context) · Claude
+/// Max` or `kimi-k2.7-code · API Usage Billing` — we take the text before the
+/// `·`, drop a trailing `(… context)`, and trim box-drawing/padding. Best-effort:
+/// returns `None` if no plausible model line is present yet.
+fn extract_model_from_banner(buf: &[u8]) -> Option<String> {
+    let text = strip_ansi(&String::from_utf8_lossy(buf));
+    for line in text.lines() {
+        let Some(idx) = line.find('\u{00b7}') else { continue };
+        let mut left = &line[..idx];
+        // Drop a trailing "(1M context)" / "(200k context)" annotation.
+        if let Some(paren) = left.find('(') {
+            left = &left[..paren];
+        }
+        // Trim surrounding box-drawing chars, spaces and punctuation.
+        let candidate = left.trim_matches(|c: char| !c.is_alphanumeric());
+        if candidate.is_empty() || candidate.len() > 40 {
+            continue;
+        }
+        if candidate.chars().any(|c| c.is_alphanumeric()) {
+            return Some(candidate.to_string());
+        }
+    }
+    None
 }
 
 /// Write bytes to the PTY stdin. Shared by keystroke relay and composer
@@ -983,6 +1099,23 @@ fn ensure_claude_trusts(dir: &std::path::Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extract_model_from_banner_handles_real_banners() {
+        // Claude Code identity line (with a "(1M context)" annotation).
+        let claude = "Claude Code v2.1.195\n  Opus 4.8 (1M context) \u{00b7} Claude Max\n";
+        assert_eq!(extract_model_from_banner(claude.as_bytes()).as_deref(), Some("Opus 4.8"));
+        // Third-party / billing line.
+        let kimi = "\u{1b}[2m│\u{1b}[0m kimi-k2.7-code \u{00b7} API Usage Billing │\n";
+        assert_eq!(extract_model_from_banner(kimi.as_bytes()).as_deref(), Some("kimi-k2.7-code"));
+        // No identity line yet → None.
+        assert_eq!(extract_model_from_banner(b"booting up...\n"), None);
+    }
+
+    #[test]
+    fn strip_ansi_removes_csi_sequences() {
+        assert_eq!(strip_ansi("\u{1b}[31mred\u{1b}[0m"), "red");
+    }
 
     #[test]
     fn persona_file_renders_named_sections() {

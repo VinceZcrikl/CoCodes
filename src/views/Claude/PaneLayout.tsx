@@ -128,6 +128,12 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   const [relayMiss, setRelayMiss] = useState(false);
   const [editing, setEditing] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // The real model read off this session's startup banner (overrides the config
+  // guess once known). Reset when the pane rebinds to a different conversation.
+  const [liveModel, setLiveModel] = useState<string | null>(null);
+  useEffect(() => {
+    setLiveModel(null);
+  }, [node.profileId, node.convId]);
 
   // This pane's effective palette: its own override when set, else the global
   // panel scheme. A set override also re-skins the pane chrome via inline vars.
@@ -283,9 +289,9 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         {!editing && (
           <span
             className="pane-header-model"
-            title={`${identity.name} · ${identity.model}`}
+            title={`${identity.name} · ${liveModel ?? identity.model}`}
           >
-            {identity.model}
+            {liveModel ?? identity.model}
           </span>
         )}
         <span className="pane-header-spacer" />
@@ -416,6 +422,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
         onMissingCli={ctx.onMissingCli}
         onOpened={() => ctx.onPaneStarted(node.paneId, effectiveCwd)}
         onSessionConflict={() => ctx.onRespawn(node.paneId)}
+        onModel={setLiveModel}
         onFocus={() => {
           ctx.setActive(node.paneId);
           // Looking at this pane clears any pending attention for it.
