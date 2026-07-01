@@ -140,6 +140,54 @@ pub(crate) fn find_in_path(exe: &str, extra_dirs: &[PathBuf]) -> Option<PathBuf>
     extra_dirs.iter().map(|d| d.join(exe)).find(|c| c.is_file())
 }
 
+/// Common bin dirs where Node.js / package managers install `node` and `npx`.
+/// GUI apps launched from Finder/Dock inherit a minimal PATH, so a spawned CLI
+/// (e.g. `claude`) can't find `npx` when it tries to launch an npx-based MCP
+/// server — it fails with "No such file or directory (os error 2)". Callers
+/// prepend these to the inherited PATH before spawning a CLI.
+pub(crate) fn node_bin_dirs() -> Vec<PathBuf> {
+    let mut dirs_list = vec![
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ];
+    if let Some(h) = dirs::home_dir() {
+        dirs_list.push(h.join(".local/bin"));
+        dirs_list.push(h.join(".npm-global/bin"));
+        dirs_list.push(h.join(".bun/bin"));
+        dirs_list.push(h.join(".volta/bin"));
+        // nvm installs node under a per-version dir; add every version's bin so
+        // whichever one holds `npx` is reachable regardless of the active alias.
+        if let Ok(entries) = std::fs::read_dir(h.join(".nvm/versions/node")) {
+            for e in entries.flatten() {
+                let bin = e.path().join("bin");
+                if bin.is_dir() {
+                    dirs_list.push(bin);
+                }
+            }
+        }
+    }
+    dirs_list.retain(|d| d.is_dir());
+    dirs_list
+}
+
+/// Prepend `node_bin_dirs()` (and the spawned binary's own directory) to the
+/// inherited PATH so child processes the CLI launches — notably npx-based MCP
+/// servers — resolve on GUI-launched (minimal-PATH) apps.
+pub(crate) fn cli_path_env(binary: &std::path::Path) -> std::ffi::OsString {
+    let mut dirs_list = Vec::new();
+    if let Some(dir) = binary.parent() {
+        dirs_list.push(dir.to_path_buf());
+    }
+    dirs_list.extend(node_bin_dirs());
+    if let Some(existing) = std::env::var_os("PATH") {
+        dirs_list.extend(std::env::split_paths(&existing));
+    }
+    // Drop exact duplicates while preserving order (first occurrence wins).
+    let mut seen = std::collections::HashSet::new();
+    dirs_list.retain(|d| seen.insert(d.clone()));
+    std::env::join_paths(dirs_list).unwrap_or_else(|_| std::env::var_os("PATH").unwrap_or_default())
+}
+
 /// On Windows, `where.exe` reads the registry-based PATH (HKCU + HKLM) and
 /// finds binaries installed after the current process started — essential for
 /// CLIs installed by PowerShell scripts that modify the user PATH via registry.
@@ -627,6 +675,11 @@ pub async fn terminal_open(
     // Force a real terminal type so every CLI's TUI renders correctly in xterm.
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+
+    // GUI apps launched from Finder/Dock inherit a minimal PATH. Give the CLI a
+    // PATH that includes the common node/npx dirs so it can launch npx-based MCP
+    // servers (otherwise `/mcp` reports them "failed" with os error 2).
+    cmd.env("PATH", cli_path_env(&binary));
 
     // Background-luminance hint for TUI theme detection. `COLORFGBG="fg;bg"`
     // is the long-standing convention (rxvt/iTerm/Konsole): a high bg index
