@@ -326,9 +326,39 @@ pub fn mcp_run_auth(
         }
         #[cfg(not(windows))]
         {
-            let mut c = std::process::Command::new(&command);
+            // GUI apps on macOS/Linux launch from Finder/Dock with a minimal
+            // PATH that omits ~/.local/bin, Homebrew, and node-version-manager
+            // dirs, so spawning `npx` directly fails with "No such file or
+            // directory (os error 2)". Resolve it against the same fallback
+            // dirs the CLI launcher uses, and prepend those dirs (plus the
+            // binary's own dir) to the child PATH so the `#!/usr/bin/env node`
+            // shebang can also find `node`, which lives beside `npx`.
+            let home = dirs::home_dir();
+            let mut extras = vec![
+                PathBuf::from("/usr/local/bin"),
+                PathBuf::from("/opt/homebrew/bin"),
+            ];
+            if let Some(h) = &home {
+                extras.push(h.join(".local/bin"));
+                extras.push(h.join(".npm-global/bin"));
+                extras.push(h.join(".bun/bin"));
+            }
+            let resolved = crate::terminal::find_in_path(&command, &extras)
+                .unwrap_or_else(|| PathBuf::from(&command));
+            if let Some(dir) = resolved.parent() {
+                extras.insert(0, dir.to_path_buf());
+            }
+
+            let mut path_dirs = extras;
+            if let Ok(existing) = std::env::var("PATH") {
+                path_dirs.extend(std::env::split_paths(&existing));
+            }
+            let new_path = std::env::join_paths(path_dirs).map_err(|e| e.to_string())?;
+
+            let mut c = std::process::Command::new(&resolved);
             c.args(&args)
                 .envs(&env)
+                .env("PATH", &new_path)
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::piped());
