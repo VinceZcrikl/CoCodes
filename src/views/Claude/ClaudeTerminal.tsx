@@ -75,6 +75,9 @@ interface Props {
   /** Raised when the PTY output contains "already in use" — the caller should
    *  generate a new convId and remount this terminal to recover. */
   onSessionConflict?: () => void;
+  /** Raised with the model read off the CLI's startup banner (the real model the
+   *  session is running), so the pane header can show it instead of a guess. */
+  onModel?: (model: string) => void;
 }
 
 interface DataEvent {
@@ -124,7 +127,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
   function ClaudeTerminal(
     { profileId, claudeSessionId, forkFromSessionId, cwd, cli = "claude", resume,
       terminalKey, paletteOverride,
-      onMissingCli, onOpened, onExit, onFocus, onKeyEvent, onSessionConflict },
+      onMissingCli, onOpened, onExit, onFocus, onKeyEvent, onSessionConflict, onModel },
     ref,
   ) {
     const hostRef = useRef<HTMLDivElement | null>(null);
@@ -370,7 +373,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
             // For a fork pane (not yet started), use the source session ID so
             // the fork inherits conversation history on its very first run.
             const spawnSessionId = forkFromSessionId ?? claudeSessionId;
-            void invoke<{ id: string; replay: string | null }>("terminal_open", {
+            void invoke<{ id: string; replay: string | null; model: string | null }>("terminal_open", {
               profileId,
               cols: term.cols,
               rows: term.rows,
@@ -389,7 +392,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
               // hard-paints dark cells.)
               light: !!PANEL_PALETTES[effPalette]?.light,
             })
-              .then(({ id, replay }) => {
+              .then(({ id, replay, model }) => {
                 if (disposed) {
                   // Unmounted mid-open: schedule a graced close (a remount
                   // cancels it). Don't kill outright — the task may continue.
@@ -400,6 +403,8 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
                 // Reconnecting to a live session: replay its buffered output so
                 // the running task is visible instead of a blank terminal.
                 if (replay) term.write(decodeBase64(replay));
+                // On reconnect the model was already parsed from the banner.
+                if (model) onModel?.(model);
                 spawnedAt = Date.now();
                 // After the grace window expires, run one final fit. By then
                 // the welcome banner has rendered and any layout drift accumulated
@@ -505,6 +510,15 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         if (ev.payload.id !== sessionIdRef.current) return;
         term.write(`\r\n\x1b[2m[${cli} exited]\x1b[0m\r\n`);
         onExit?.(ev.payload.code);
+      }).then((un) => {
+        if (disposed) un();
+        else cleanup.push(un);
+      });
+
+      // Real model read off the CLI's startup banner → surface it to the header.
+      void listen<{ id: string; model: string }>("terminal://model", (ev) => {
+        if (ev.payload.id !== sessionIdRef.current) return;
+        onModel?.(ev.payload.model);
       }).then((un) => {
         if (disposed) un();
         else cleanup.push(un);

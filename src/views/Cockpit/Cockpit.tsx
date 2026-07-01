@@ -15,6 +15,7 @@ import GoalConfetti from "./GoalConfetti";
 import ThemeCelebrate from "./ThemeCelebrate";
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import { useProfileStore } from "../../state/profileStore";
+import { useLiveModels } from "../../state/liveModels";
 import { usePaletteStore, installPaletteSync } from "../../state/paletteStore";
 import { PANEL_PALETTES, resolveAccentColor } from "../../state/panelPalettes";
 import { THEME_DECOR } from "../../state/themeDecor";
@@ -140,7 +141,10 @@ export default function Cockpit() {
     : undefined;
   const cliModel =
     activeCliId === "claude" ? claudeModel : activeCliId === "codex" ? codexModel : null;
-  const modelLabel = provider?.model || cliModel || "default";
+  // The real model read off the active persona's running session banner — most
+  // accurate, so it wins over the injected/config value.
+  const bannerModel = useLiveModels((s) => s.byProfile[profileId]);
+  const modelLabel = bannerModel || provider?.model || cliModel || "default";
 
   // Keep a ClaudeTab alive for every persona we've visited (not just the
   // active one), so switching persona toggles visibility instead of tearing
