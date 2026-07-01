@@ -18,7 +18,13 @@ use crate::persona::app_home;
 // ── Data model ────────────────────────────────────────────────────────────────
 
 /// One MCP server entry stored in `~/.cocodes/mcp.json`.
+///
+/// `rename_all = "camelCase"` bridges the snake_case Rust fields to the
+/// camelCase keys the frontend sends/reads (`presetKey`, `usageHint`). Without
+/// it, multi-word fields silently vanished on save — single-word fields
+/// (`id`/`name`/`config`/`enabled`) matched by luck, but `preset_key` did not.
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct McpServer {
     /// Stable unique id (UUID v4 hex, generated on first save).
     pub id: String,
@@ -31,6 +37,11 @@ pub struct McpServer {
     /// Lets the UI distinguish preset servers from hand-crafted custom ones.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset_key: Option<String>,
+    /// Optional guidance folded into the persona system prompt while this
+    /// server is enabled, so the model prefers these tools over a web-search
+    /// fallback without the user having to say so every turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_hint: Option<String>,
     /// Whether CoCodes should pass this server to CLI sessions on launch.
     pub enabled: bool,
 }
@@ -240,6 +251,23 @@ fn sync_to_claude_settings(servers: &[McpServer]) {
 #[tauri::command]
 pub fn mcp_list() -> Vec<McpServer> {
     load_store().servers
+}
+
+/// Usage hints of every *enabled* server that carries one, in stored order.
+/// Folded into the persona system prompt so the model reaches for these tools
+/// instead of a web-search fallback. Not a Tauri command — called internally
+/// while assembling the CLI's system prompt.
+pub fn enabled_usage_hints() -> Vec<String> {
+    load_store()
+        .servers
+        .into_iter()
+        .filter(|s| s.enabled)
+        .filter_map(|s| {
+            s.usage_hint
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty())
+        })
+        .collect()
 }
 
 /// Persist the full server list (add / edit / delete / reorder all go here).

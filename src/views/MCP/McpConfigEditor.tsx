@@ -142,6 +142,7 @@ export default function McpConfigEditor({ server, presetKey: initialPresetKey, o
         config,
         enabled: server?.enabled ?? true,
         presetKey: preset?.key,
+        usageHint: preset?.usageHint ?? server?.usageHint,
       };
       await onSave(updated, Array.from(selectedClients));
       setSuccessMsg(

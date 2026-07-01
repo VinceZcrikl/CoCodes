@@ -43,6 +43,12 @@ export interface McpPreset {
   keyUrl?: string;
   /** One-time setup step shown after first save (e.g. OAuth browser flow). */
   authStep?: McpAuthStep;
+  /**
+   * Guidance folded into the persona system prompt while this server is
+   * enabled, so the model prefers these tools over a web-search fallback
+   * without the user re-stating it every turn.
+   */
+  usageHint?: string;
 }
 
 export const MCP_PRESETS: McpPreset[] = [
@@ -71,6 +77,12 @@ export const MCP_PRESETS: McpPreset[] = [
       },
     ],
     keyUrl: "https://developer.x.com/en/portal/dashboard",
+    usageHint:
+      "The **x-api** MCP server (X / Twitter) is connected. For any request " +
+      "about X/Twitter — searching posts, a user's tweets, trends, timelines, " +
+      "mentions, bookmarks, or posting — use its tools directly. Do NOT " +
+      "substitute a web search unless an x-api tool actually returns an error; " +
+      "if one does, say so explicitly before falling back.",
     authStep: {
       title: "Authorize X API (one-time)",
       description: "xurl opens a browser so you can log in with your X account. This only happens once — tokens are cached locally.",

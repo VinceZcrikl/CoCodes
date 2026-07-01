@@ -416,6 +416,14 @@ fn write_persona_file(id: &str, ctx: &PersonaContext, identity: Option<&str>) ->
     if !user.is_empty() {
         sections.push(format!("## About the user\n\n{user}"));
     }
+    // Usage guidance for enabled MCP servers (e.g. "prefer the x-api tools over
+    // web search"). Folded in so the model reaches for connected tools by
+    // default, without the user re-stating it every turn.
+    let hints = crate::mcp::enabled_usage_hints();
+    if !hints.is_empty() {
+        sections.push(format!("## Connected tools\n\n{}", hints.join("\n\n")));
+    }
+
     // Truthful base-model identity (only set when this persona routes its claude
     // at a third-party Anthropic-compatible endpoint). Last so it overrides any
     // earlier "you are Claude" framing in the SOUL.

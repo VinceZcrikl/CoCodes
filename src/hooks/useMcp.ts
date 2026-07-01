@@ -9,6 +9,9 @@ export interface McpServer {
   enabled: boolean;
   /** Links this server to a built-in preset key (e.g. "x-api"). */
   presetKey?: string;
+  /** Guidance folded into the persona system prompt while enabled, so the
+   *  model prefers this server's tools over a web-search fallback. */
+  usageHint?: string;
 }
 
 export function useMcp() {
