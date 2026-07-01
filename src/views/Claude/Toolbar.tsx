@@ -6,11 +6,13 @@ import {
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
+  Plug,
   Terminal,
   GitBranch,
 } from "lucide-react";
 import { useShellStore } from "../../state/shellStore";
 import { useGitStore } from "../../state/gitStore";
+import { useMcpStore } from "../../state/mcpStore";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
 import { useSidebarStore } from "../../state/sidebarStore";
 import { useBranch } from "../../hooks/useBranch";
@@ -36,6 +38,8 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
   const toggleShell = useShellStore((s) => s.toggle);
   const gitOpen = useGitStore((s) => s.open);
   const toggleGit = useGitStore((s) => s.toggle);
+  const mcpOpen = useMcpStore((s) => s.open);
+  const toggleMcp = useMcpStore((s) => s.toggle);
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
   const branch = useBranch();
@@ -189,6 +193,20 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
             >
               <GitBranch size={15} strokeWidth={1.75} />
               <span className="cli-tool-label">Git</span>
+            </button>
+          </Tooltip>
+
+          <Tooltip label={mcpOpen ? "Hide MCP panel" : "Manage MCP servers"}>
+            <button
+              type="button"
+              data-panel-toggle="mcp"
+              className={`cli-tool-btn labelled${mcpOpen ? " active" : ""}`}
+              onClick={toggleMcp}
+              aria-label={mcpOpen ? "Hide MCP panel" : "MCP servers"}
+              aria-pressed={mcpOpen}
+            >
+              <Plug size={15} strokeWidth={1.75} />
+              <span className="cli-tool-label">MCP</span>
             </button>
           </Tooltip>
         </div>

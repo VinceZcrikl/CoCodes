@@ -583,10 +583,11 @@ pub async fn terminal_open(
             }
             cmd.arg(sid);
         }
-        // Attach a Notification hook (via an extra in-memory settings doc) so a
-        // tool-approval prompt pings CoCodes's loopback listener, which raises a
-        // tray notification that jumps back to this pane. Tagged with the
-        // terminal key (`id`) so the cockpit can resolve which pane is waiting.
+        // Attach a Notification hook so a tool-approval prompt pings CoCodes's
+        // loopback listener and raises a tray notification jumping back to this pane.
+        // MCP servers are NOT injected here — they are written to
+        // ~/.claude/settings.json by mcp_save() so Claude Code picks them up from
+        // the file, which avoids double-starting the same MCP process.
         if let Some(settings) = crate::notify_hooks::claude_settings_arg(&id) {
             cmd.arg("--settings");
             cmd.arg(settings);

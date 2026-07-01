@@ -8,6 +8,7 @@ pub mod codex_proxy;
 pub mod directory;
 pub mod fs;
 pub mod git;
+pub mod mcp;
 pub mod notify_hooks;
 pub mod persona;
 pub mod providers;
@@ -173,6 +174,10 @@ pub fn run() {
             fs::fs_list,
             fs::fs_walk,
             fs::fs_drives,
+            mcp::mcp_list,
+            mcp::mcp_save,
+            mcp::mcp_apply_to_clients,
+            mcp::mcp_run_auth,
         ])
         .on_window_event(|window, event| {
             // X closes the window to the system tray on all platforms — the

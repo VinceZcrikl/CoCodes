@@ -22,9 +22,13 @@ import { applyPaletteVars } from "../../state/uiPalette";
 import { useWindowStore } from "../../state/windowStore";
 import { useShellStore } from "../../state/shellStore";
 import { useGitStore } from "../../state/gitStore";
+import { useMcpStore } from "../../state/mcpStore";
 import ShellOverlay from "../Claude/ShellOverlay";
 import GitPanel from "../Git/GitPanel";
+import McpPanel from "../MCP/McpPanel";
+import McpConfigEditor from "../MCP/McpConfigEditor";
 import PersonaOrb from "../PersonaOrb/PersonaOrb";
+import { useMcp, type McpServer } from "../../hooks/useMcp";
 
 interface CliDef {
   id: string;
@@ -195,6 +199,14 @@ export default function Cockpit() {
   const closeGit = useGitStore((s) => s.close);
   const toggleGitMax = useGitStore((s) => s.toggleMax);
 
+  // MCP panel state.
+  const mcpEverOpened = useMcpStore((s) => s.everOpened);
+  const mcpOpen = useMcpStore((s) => s.open);
+  const closeMcp = useMcpStore((s) => s.close);
+  const { servers: mcpServers, loading: mcpLoading, toggle: mcpToggle, upsert: mcpUpsert, remove: mcpRemove, applyToClients } = useMcp();
+  // undefined = editor closed, null = new custom, string = open preset by key, McpServer = editing existing.
+  const [mcpEditing, setMcpEditing] = useState<McpServer | null | string | undefined>(undefined);
+
   useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
   useEffect(() => installPaletteSync(), []);
 
@@ -336,8 +348,35 @@ export default function Cockpit() {
               onClose={closeGit}
             />
           )}
+          {!mini && mcpEverOpened && (
+            <McpPanel
+              open={mcpOpen}
+              servers={mcpServers}
+              loading={mcpLoading}
+              onClose={closeMcp}
+              onConfigurePreset={(key) => setMcpEditing(key)}
+              onAdd={() => setMcpEditing(null)}
+              onEdit={(s) => setMcpEditing(s)}
+              onToggle={(id) => void mcpToggle(id)}
+              onDelete={(id) => void mcpRemove(id)}
+            />
+          )}
         </main>
       </div>
+
+      {mcpEditing !== undefined && (
+        <McpConfigEditor
+          server={typeof mcpEditing === "string" ? null : mcpEditing}
+          presetKey={typeof mcpEditing === "string" ? mcpEditing : undefined}
+          onSave={async (server, clientIds) => {
+            await mcpUpsert(server);
+            if (clientIds.length > 0) {
+              await applyToClients(server, clientIds);
+            }
+          }}
+          onClose={() => setMcpEditing(undefined)}
+        />
+      )}
 
       {editorFor !== undefined && (
         <PersonaEditor
