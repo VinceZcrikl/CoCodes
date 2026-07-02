@@ -164,37 +164,64 @@ pub async fn screenshot_grab(
         let gw = width.round().max(1.0) as i64;
         let gh = height.round().max(1.0) as i64;
         let region = format!("{gx},{gy},{gw},{gh}");
-        tauri::async_runtime::spawn_blocking(move || {
+        // `screencapture` writes nothing and prints "could not create image
+        // from rect/display" when the app lacks Screen Recording permission.
+        // Surface its stderr so the overlay can show a real reason.
+        let stderr = tauri::async_runtime::spawn_blocking(move || {
             std::thread::sleep(std::time::Duration::from_millis(140));
-            let _ = std::process::Command::new("screencapture")
+            let out = std::process::Command::new("screencapture")
                 .args(["-x", "-R", &region, &task_path])
-                .status();
+                .output();
             if to_clip {
                 let _ = std::process::Command::new("screencapture")
                     .args(["-x", "-c", "-R", &region])
                     .status();
             }
+            out.map(|o| String::from_utf8_lossy(&o.stderr).trim().to_string())
+                .unwrap_or_default()
         })
         .await
         .map_err(err_string)?;
+
+        if !path.exists() {
+            let _ = win.show();
+            let _ = win.set_focus();
+            let hint = if stderr.to_lowercase().contains("could not create image") {
+                "Screen Recording permission is required — enable CoCodes in \
+                 System Settings › Privacy & Security › Screen Recording, then retry."
+                    .to_string()
+            } else if stderr.is_empty() {
+                "capture produced no file (selection may be empty)".to_string()
+            } else {
+                format!("screencapture failed: {stderr}")
+            };
+            return Err(hint);
+        }
     }
 
     #[cfg(not(target_os = "macos"))]
     {
         let pos_x = pos.x;
         let pos_y = pos.y;
-        tauri::async_runtime::spawn_blocking(move || {
+        let result = tauri::async_runtime::spawn_blocking(move || {
             std::thread::sleep(std::time::Duration::from_millis(140));
             capture_region_xcap(
                 pos_x, pos_y, scale, x, y, width, height, &task_path, to_clip,
             )
         })
         .await
-        .map_err(err_string)??;
-    }
-
-    if !path.exists() {
-        return Err("capture produced no file (selection may be empty)".to_string());
+        .map_err(err_string)?;
+        if let Err(e) = result {
+            // Re-show the overlay so the failure isn't silent and can be retried.
+            let _ = win.show();
+            let _ = win.set_focus();
+            return Err(e);
+        }
+        if !path.exists() {
+            let _ = win.show();
+            let _ = win.set_focus();
+            return Err("capture produced no file (selection may be empty)".to_string());
+        }
     }
     let _ = app.emit("screenshot:captured", path_str.clone());
     Ok(path_str)

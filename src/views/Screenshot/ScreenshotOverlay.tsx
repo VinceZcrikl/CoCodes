@@ -63,6 +63,7 @@ function resizeRect(o: Rect, handle: Handle, dx: number, dy: number): Rect {
 export default function ScreenshotOverlay() {
   const [sel, setSel] = useState<Rect | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const selRef = useRef<Rect | null>(null);
   selRef.current = sel;
@@ -93,6 +94,7 @@ export default function ScreenshotOverlay() {
 
   const cancel = useCallback(() => {
     setSel(null);
+    setError(null);
     dragRef.current = null;
     void invoke("screenshot_cancel");
   }, []);
@@ -101,6 +103,7 @@ export default function ScreenshotOverlay() {
     const s = selRef.current ? normalize(selRef.current) : null;
     if (!s || s.w < 2 || s.h < 2) return;
     setBusy(true);
+    setError(null);
     try {
       await invoke("screenshot_grab", {
         x: s.x,
@@ -113,7 +116,10 @@ export default function ScreenshotOverlay() {
       // reset event is missed.
       setSel(null);
     } catch (e) {
+      // Rust re-shows the overlay on failure; surface the reason so the capture
+      // doesn't just silently vanish (most often: Screen Recording permission).
       console.error("screenshot_grab failed", e);
+      setError(typeof e === "string" ? e : String(e));
     } finally {
       setBusy(false);
     }
@@ -225,6 +231,7 @@ export default function ScreenshotOverlay() {
     const p = listen("screenshot:reset", () => {
       setSel(null);
       setBusy(false);
+      setError(null);
       setHoverWin(null);
       dragRef.current = null;
       void fetchWindows();
@@ -278,6 +285,11 @@ export default function ScreenshotOverlay() {
       onMouseDown={onRootMouseDown}
       onMouseMove={onRootMouseMove}
     >
+      {error && (
+        <div className="shot-error" onMouseDown={(e) => e.stopPropagation()}>
+          {error}
+        </div>
+      )}
       {!sel && (
         <div className="shot-predim">
           <div className="shot-hint">
