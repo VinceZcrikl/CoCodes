@@ -419,13 +419,17 @@ body {
 .sidebar {
   position: relative;
   /* Width is user-resizable (drag the right border); the store persists it and
-     provides the inline `width`. Default ~244px, clamped 180–480 in the store. */
+     provides the inline `width`. Default ~244px, clamped 156–480 in the store. */
   width: 244px;
   flex: none;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--panel-soft);
+  /* Container context so the contents (tabs, rows, group heads) can adapt to
+     the sidebar's own width as it's dragged — independent of viewport size. */
+  container-type: inline-size;
+  container-name: sidebar;
 }
 
 /* Right-border drag handle. Sits over the border, widens the hit area, and
@@ -805,6 +809,47 @@ body.resizing-col {
 .sidebar-fab:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* ── Sidebar responsive: adapt content to the (draggable) sidebar width ──
+   Uses container queries against the sidebar itself, so narrowing the panel
+   degrades gracefully instead of clipping. Two breakpoints:
+     ≤210px — tighten paddings, drop the per-session timestamp so titles keep
+              full width, and let group-action buttons shrink.
+     ≤184px — tabs go icon-only (labels would otherwise wrap/clip). */
+@container sidebar (max-width: 210px) {
+  .session-list {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .session-row {
+    padding: 7px 6px 7px 8px;
+    gap: 4px;
+  }
+  /* Timestamp is the first thing to sacrifice — the title is what matters. */
+  .session-row-time {
+    display: none;
+  }
+  .sidebar-fab {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .sidebar-tab {
+    gap: 4px;
+    padding: 0 3px;
+    font-size: 11px;
+  }
+}
+
+@container sidebar (max-width: 184px) {
+  /* Icon-only tabs — labels can't fit three-up any narrower. Titles stay via
+     the tab's aria-label / tooltip. */
+  .sidebar-tab span {
+    display: none;
+  }
+  .sidebar-tab {
+    gap: 0;
+  }
 }
 
 /* ── Terminal pane ─────────────────────────────────────────────────── */

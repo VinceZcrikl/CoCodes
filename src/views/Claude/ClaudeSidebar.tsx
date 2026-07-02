@@ -173,6 +173,8 @@ export default function ClaudeSidebar({
             type="button"
             role="tab"
             aria-selected={tab === id}
+            aria-label={label}
+            title={label}
             className={`sidebar-tab${tab === id ? " active" : ""}`}
             onClick={() => setTab(id)}
           >

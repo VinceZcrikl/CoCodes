@@ -5,7 +5,7 @@ import { create } from "zustand";
 const KEY = "cocodes:sidebar-collapsed";
 const WIDTH_KEY = "cocodes:sidebar-width";
 
-export const SIDEBAR_MIN_WIDTH = 180;
+export const SIDEBAR_MIN_WIDTH = 156;
 export const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 244;
 
