@@ -1,4 +1,11 @@
-import { useMemo, useState, useRef, useEffect, type KeyboardEvent } from "react";
+import {
+  useMemo,
+  useState,
+  useRef,
+  useEffect,
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -16,6 +23,7 @@ import FileFinder from "./FileFinder";
 import { GitPanelBody } from "../Git/GitPanel";
 import { useTerminalBusy } from "../../hooks/useTerminalBusy";
 import { useSidebarTabStore, type SidebarTab } from "../../state/sidebarTabStore";
+import { useSidebarStore } from "../../state/sidebarStore";
 import { useDirectoryStore } from "../../state/directoryStore";
 import { useActiveTerminalStore } from "../../state/activeTerminalStore";
 
@@ -62,6 +70,8 @@ export default function ClaudeSidebar({
   const { busySessions } = useTerminalBusy();
   const tab = useSidebarTabStore((s) => s.tab);
   const setTab = useSidebarTabStore((s) => s.setTab);
+  const width = useSidebarStore((s) => s.width);
+  const setWidth = useSidebarStore((s) => s.setWidth);
   const cwd = useDirectoryStore((s) => s.cwd);
   const changeDir = useActiveTerminalStore((s) => s.changeDir);
   const insertPath = useActiveTerminalStore((s) => s.insertPath);
@@ -131,8 +141,25 @@ export default function ClaudeSidebar({
     }
   };
 
+  // Drag the right border to resize. Width lives in the (persisted) sidebar
+  // store; we listen on the window so the drag keeps tracking outside the handle.
+  const startResize = (e: ReactPointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = width;
+    const onMove = (ev: PointerEvent) => setWidth(startW + (ev.clientX - startX));
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.classList.remove("resizing-col");
+    };
+    document.body.classList.add("resizing-col");
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ width }}>
       <div className="sidebar-tabs" role="tablist" aria-label="Sidebar sections">
         {(
           [
@@ -298,6 +325,17 @@ export default function ClaudeSidebar({
           onClose={() => setMovingId(null)}
         />
       )}
+
+      {/* Right-border drag handle — resize the sidebar. */}
+      <div
+        className="sidebar-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onPointerDown={startResize}
+        onDoubleClick={() => setWidth(244)}
+        title="Drag to resize · double-click to reset"
+      />
     </aside>
   );
 }

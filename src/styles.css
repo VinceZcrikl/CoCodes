@@ -418,13 +418,46 @@ body {
 /* ── Session rail ──────────────────────────────────────────────────── */
 .sidebar {
   position: relative;
-  /* Fluid width: full at 1180px, shrinks proportionally down to 180px. */
-  width: clamp(180px, 22vw, 244px);
+  /* Width is user-resizable (drag the right border); the store persists it and
+     provides the inline `width`. Default ~244px, clamped 180–480 in the store. */
+  width: 244px;
   flex: none;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--panel-soft);
+}
+
+/* Right-border drag handle. Sits over the border, widens the hit area, and
+   shows a subtle accent line on hover / while dragging. */
+.sidebar-resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+  touch-action: none;
+}
+.sidebar-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 3px;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.sidebar-resize:hover::after,
+body.resizing-col .sidebar-resize::after {
+  background: var(--accent-gold);
+}
+/* Keep the pointer as col-resize and suppress text selection during a drag. */
+body.resizing-col {
+  cursor: col-resize;
+  user-select: none;
 }
 
 /* Sidebar section tabs (Session / Explore / Git) — a segmented header row.
@@ -3892,8 +3925,12 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   max-width: min(560px, 80vw);
-  padding: 11px 18px;
+  padding: 12px 18px 14px;
   border-radius: 12px;
   font-size: 13px;
   line-height: 1.45;
@@ -3903,6 +3940,22 @@ body {
   border: 1px solid rgba(255, 120, 120, 0.55);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(8px);
+}
+
+.shot-error-btn {
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: background 0.12s ease;
+}
+
+.shot-error-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .shot-winhint {
