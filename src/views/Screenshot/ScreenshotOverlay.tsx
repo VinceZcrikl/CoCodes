@@ -287,7 +287,16 @@ export default function ScreenshotOverlay() {
     >
       {error && (
         <div className="shot-error" onMouseDown={(e) => e.stopPropagation()}>
-          {error}
+          <span>{error}</span>
+          {/permission/i.test(error) && (
+            <button
+              type="button"
+              className="shot-error-btn"
+              onClick={() => void invoke("screenshot_open_settings")}
+            >
+              Open Settings
+            </button>
+          )}
         </div>
       )}
       {!sel && (

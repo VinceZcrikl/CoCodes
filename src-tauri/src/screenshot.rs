@@ -54,6 +54,21 @@ pub async fn screenshot_open(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Open the OS privacy pane where the user grants screen-capture permission.
+/// macOS deep-links straight to the Screen Recording list; elsewhere it's a
+/// no-op (those platforms don't gate `xcap` behind a settings toggle).
+#[tauri::command]
+pub async fn screenshot_open_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+            .status()
+            .map_err(err_string)?;
+    }
+    Ok(())
+}
+
 /// Hide the overlay without capturing (Esc / ✕).
 #[tauri::command]
 pub async fn screenshot_cancel(app: AppHandle) -> Result<(), String> {

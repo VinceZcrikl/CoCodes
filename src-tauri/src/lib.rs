@@ -166,6 +166,7 @@ pub fn run() {
             providers::codex_default_model,
             providers::provider_models,
             screenshot::screenshot_open,
+            screenshot::screenshot_open_settings,
             screenshot::screenshot_cancel,
             screenshot::screenshot_grab,
             screenshot::screenshot_windows,
