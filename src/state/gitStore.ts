@@ -1,8 +1,8 @@
 import { create } from "zustand";
 
-/** State for the floating Git window — a read-only source-control inspector
- *  that floats over the active panel (same pattern as the shell window). Not
- *  persisted: it's a transient glance surface, reopened fresh each session. */
+/** Floating Git panel state — used ONLY when the sidebar is collapsed (with the
+ *  sidebar open, Git lives in its sidebar tab instead). The toolbar's git chip
+ *  toggles this overlay; not persisted (a transient glance surface). */
 interface GitState {
   open: boolean;
   maximized: boolean;

@@ -196,7 +196,8 @@ export default function Cockpit() {
   const closeShell = useShellStore((s) => s.close);
   const toggleShellMax = useShellStore((s) => s.toggleMax);
 
-  // Floating Git window (toolbar git icon) — read-only source-control inspector.
+  // Floating Git panel — only used when the sidebar is collapsed (otherwise Git
+  // lives in its sidebar tab). Toggled by the toolbar's git chip.
   const gitEverOpened = useGitStore((s) => s.everOpened);
   const gitOpen = useGitStore((s) => s.open);
   const gitMaximized = useGitStore((s) => s.maximized);

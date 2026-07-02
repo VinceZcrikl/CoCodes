@@ -9,6 +9,7 @@ import PaneLayout from "./PaneLayout";
 import type { ClaudeSession, LayoutNode } from "../../hooks/useClaudeSessions";
 import { useDirectoryStore } from "../../state/directoryStore";
 import { useWindowStore } from "../../state/windowStore";
+import { useActiveTerminalStore } from "../../state/activeTerminalStore";
 
 const CLI_META: Record<string, {
   title: string;
@@ -151,6 +152,16 @@ export default function ClaudeTerminalView({
     },
     [activeHandle],
   );
+
+  // Register this view's "write to active pane" as the global sink so the
+  // toolbar and (sibling) sidebar can drive the terminal without the handle map.
+  // Only the visible tab's view should own the sink — hidden tabs skip it.
+  const setSink = useActiveTerminalStore((s) => s.setSink);
+  useEffect(() => {
+    if (!panelVisible) return;
+    setSink(onCommand);
+    return () => setSink(null);
+  }, [panelVisible, onCommand, setSink]);
 
   useEffect(() => {
     const p = listen<string>("screenshot:captured", (e) => {

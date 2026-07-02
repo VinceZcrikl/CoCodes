@@ -15,6 +15,7 @@ import { useGitStore } from "../../state/gitStore";
 import { useMcpStore } from "../../state/mcpStore";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
 import { useSidebarStore } from "../../state/sidebarStore";
+import { useActiveTerminalStore } from "../../state/activeTerminalStore";
 import { useBranch } from "../../hooks/useBranch";
 import Tooltip from "../../components/Tooltip";
 import CommandPalette from "./CommandPalette";
@@ -33,16 +34,26 @@ interface Props {
 }
 
 export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" }: Props) {
-  const { cwd, setCwd } = useDirectoryStore();
+  const { cwd } = useDirectoryStore();
   const shellOpen = useShellStore((s) => s.open);
   const toggleShell = useShellStore((s) => s.toggle);
-  const gitOpen = useGitStore((s) => s.open);
-  const toggleGit = useGitStore((s) => s.toggle);
   const mcpOpen = useMcpStore((s) => s.open);
   const toggleMcp = useMcpStore((s) => s.toggle);
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
+  const gitOpen = useGitStore((s) => s.open);
+  const toggleGit = useGitStore((s) => s.toggle);
+  const closeGit = useGitStore((s) => s.close);
+  const changeDir = useActiveTerminalStore((s) => s.changeDir);
+  const insertPath = useActiveTerminalStore((s) => s.insertPath);
   const branch = useBranch();
+
+  // Showing the sidebar moves Git into its tab, so close the floating panel to
+  // avoid two Git surfaces at once.
+  const handleToggleSidebar = useCallback(() => {
+    if (sidebarCollapsed) closeGit();
+    toggleSidebar();
+  }, [sidebarCollapsed, closeGit, toggleSidebar]);
   const [version, setVersion] = useState<string | null>(null);
   const [dropOpen, setDropOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -63,19 +74,21 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
     return () => document.removeEventListener("mousedown", close);
   }, [dropOpen]);
 
-  // Paste a chosen file's path into the terminal (quote if it has spaces).
-  const insertPath = useCallback(
-    (abs: string) => {
-      const p = abs.replace(/\\/g, "/");
-      onCommand?.(/\s/.test(p) ? `"${p}"` : p, false);
-      setDropOpen(false);
-    },
-    [onCommand],
-  );
-
   const handleCommand = useCallback(
     (cmd: string, submit: boolean) => onCommand?.(cmd, submit),
     [onCommand],
+  );
+
+  // Dropdown (collapsed-sidebar file finder) handlers: delegate to the shared
+  // active-terminal store, then close the dropdown. `changeDir`/`insertPath`
+  // themselves (store) handle cwd + `/cd` sync and path insertion.
+  const pickPath = useCallback(
+    (abs: string) => { insertPath(abs); setDropOpen(false); },
+    [insertPath],
+  );
+  const pickDir = useCallback(
+    (dir: string) => { changeDir(dir); setDropOpen(false); },
+    [changeDir],
   );
 
   const label = cwd ? dirBasename(cwd) : "Home";
@@ -90,43 +103,92 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
       />
 
       <div className="cli-toolbar-left">
-        {/* ── Group 1: context anchor (R6) — working directory + sidebar ── */}
+        {/* ── Group 1: context anchor (R6) — working directory + sidebar ──
+            The dir picker + Git chip only appear when the sidebar is COLLAPSED;
+            when it's open, both live in the sidebar's Explore / Git tabs, so
+            showing them here too would duplicate the entry point. Clicking
+            either while collapsed expands the sidebar onto its tab. */}
         <div className="cli-tool-group">
-          {/* Directory picker — the global context every command runs against,
-              so it leads the toolbar as the context anchor. */}
-          <div className="dir-picker" ref={dropRef}>
-            <button
-              type="button"
-              className="dir-picker-btn"
-              onClick={() => setDropOpen((v) => !v)}
-              aria-haspopup="dialog"
-              aria-expanded={dropOpen}
-              aria-label="Working directory — browse files"
-            >
-              <FolderOpen size={12} strokeWidth={1.75} />
-              <span className="dir-picker-label">{label}</span>
-              <ChevronDown
-                size={10}
-                strokeWidth={2.2}
-                className={`dir-picker-chevron${dropOpen ? " open" : ""}`}
-              />
-            </button>
+          {sidebarCollapsed && (
+            <>
+              {/* Directory picker — quick browse dropdown; the chevron opens an
+                  inline finder without expanding the sidebar. */}
+              <div className="dir-picker" ref={dropRef}>
+                <button
+                  type="button"
+                  className="dir-picker-btn"
+                  onClick={() => setDropOpen((v) => !v)}
+                  aria-haspopup="dialog"
+                  aria-expanded={dropOpen}
+                  aria-label="Working directory — browse files"
+                >
+                  <FolderOpen size={12} strokeWidth={1.75} />
+                  <span className="dir-picker-label">{label}</span>
+                  <ChevronDown
+                    size={10}
+                    strokeWidth={2.2}
+                    className={`dir-picker-chevron${dropOpen ? " open" : ""}`}
+                  />
+                </button>
 
-            {dropOpen && (
-              <FileFinder
-                cwd={cwd}
-                onInsertPath={insertPath}
-                onSetCwd={(dir) => setCwd(dir)}
-                onClose={() => setDropOpen(false)}
-              />
-            )}
-          </div>
+                {dropOpen && (
+                  <FileFinder
+                    cwd={cwd}
+                    onInsertPath={pickPath}
+                    onSetCwd={pickDir}
+                    onClose={() => setDropOpen(false)}
+                  />
+                )}
+              </div>
+
+              {/* Git branch chip — toggles the floating Git panel (the sidebar
+                  is collapsed here, so Git has nowhere else to live). Rendered
+                  ALWAYS: in a repo it shows branch + dirty/ahead/behind; outside
+                  one it degrades to a plain "Git" chip (opens the panel to init). */}
+              <Tooltip
+                label={
+                  gitOpen
+                    ? "Hide Git panel"
+                    : branch
+                      ? branch.dirty
+                        ? `On ${branch.branch} · uncommitted changes — open Git`
+                        : `On ${branch.branch} — open Git`
+                      : "Open the Git panel"
+                }
+              >
+                <button
+                  type="button"
+                  data-panel-toggle="git"
+                  className={`cli-status-chip${gitOpen ? " active" : ""}`}
+                  onClick={toggleGit}
+                  aria-pressed={gitOpen}
+                  aria-label={
+                    branch
+                      ? `${gitOpen ? "Hide" : "Open"} Git panel — branch ${branch.branch}${branch.dirty ? ", uncommitted changes" : ""}`
+                      : `${gitOpen ? "Hide" : "Open"} Git panel`
+                  }
+                >
+                  <GitBranch size={12} strokeWidth={1.75} />
+                  {branch ? (
+                    <>
+                      <span className="cli-status-branch">{branch.branch}</span>
+                      {branch.dirty && <span className="cli-status-dirty" aria-hidden="true" />}
+                      {branch.ahead > 0 && <span className="cli-status-count">↑{branch.ahead}</span>}
+                      {branch.behind > 0 && <span className="cli-status-count">↓{branch.behind}</span>}
+                    </>
+                  ) : (
+                    <span className="cli-status-branch">Git</span>
+                  )}
+                </button>
+              </Tooltip>
+            </>
+          )}
 
           <Tooltip label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}>
             <button
               type="button"
               className="cli-tool-btn"
-              onClick={toggleSidebar}
+              onClick={handleToggleSidebar}
               aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
               aria-pressed={sidebarCollapsed}
             >
@@ -166,7 +228,10 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
 
         {cli === "claude" && <span className="cli-tool-sep" aria-hidden="true" />}
 
-        {/* ── Group 3: panels (R3 labelled) — shell · git ── */}
+        {/* ── Group 3: panels (R3 labelled) — shell · mcp ──
+            Git has no button here: the right-side branch chip is the single
+            Git entry point (it toggles the panel), so a second GitBranch
+            button would be redundant. */}
         <div className="cli-tool-group">
           <Tooltip label={shellOpen ? "Hide shell" : "Open a shell over this panel"}>
             <button
@@ -179,20 +244,6 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
             >
               <Terminal size={15} strokeWidth={1.75} />
               <span className="cli-tool-label">Shell</span>
-            </button>
-          </Tooltip>
-
-          <Tooltip label={gitOpen ? "Hide Git panel" : "Open the Git panel"}>
-            <button
-              type="button"
-              data-panel-toggle="git"
-              className={`cli-tool-btn labelled${gitOpen ? " active" : ""}`}
-              onClick={toggleGit}
-              aria-label={gitOpen ? "Hide Git panel" : "Git panel"}
-              aria-pressed={gitOpen}
-            >
-              <GitBranch size={15} strokeWidth={1.75} />
-              <span className="cli-tool-label">Git</span>
             </button>
           </Tooltip>
 
@@ -229,30 +280,8 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
         </div>
       </div>
 
-      {/* ── Right: read-only global status (R2) — branch + app version ── */}
+      {/* ── Right: app version (Git status now lives beside the dir picker) ── */}
       <div className="cli-toolbar-right">
-        {branch && (
-          <Tooltip
-            label={
-              branch.dirty
-                ? `On ${branch.branch} · uncommitted changes`
-                : `On ${branch.branch}`
-            }
-          >
-            <button
-              type="button"
-              className="cli-status-chip"
-              onClick={() => !gitOpen && toggleGit()}
-              aria-label={`Branch ${branch.branch}${branch.dirty ? ", uncommitted changes" : ""}`}
-            >
-              <GitBranch size={12} strokeWidth={1.75} />
-              <span className="cli-status-branch">{branch.branch}</span>
-              {branch.dirty && <span className="cli-status-dirty" aria-hidden="true" />}
-              {branch.ahead > 0 && <span className="cli-status-count">↑{branch.ahead}</span>}
-              {branch.behind > 0 && <span className="cli-status-count">↓{branch.behind}</span>}
-            </button>
-          </Tooltip>
-        )}
         {version && (
           <span className="cli-status-model" title={`CoCodes v${version}`}>
             CoCodes v{version}

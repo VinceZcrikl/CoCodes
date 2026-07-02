@@ -1,9 +1,23 @@
 import { useMemo, useState, useRef, useEffect, type KeyboardEvent } from "react";
-import { ChevronDown, ChevronRight, Pin, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderOpen,
+  GitBranch,
+  MessageSquare,
+  Pin,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import type { ClaudeGroup, ClaudeSession } from "../../hooks/useClaudeSessions";
 import SessionRow from "./SessionRow";
 import GroupPickerModal from "./GroupPickerModal";
+import FileFinder from "./FileFinder";
+import { GitPanelBody } from "../Git/GitPanel";
 import { useTerminalBusy } from "../../hooks/useTerminalBusy";
+import { useSidebarTabStore, type SidebarTab } from "../../state/sidebarTabStore";
+import { useDirectoryStore } from "../../state/directoryStore";
+import { useActiveTerminalStore } from "../../state/activeTerminalStore";
 
 interface Props {
   sessions: ClaudeSession[];
@@ -46,6 +60,11 @@ export default function ClaudeSidebar({
   onRemoveGroup,
 }: Props) {
   const { busySessions } = useTerminalBusy();
+  const tab = useSidebarTabStore((s) => s.tab);
+  const setTab = useSidebarTabStore((s) => s.setTab);
+  const cwd = useDirectoryStore((s) => s.cwd);
+  const changeDir = useActiveTerminalStore((s) => s.changeDir);
+  const insertPath = useActiveTerminalStore((s) => s.insertPath);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
@@ -114,11 +133,46 @@ export default function ClaudeSidebar({
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-header">
-        <span className="sidebar-header-title">Sessions</span>
+      <div className="sidebar-tabs" role="tablist" aria-label="Sidebar sections">
+        {(
+          [
+            { id: "session", label: "Session", Icon: MessageSquare },
+            { id: "explore", label: "Explore", Icon: FolderOpen },
+            { id: "git", label: "Git", Icon: GitBranch },
+          ] as { id: SidebarTab; label: string; Icon: typeof MessageSquare }[]
+        ).map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            className={`sidebar-tab${tab === id ? " active" : ""}`}
+            onClick={() => setTab(id)}
+          >
+            <Icon size={13} strokeWidth={2} aria-hidden="true" />
+            <span>{label}</span>
+          </button>
+        ))}
       </div>
 
-      <div className="session-list">
+      {tab === "explore" && (
+        <div className="sidebar-tab-body sidebar-explore">
+          <FileFinder
+            cwd={cwd}
+            onInsertPath={insertPath}
+            onSetCwd={changeDir}
+            onClose={() => {}}
+          />
+        </div>
+      )}
+
+      {tab === "git" && (
+        <div className="sidebar-tab-body sidebar-git">
+          <GitPanelBody active={true} />
+        </div>
+      )}
+
+      <div className="session-list" style={{ display: tab === "session" ? undefined : "none" }}>
         {sessions.length === 0 && groups.length === 0 && (
           <div className="session-empty">No sessions yet.</div>
         )}
@@ -221,16 +275,19 @@ export default function ClaudeSidebar({
         )}
       </div>
 
-      {/* Floating "New session" pill, orb-style — overlaps the list bottom. */}
-      <button
-        type="button"
-        className="sidebar-fab"
-        onClick={() => onNew(null)}
-        aria-label="New session"
-      >
-        <Plus size={16} strokeWidth={2.25} aria-hidden="true" />
-        <span>New session</span>
-      </button>
+      {/* Floating "New session" pill, orb-style — overlaps the list bottom.
+          Only on the Session tab; Explore/Git have their own affordances. */}
+      {tab === "session" && (
+        <button
+          type="button"
+          className="sidebar-fab"
+          onClick={() => onNew(null)}
+          aria-label="New session"
+        >
+          <Plus size={16} strokeWidth={2.25} aria-hidden="true" />
+          <span>New session</span>
+        </button>
+      )}
 
       {moving && (
         <GroupPickerModal
