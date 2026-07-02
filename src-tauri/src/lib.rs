@@ -4,6 +4,7 @@
 //! The per-CLI registry (`CliSpec`) and provider-switching modules land in
 //! later phases; the PTY engine here is already generic enough to drive them.
 
+pub mod ai_commit;
 pub mod codex_proxy;
 pub mod directory;
 pub mod fs;
@@ -171,6 +172,18 @@ pub fn run() {
             git::git_status,
             git::git_log,
             git::git_commit_files,
+            git::git_fetch,
+            git::git_pull,
+            git::git_push,
+            git::git_init,
+            git::git_branches,
+            git::git_checkout,
+            git::git_create_branch,
+            git::git_stage_all,
+            git::git_diff_cached,
+            git::git_commit,
+            ai_commit::ai_commit_providers,
+            ai_commit::ai_commit_message,
             fs::fs_list,
             fs::fs_walk,
             fs::fs_drives,

@@ -60,6 +60,10 @@ pub struct Resolved {
     pub auth_token: String,
     pub model: String,
     pub small_fast_model: Option<String>,
+    /// OpenAI/Codex wire protocol when this is a Codex provider (`"chat"` /
+    /// `"responses"`), `None` for Anthropic ones. Lets callers outside the CLI
+    /// launch path (e.g. the AI commit-message generator) pick the right wire.
+    pub wire_api: Option<String>,
 }
 
 /// What the Codex launch path needs to route a `codex` process through the
@@ -246,6 +250,7 @@ fn resolve_in(base: &Path, id: &str) -> Result<Option<Resolved>, String> {
         auth_token: token,
         model: p.model,
         small_fast_model: p.small_fast_model,
+        wire_api: p.wire_api,
     }))
 }
 

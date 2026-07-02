@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   GitBranch,
   RefreshCw,
@@ -7,9 +8,34 @@ import {
   X,
   ArrowUp,
   ArrowDown,
+  Download,
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Check,
+  Plus,
+  Loader2,
+  Sparkles,
+  ChevronDown,
 } from "lucide-react";
-import { useGit, type GitFileEntry } from "../../hooks/useGit";
+import {
+  useGit,
+  type GitFileEntry,
+  type GitBranches,
+  type GitStatus,
+  type ActionResult,
+} from "../../hooks/useGit";
+import { useProfileStore } from "../../state/profileStore";
 import { computeGraph, type GraphRow } from "./graph";
+
+/** A provider usable for AI commit messages (mirrors Rust `CommitProvider`). */
+interface CommitProvider {
+  id: string;
+  label: string;
+  model: string;
+  hasToken: boolean;
+}
+
+type ActionKind = "fetch" | "pull" | "push" | "commit" | "branch" | null;
 
 interface Props {
   open: boolean;
@@ -96,26 +122,319 @@ function GraphCell({ row, laneCount }: { row: GraphRow; laneCount: number }) {
   );
 }
 
-/** Floating, read-only Git inspector: branch + ahead/behind, working-tree
- *  status groups, and a multi-lane commit graph whose rows expand to show the
- *  files each commit changed. Writes stay the embedded CLI's job. */
-export default function GitPanel({ open, maximized, onToggleMax, onClose }: Props) {
-  const { status, commits, error, loading, refresh, loadCommitFiles } = useGit(open);
-
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [files, setFiles] = useState<Record<string, GitFileEntry[] | "loading">>({});
-  const panelRef = useRef<HTMLDivElement>(null);
+/** Branch switcher + new-branch input, shown as a popover under the branch
+ *  chip. Selecting a branch checks it out; the input creates and switches. */
+function BranchMenu({
+  branches,
+  busy,
+  onCheckout,
+  onCreate,
+  onClose,
+}: {
+  branches: GitBranches;
+  busy: boolean;
+  onCheckout: (name: string) => void;
+  onCreate: (name: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (panelRef.current?.contains(e.target as Node)) return;
-      if ((e.target as Element).closest('[data-panel-toggle="git"]')) return;
+      if (ref.current?.contains(e.target as Node)) return;
+      if ((e.target as Element).closest(".git-branch-chip")) return;
       onClose();
     };
     const id = window.setTimeout(() => window.addEventListener("mousedown", handler), 0);
     return () => { window.clearTimeout(id); window.removeEventListener("mousedown", handler); };
-  }, [open, onClose]);
+  }, [onClose]);
+
+  const submit = () => {
+    const n = name.trim();
+    if (n) onCreate(n);
+  };
+
+  return (
+    <div className="git-branch-menu" ref={ref} role="menu">
+      <div className="git-branch-list">
+        {branches.locals.length === 0 ? (
+          <div className="git-empty-sm">No local branches.</div>
+        ) : (
+          branches.locals.map((b) => (
+            <button
+              key={b}
+              type="button"
+              className={`git-branch-item${b === branches.current ? " current" : ""}`}
+              disabled={busy || b === branches.current}
+              onClick={() => onCheckout(b)}
+            >
+              <Check size={12} strokeWidth={2.2} className="git-branch-tick" />
+              <span className="git-branch-name">{b}</span>
+            </button>
+          ))
+        )}
+      </div>
+      <div className="git-branch-new">
+        <Plus size={12} strokeWidth={2.2} />
+        <input
+          className="git-branch-input"
+          placeholder="new branch…"
+          value={name}
+          disabled={busy}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); submit(); }
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** One-row action toolbar: branch switcher, Fetch / Pull / Push, and the AI
+ *  Commit split-button (button + model dropdown). A single inline status line
+ *  under the bar reports the last action's result. */
+function GitActions({
+  git,
+  isRepo,
+  branch,
+}: {
+  git: ReturnType<typeof useGit>;
+  isRepo: boolean;
+  branch: string;
+}) {
+  const activeProfileId = useProfileStore((s) => s.activeProfileId);
+  const [providers, setProviders] = useState<CommitProvider[]>([]);
+  const [modelId, setModelId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<ActionKind>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [branchOpen, setBranchOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const modelRef = useRef<HTMLDivElement>(null);
+
+  // Load providers that can generate a commit message; default the dropdown to
+  // the active persona's base_model provider when it's one of them.
+  useEffect(() => {
+    if (!isRepo) return;
+    let alive = true;
+    void invoke<{ id: string; label: string; model: string; hasToken: boolean }[]>(
+      "ai_commit_providers",
+    )
+      .then((list) => {
+        if (!alive) return;
+        setProviders(list);
+        setModelId((cur) => {
+          if (cur && list.some((p) => p.id === cur)) return cur;
+          const persona = list.find((p) => p.id === activeProfileId);
+          return persona?.id ?? list[0]?.id ?? null;
+        });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isRepo, activeProfileId]);
+
+  // Close the model dropdown on outside click.
+  useEffect(() => {
+    if (!modelOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (modelRef.current?.contains(e.target as Node)) return;
+      setModelOpen(false);
+    };
+    const id = window.setTimeout(() => window.addEventListener("mousedown", handler), 0);
+    return () => { window.clearTimeout(id); window.removeEventListener("mousedown", handler); };
+  }, [modelOpen]);
+
+  const flash = useCallback((r: ActionResult) => {
+    setNote({ ok: r.ok, text: r.message });
+  }, []);
+
+  // Auto-dismiss a success note; keep errors until the next action.
+  useEffect(() => {
+    if (!note?.ok) return;
+    const id = window.setTimeout(() => setNote(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [note]);
+
+  const runAction = useCallback(
+    async (kind: Exclude<ActionKind, null>, fn: () => Promise<ActionResult>) => {
+      if (busy) return;
+      setBusy(kind);
+      setNote(null);
+      try {
+        flash(await fn());
+      } finally {
+        setBusy(null);
+      }
+    },
+    [busy, flash],
+  );
+
+  if (!isRepo) {
+    return (
+      <div className="git-actions-bar">
+        <button
+          type="button"
+          className="git-action-init"
+          disabled={busy === "branch"}
+          onClick={() => void runAction("branch", () => git.init())}
+        >
+          {busy === "branch" ? <Loader2 size={13} className="spin" /> : <GitBranch size={13} strokeWidth={1.9} />}
+          Initialize repository
+        </button>
+        {note && (
+          <div className={`git-action-status${note.ok ? " ok" : " err"}`}>{note.text}</div>
+        )}
+      </div>
+    );
+  }
+
+  const selected = providers.find((p) => p.id === modelId) ?? null;
+  const canCommit = !!selected && busy === null;
+
+  return (
+    <div className="git-actions-bar">
+      <div className="git-actions-row">
+        {/* Branch switcher */}
+        <div className="git-branch-wrap">
+          <button
+            type="button"
+            className="git-branch-chip"
+            onClick={() => setBranchOpen((v) => !v)}
+            title="Switch or create branch"
+          >
+            <GitBranch size={12} strokeWidth={1.9} />
+            <span className="git-branch-cur">{branch || "branch"}</span>
+            <ChevronDown size={11} strokeWidth={2} />
+          </button>
+          {branchOpen && (
+            <BranchMenu
+              branches={git.branches}
+              busy={busy === "branch"}
+              onCheckout={(n) => {
+                setBranchOpen(false);
+                void runAction("branch", () => git.checkout(n));
+              }}
+              onCreate={(n) => {
+                setBranchOpen(false);
+                void runAction("branch", () => git.createBranch(n));
+              }}
+              onClose={() => setBranchOpen(false)}
+            />
+          )}
+        </div>
+
+        <div className="git-actions-spacer" />
+
+        {/* Fetch / Pull / Push */}
+        <button
+          type="button"
+          className="git-overlay-btn"
+          disabled={busy !== null}
+          onClick={() => void runAction("fetch", () => git.fetch())}
+          title="Fetch --all --prune"
+          aria-label="Fetch"
+        >
+          {busy === "fetch" ? <Loader2 size={13} className="spin" /> : <Download size={13} strokeWidth={1.9} />}
+        </button>
+        <button
+          type="button"
+          className="git-overlay-btn"
+          disabled={busy !== null}
+          onClick={() => void runAction("pull", () => git.pull())}
+          title="Pull --ff-only"
+          aria-label="Pull"
+        >
+          {busy === "pull" ? <Loader2 size={13} className="spin" /> : <ArrowDownToLine size={13} strokeWidth={1.9} />}
+        </button>
+        <button
+          type="button"
+          className="git-overlay-btn"
+          disabled={busy !== null}
+          onClick={() => void runAction("push", () => git.push())}
+          title="Push"
+          aria-label="Push"
+        >
+          {busy === "push" ? <Loader2 size={13} className="spin" /> : <ArrowUpToLine size={13} strokeWidth={1.9} />}
+        </button>
+
+        <div className="git-actions-spacer" />
+
+        {/* AI Commit split-button */}
+        <div className="git-commit-split" ref={modelRef}>
+          <button
+            type="button"
+            className="git-commit-btn"
+            disabled={!canCommit}
+            onClick={() => modelId && void runAction("commit", () => git.commit(modelId))}
+            title={selected ? `Commit — summarize with ${selected.label}` : "Configure a base-model provider to enable AI commit"}
+          >
+            {busy === "commit" ? <Loader2 size={13} className="spin" /> : <Sparkles size={13} strokeWidth={1.9} />}
+            Commit
+          </button>
+          <button
+            type="button"
+            className="git-commit-model"
+            disabled={busy !== null || providers.length === 0}
+            onClick={() => setModelOpen((v) => !v)}
+            title={selected ? selected.label : "Choose model"}
+          >
+            <ChevronDown size={12} strokeWidth={2} />
+          </button>
+          {modelOpen && (
+            <div className="git-model-menu" role="menu">
+              {providers.length === 0 ? (
+                <div className="git-empty-sm">No provider configured.</div>
+              ) : (
+                providers.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`git-model-item${p.id === modelId ? " current" : ""}`}
+                    onClick={() => { setModelId(p.id); setModelOpen(false); }}
+                  >
+                    <Check size={12} strokeWidth={2.2} className="git-model-tick" />
+                    <span className="git-model-label">{p.label}</span>
+                    <span className="git-model-name">{p.model}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {note && (
+        <div className={`git-action-status${note.ok ? " ok" : " err"}`} title={note.text}>
+          {note.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The Git panel's content — action bar + working-tree status + history graph.
+ *  Chrome-free so it can live inside the floating overlay OR as a sidebar tab.
+ *  `active` gates polling (see [`useGit`]); the optional `onRefresh` lets a host
+ *  header wire a refresh button to the same `useGit` instance. */
+export function GitPanelBody({
+  active,
+  onState,
+}: {
+  active: boolean;
+  /** Reports {status, loading, refresh} up to a host that renders its own header
+   *  (the floating overlay). Sidebar embedding can ignore it. */
+  onState?: (s: { status: GitStatus | null; loading: boolean; refresh: () => void }) => void;
+}) {
+  const git = useGit(active);
+  const { status, commits, error, refresh, loadCommitFiles } = git;
+
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [files, setFiles] = useState<Record<string, GitFileEntry[] | "loading">>({});
+
+  useEffect(() => {
+    onState?.({ status, loading: git.loading, refresh });
+  }, [status, git.loading, refresh, onState]);
 
   const graph = useMemo(() => computeGraph(commits), [commits]);
 
@@ -138,58 +457,10 @@ export default function GitPanel({ open, maximized, onToggleMax, onClose }: Prop
     (status.staged.length + status.unstaged.length + status.untracked.length) > 0;
 
   return (
-    <div
-      ref={panelRef}
-      className={`git-overlay${maximized ? " max" : ""}`}
-      style={{ display: open ? "flex" : "none" }}
-      role="dialog"
-      aria-label="Git"
-    >
-      <header className="git-overlay-bar">
-        <span className="git-overlay-title">
-          <GitBranch size={13} strokeWidth={1.9} />
-          <span>{status?.isRepo ? status.branch || "Git" : "Git"}</span>
-          {status?.isRepo && (status.ahead > 0 || status.behind > 0) && (
-            <span className="git-ab">
-              {status.ahead > 0 && (
-                <span className="git-ab-up"><ArrowUp size={10} strokeWidth={2.4} />{status.ahead}</span>
-              )}
-              {status.behind > 0 && (
-                <span className="git-ab-down"><ArrowDown size={10} strokeWidth={2.4} />{status.behind}</span>
-              )}
-            </span>
-          )}
-        </span>
-        <div className="git-overlay-actions">
-          <button
-            type="button"
-            className={`git-overlay-btn${loading ? " spinning" : ""}`}
-            onClick={() => void refresh()}
-            title="Refresh"
-            aria-label="Refresh"
-          >
-            <RefreshCw size={13} strokeWidth={1.9} />
-          </button>
-          <button
-            type="button"
-            className="git-overlay-btn"
-            onClick={onToggleMax}
-            title={maximized ? "Restore" : "Maximize"}
-            aria-label={maximized ? "Restore" : "Maximize"}
-          >
-            {maximized ? <Minimize2 size={13} strokeWidth={1.9} /> : <Maximize2 size={13} strokeWidth={1.9} />}
-          </button>
-          <button
-            type="button"
-            className="git-overlay-btn git-overlay-close"
-            onClick={onClose}
-            title="Close"
-            aria-label="Close Git"
-          >
-            <X size={14} strokeWidth={1.9} />
-          </button>
-        </div>
-      </header>
+    <>
+      {status && !error && (
+        <GitActions git={git} isRepo={status.isRepo} branch={status.branch} />
+      )}
 
       <div className="git-overlay-body">
         {error ? (
@@ -289,6 +560,87 @@ export default function GitPanel({ open, maximized, onToggleMax, onClose }: Prop
           </>
         )}
       </div>
+    </>
+  );
+}
+
+/** Floating Git panel: overlay chrome (branch + ahead/behind header, refresh /
+ *  maximize / close) wrapping the shared [`GitPanelBody`]. */
+export default function GitPanel({ open, maximized, onToggleMax, onClose }: Props) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [hdr, setHdr] = useState<{ status: GitStatus | null; loading: boolean; refresh: () => void }>({
+    status: null,
+    loading: false,
+    refresh: () => {},
+  });
+  const status = hdr.status;
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current?.contains(e.target as Node)) return;
+      if ((e.target as Element).closest('[data-panel-toggle="git"]')) return;
+      onClose();
+    };
+    const id = window.setTimeout(() => window.addEventListener("mousedown", handler), 0);
+    return () => { window.clearTimeout(id); window.removeEventListener("mousedown", handler); };
+  }, [open, onClose]);
+
+  return (
+    <div
+      ref={panelRef}
+      className={`git-overlay${maximized ? " max" : ""}`}
+      style={{ display: open ? "flex" : "none" }}
+      role="dialog"
+      aria-label="Git"
+    >
+      <header className="git-overlay-bar">
+        <span className="git-overlay-title">
+          <GitBranch size={13} strokeWidth={1.9} />
+          <span>{status?.isRepo ? status.branch || "Git" : "Git"}</span>
+          {status?.isRepo && (status.ahead > 0 || status.behind > 0) && (
+            <span className="git-ab">
+              {status.ahead > 0 && (
+                <span className="git-ab-up"><ArrowUp size={10} strokeWidth={2.4} />{status.ahead}</span>
+              )}
+              {status.behind > 0 && (
+                <span className="git-ab-down"><ArrowDown size={10} strokeWidth={2.4} />{status.behind}</span>
+              )}
+            </span>
+          )}
+        </span>
+        <div className="git-overlay-actions">
+          <button
+            type="button"
+            className={`git-overlay-btn${hdr.loading ? " spinning" : ""}`}
+            onClick={() => hdr.refresh()}
+            title="Refresh"
+            aria-label="Refresh"
+          >
+            <RefreshCw size={13} strokeWidth={1.9} />
+          </button>
+          <button
+            type="button"
+            className="git-overlay-btn"
+            onClick={onToggleMax}
+            title={maximized ? "Restore" : "Maximize"}
+            aria-label={maximized ? "Restore" : "Maximize"}
+          >
+            {maximized ? <Minimize2 size={13} strokeWidth={1.9} /> : <Maximize2 size={13} strokeWidth={1.9} />}
+          </button>
+          <button
+            type="button"
+            className="git-overlay-btn git-overlay-close"
+            onClick={onClose}
+            title="Close"
+            aria-label="Close Git"
+          >
+            <X size={14} strokeWidth={1.9} />
+          </button>
+        </div>
+      </header>
+
+      <GitPanelBody active={open} onState={setHdr} />
     </div>
   );
 }

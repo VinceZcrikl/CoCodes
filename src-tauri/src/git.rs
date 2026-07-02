@@ -1,9 +1,12 @@
-//! Read-only Git inspection for the floating Git window.
+//! Git inspection **and** the common write actions for the floating Git window.
 //!
 //! Shells out to the system `git` (no native libgit dependency) on a blocking
-//! thread, always scoped to the caller-supplied working directory. This module
-//! never mutates the repo — staging, commits, and pushes stay the embedded
-//! CLI's job, matching CoCodes's "drive the real CLI" philosophy.
+//! thread, always scoped to the caller-supplied working directory. Reads
+//! (status/log/diff) are complemented by a small set of one-click write actions
+//! — fetch/pull/push, init, branch switch/create, stage-all, and commit — so the
+//! panel is a usable source-control surface without leaving CoCodes. Anything
+//! richer (interactive rebase, conflict resolution) still belongs to the
+//! embedded CLI, matching CoCodes's "drive the real CLI" philosophy.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -89,12 +92,25 @@ fn git_bin() -> Result<PathBuf, GitError> {
         .ok_or_else(|| GitError::GitNotFound("`git` was not found on PATH.".into()))
 }
 
+/// Resolve the directory a git command runs in. A blank `cwd` (the frontend's
+/// `null → ""`) must mean the user's home dir — the same fallback the PTY uses
+/// ([`crate::terminal`]) — never the app process's launch directory, which is
+/// ambiguous (the repo in dev, `/` from a bundle) and would make the panel show
+/// an unrelated repo's status.
+fn resolve_cwd(cwd: &str) -> PathBuf {
+    if cwd.trim().is_empty() {
+        dirs::home_dir().unwrap_or_else(|| PathBuf::from("."))
+    } else {
+        PathBuf::from(cwd)
+    }
+}
+
 /// Run a git subcommand in `cwd` and return its stdout. A non-zero exit yields
 /// `GitError::Failed` carrying stderr.
 fn run_git(cwd: &str, args: &[&str]) -> Result<String, GitError> {
     let git = git_bin()?;
     let mut cmd = Command::new(&git);
-    cmd.args(args).current_dir(cwd);
+    cmd.args(args).current_dir(resolve_cwd(cwd));
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
     let out = cmd
@@ -309,4 +325,221 @@ pub async fn git_commit_files(cwd: String, hash: String) -> Result<Vec<FileEntry
     })
     .await
     .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+// ─────────────────────────── write actions ───────────────────────────
+//
+// Each command shells out on a blocking thread (like the readers) and returns
+// git's own stderr on failure so the panel can show it inline (e.g. "would
+// clobber", non-fast-forward, no upstream). Branch names are validated against a
+// conservative whitelist so nothing odd reaches the arg array.
+
+/// Reject anything that isn't a plausible branch name. git already forbids the
+/// dangerous forms via `check-ref-format`, but we gate here too: our own args
+/// are parameterized (never a shell), so this is belt-and-suspenders against a
+/// leading `-` being read as a flag and against obviously bad refs.
+fn valid_branch_name(name: &str) -> bool {
+    let n = name.trim();
+    !n.is_empty()
+        && n.len() <= 255
+        && !n.starts_with('-')
+        && !n.starts_with('.')
+        && !n.starts_with('/')
+        && !n.ends_with('/')
+        && !n.contains("..")
+        && !n.contains("//")
+        && !n.contains(' ')
+        && n.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '/' | '.')
+        })
+}
+
+/// `git fetch --all --prune` — refresh remotes without touching the work tree.
+#[tauri::command]
+pub async fn git_fetch(cwd: String) -> Result<(), GitError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_git(&cwd, &["fetch", "--all", "--prune"]).map(|_| ())
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// `git pull --ff-only` — advance the current branch, refusing to create a merge
+/// commit. A diverged branch fails with git's message, surfaced inline so the
+/// user hands conflict handling to the embedded CLI.
+#[tauri::command]
+pub async fn git_pull(cwd: String) -> Result<(), GitError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        run_git(&cwd, &["pull", "--ff-only"]).map(|_| ())
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// Push the current branch. If it has no upstream yet, publish it with
+/// `-u origin <branch>` so the first push "just works"; otherwise a plain
+/// `git push`. Non-fast-forward / auth failures surface inline.
+#[tauri::command]
+pub async fn git_push(cwd: String) -> Result<(), GitError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        // Does the current branch already track an upstream?
+        let has_upstream = run_git(
+            &cwd,
+            &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        )
+        .is_ok();
+        if has_upstream {
+            run_git(&cwd, &["push"]).map(|_| ())
+        } else {
+            let branch = run_git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])?
+                .trim()
+                .to_string();
+            if branch.is_empty() || branch == "HEAD" {
+                return Err(GitError::Failed("no branch to push (detached HEAD)".into()));
+            }
+            run_git(&cwd, &["push", "-u", "origin", &branch]).map(|_| ())
+        }
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// `git init` a plain (non-bare) repository at `cwd`.
+#[tauri::command]
+pub async fn git_init(cwd: String) -> Result<(), GitError> {
+    tauri::async_runtime::spawn_blocking(move || run_git(&cwd, &["init"]).map(|_| ()))
+        .await
+        .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// Local branch names plus the current one, for the branch switcher.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Branches {
+    current: String,
+    locals: Vec<String>,
+}
+
+/// List local branches (`git branch`) and the checked-out one. Detached HEAD
+/// yields an empty `current`.
+#[tauri::command]
+pub async fn git_branches(cwd: String) -> Result<Branches, GitError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let raw = run_git(
+            &cwd,
+            &["branch", "--format=%(refname:short)"],
+        )?;
+        let locals: Vec<String> = raw
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect();
+        let current = run_git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        let current = if current == "HEAD" { String::new() } else { current };
+        Ok(Branches { current, locals })
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// Switch to an existing local branch (`git checkout <name>`). Uncommitted
+/// changes that would be clobbered make git refuse, surfaced inline.
+#[tauri::command]
+pub async fn git_checkout(cwd: String, name: String) -> Result<(), GitError> {
+    if !valid_branch_name(&name) {
+        return Err(GitError::Failed("invalid branch name".into()));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        run_git(&cwd, &["checkout", &name]).map(|_| ())
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// Create and switch to a new branch (`git checkout -b <name>`) off the current
+/// HEAD.
+#[tauri::command]
+pub async fn git_create_branch(cwd: String, name: String) -> Result<(), GitError> {
+    if !valid_branch_name(&name) {
+        return Err(GitError::Failed("invalid branch name".into()));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        run_git(&cwd, &["checkout", "-b", &name]).map(|_| ())
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// `git add -A` — stage every change (modifications, additions, deletions,
+/// untracked). The panel's Commit flow stages all before committing.
+#[tauri::command]
+pub async fn git_stage_all(cwd: String) -> Result<(), GitError> {
+    tauri::async_runtime::spawn_blocking(move || run_git(&cwd, &["add", "-A"]).map(|_| ()))
+        .await
+        .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// The staged diff (`git diff --cached`), truncated to `MAX_DIFF_BYTES` so a huge
+/// changeset can't blow the LLM context or the IPC payload. Used to feed the AI
+/// commit-message generator.
+#[tauri::command]
+pub async fn git_diff_cached(cwd: String) -> Result<String, GitError> {
+    /// ~48 KB is plenty of signal for a one-line summary while staying well
+    /// under any provider's context budget.
+    const MAX_DIFF_BYTES: usize = 48 * 1024;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut diff = run_git(&cwd, &["diff", "--cached"])?;
+        if diff.len() > MAX_DIFF_BYTES {
+            // Cut on a char boundary so the String stays valid UTF-8.
+            let mut cut = MAX_DIFF_BYTES;
+            while cut > 0 && !diff.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            diff.truncate(cut);
+            diff.push_str("\n… [diff truncated]");
+        }
+        Ok(diff)
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+/// Commit the staged snapshot with `message` (`git commit -m`). Empty messages
+/// are rejected before shelling out. Nothing-staged surfaces git's own message.
+#[tauri::command]
+pub async fn git_commit(cwd: String, message: String) -> Result<(), GitError> {
+    let msg = message.trim().to_string();
+    if msg.is_empty() {
+        return Err(GitError::Failed("commit message is empty".into()));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        // `-m` takes the message as a single arg (never a shell), so newlines
+        // and quotes in an AI-generated message are safe.
+        run_git(&cwd, &["commit", "-m", &msg]).map(|_| ())
+    })
+    .await
+    .map_err(|e| GitError::Failed(e.to_string()))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_branch_name;
+
+    #[test]
+    fn branch_name_whitelist() {
+        assert!(valid_branch_name("main"));
+        assert!(valid_branch_name("feat/git-panel"));
+        assert!(valid_branch_name("release-1.2.x"));
+        // Rejections: flag-like, traversal, spaces, bad edges.
+        assert!(!valid_branch_name("-rf"));
+        assert!(!valid_branch_name(".hidden"));
+        assert!(!valid_branch_name("a..b"));
+        assert!(!valid_branch_name("has space"));
+        assert!(!valid_branch_name("trailing/"));
+        assert!(!valid_branch_name(""));
+        assert!(!valid_branch_name("weird;name"));
+    }
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useDirectoryStore } from "../state/directoryStore";
 
 /** A leaf in the split layout: one terminal pane running its own CLI session.
  *  `convId` is the Claude conversation UUID handed to `--session-id`, so every
@@ -500,6 +501,13 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
    *  per-cwd, so resuming from a different directory loses the history. */
   const markPaneStarted = useCallback(
     (sessionId: string, paneId: string, cwd: string | null) => {
+      // Keep the global directory store in step with the pane that just
+      // spawned: the toolbar picker, branch chip, and Git panel all read
+      // `directoryStore.cwd`, so a persisted session sitting in a repo (whose
+      // path lives on the pane, not the global store) would otherwise leave the
+      // toolbar showing "Home" and the Git panel empty. Only backfill a concrete
+      // path — a null spawn cwd means "home", which the store already represents.
+      if (cwd) useDirectoryStore.getState().setCwd(cwd);
       update((s) => ({
         ...s,
         sessions: s.sessions.map((sess) => {
