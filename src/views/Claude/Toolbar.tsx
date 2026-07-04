@@ -9,8 +9,10 @@ import {
   Plug,
   Terminal,
   GitBranch,
+  LayoutGrid,
 } from "lucide-react";
 import { useShellStore } from "../../state/shellStore";
+import { useDeckStore } from "../../state/deckStore";
 import { useGitStore } from "../../state/gitStore";
 import { useMcpStore } from "../../state/mcpStore";
 import { useDirectoryStore, dirBasename } from "../../state/directoryStore";
@@ -39,6 +41,8 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
   const toggleShell = useShellStore((s) => s.toggle);
   const mcpOpen = useMcpStore((s) => s.open);
   const toggleMcp = useMcpStore((s) => s.toggle);
+  const deckOpen = useDeckStore((s) => s.open);
+  const toggleDeck = useDeckStore((s) => s.toggle);
   const sidebarCollapsed = useSidebarStore((s) => s.collapsed);
   const toggleSidebar = useSidebarStore((s) => s.toggle);
   const gitOpen = useGitStore((s) => s.open);
@@ -233,6 +237,20 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
             Git entry point (it toggles the panel), so a second GitBranch
             button would be redundant. */}
         <div className="cli-tool-group">
+          <Tooltip label={deckOpen ? "Hide session deck" : "Session deck — all terminals at a glance"}>
+            <button
+              type="button"
+              data-panel-toggle="deck"
+              className={`cli-tool-btn labelled${deckOpen ? " active" : ""}`}
+              onClick={toggleDeck}
+              aria-label={deckOpen ? "Hide session deck" : "Session deck"}
+              aria-pressed={deckOpen}
+            >
+              <LayoutGrid size={15} strokeWidth={1.75} />
+              <span className="cli-tool-label">Deck</span>
+            </button>
+          </Tooltip>
+
           <Tooltip label={shellOpen ? "Hide shell" : "Open a shell over this panel"}>
             <button
               type="button"

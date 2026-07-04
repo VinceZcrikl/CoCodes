@@ -683,16 +683,34 @@ body.resizing-col {
   gap: 1px;
 }
 
+.session-row-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
 .session-row-title {
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .session-row-time {
+  flex: none;
   font-size: 10.5px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* AI task label shown under an unnamed session so it still says what it does. */
+.session-row-subtitle {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--accent-gold) 62%, var(--text-muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .session-row-input {
@@ -978,6 +996,16 @@ body.resizing-col {
   border-color: color-mix(in srgb, var(--accent-gold) 45%, transparent);
 }
 
+/* Spotlight: the Session Deck is hovering this pane's card. A brighter, glowing
+   border that reads instantly, overriding the subtle active border. */
+.pane-leaf.pane-spotlight {
+  border-color: var(--accent-gold);
+  box-shadow:
+    0 0 0 1px var(--accent-gold),
+    0 0 14px color-mix(in srgb, var(--accent-gold) 55%, transparent);
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
 /* Running agent: top-edge horizontal sweep — same visual language as .cockpit-frame::before,
  * but 3× faster to signal active processing rather than ambient decoration. */
 .pane-leaf.running::before {
@@ -1027,6 +1055,14 @@ body.resizing-col {
 .pane-header-cli:hover {
   background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
   color: var(--text-primary, #fff);
+}
+/* A real title (manual or AI task label) reads as a phrase, not a code — so it
+   keeps natural case instead of the CLI-name's uppercase treatment. */
+.pane-header-cli.is-label {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 10.5px;
+  max-width: 260px;
 }
 /* Persona avatar (before the title) + model (after it), so each terminal header
    reads avatar · title · model and visibly declares who/what it's running. */
@@ -1117,6 +1153,14 @@ body.resizing-col {
 }
 .pane-header-btn.has-override {
   color: var(--accent-gold);
+}
+/* AI-labeling button: gold when idle-hovered, spins while generating. */
+.pane-header-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.pane-label-spin {
+  animation: git-spin 700ms linear infinite;
 }
 .pane-palette-dot {
   position: absolute;
@@ -2222,6 +2266,655 @@ body.resizing-col {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+/* ── Session Deck ─────────────────────────────────────────────────────────
+   A task-card overview of the current session's panes, floated over the panel
+   above the toolbar (same anchor as the shell overlay). */
+.session-deck {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  z-index: 72;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100% - 32px));
+  max-height: min(560px, calc(100% - 92px));
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 30%, var(--border));
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow:
+    0 -4px 16px rgba(0, 0, 0, 0.30),
+    0 18px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  animation: shell-overlay-pop 140ms ease;
+}
+
+/* Docked: leave the floating overlay and become a full-width band that reserves
+   its own row in the .chat-view column — below the terminals (which shrink to
+   fit above it), spanning all panes but not the sidebar, right above the
+   toolbar. Cards lay out in a single horizontal, scrollable row. */
+.session-deck.docked {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  transform: none;
+  width: auto;
+  flex: none;
+  /* Height is driven by an inline style (drag the top border to resize); this is
+     only the fallback before the store value is applied. Bounds mirror
+     DECK_MIN_HEIGHT / DECK_MAX_HEIGHT in deckStore. */
+  height: 300px;
+  min-height: 160px;
+  max-height: none;
+  margin: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  animation: none;
+}
+
+/* Top-border drag handle for the docked band — mirrors .sidebar-resize but on
+   the horizontal axis. Sits just above the header, spanning the full width. */
+.deck-resize {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 7px;
+  width: 100%;
+  cursor: row-resize;
+  z-index: 5;
+  touch-action: none;
+}
+.deck-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.deck-resize:hover::after,
+body.resizing-row .deck-resize::after {
+  background: var(--accent-gold);
+}
+/* Keep the pointer as row-resize and suppress text selection during a drag. */
+body.resizing-row {
+  cursor: row-resize;
+  user-select: none;
+}
+/* Docked cards wrap into as many columns as fit and scroll vertically — never
+   a horizontally cut-off card, and the band's height gets used. */
+.session-deck.docked .deck-cards {
+  align-items: start;     /* cards keep their natural height, not stretched */
+  overflow-y: auto;
+}
+
+.deck-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent-gold) 6%, transparent);
+}
+.deck-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-main);
+}
+.deck-counts { display: flex; align-items: center; gap: 6px; }
+.deck-badge {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.deck-badge.running {
+  color: #3fb950;
+  background: color-mix(in srgb, #3fb950 16%, transparent);
+}
+.deck-badge.waiting {
+  color: #f0b657;
+  background: color-mix(in srgb, #f0b657 18%, transparent);
+}
+.deck-spacer { flex: 1; }
+.deck-relabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 30%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--accent-gold) 85%, var(--text-main));
+  cursor: pointer;
+}
+.deck-relabel:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+}
+.deck-relabel:disabled { opacity: 0.6; cursor: default; }
+.deck-close {
+  display: flex;
+  padding: 3px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.deck-close:hover { background: color-mix(in srgb, var(--text-muted) 16%, transparent); color: var(--text-main); }
+.deck-dock.on { color: var(--accent-gold); background: color-mix(in srgb, var(--accent-gold) 16%, transparent); }
+.deck-spin { animation: git-spin 700ms linear infinite; }
+
+/* Broadcast bar */
+.deck-broadcast {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+/* Quick-target chips: All / Idle (don't interrupt running agents). Hidden while
+   an explicit per-card selection is active — checks always win. */
+.deck-target-chips {
+  flex: none;
+  display: flex;
+  gap: 3px;
+  padding: 2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+}
+.deck-target-chip {
+  font-size: 10.5px;
+  padding: 3px 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.deck-target-chip:hover { color: var(--text-main); }
+.deck-target-chip.on {
+  background: color-mix(in srgb, var(--accent-gold) 24%, transparent);
+  color: var(--accent-gold);
+}
+.deck-broadcast-input,
+.deck-reply-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--panel-deep);
+  color: var(--text-main);
+}
+.deck-broadcast-input:focus,
+.deck-reply-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent-gold) 60%, transparent);
+}
+.deck-broadcast-send,
+.deck-reply-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  flex: none;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-gold) 18%, transparent);
+  color: var(--accent-gold);
+  cursor: pointer;
+}
+.deck-broadcast-send:hover:not(:disabled),
+.deck-reply-send:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-gold) 30%, transparent);
+}
+.deck-broadcast-send:disabled,
+.deck-reply-send:disabled { opacity: 0.4; cursor: default; }
+
+/* Card grid — auto-fills columns; single column when narrow. */
+.deck-cards {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.deck-card {
+  --deck-accent: var(--accent-gold);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  border-left: 3px solid color-mix(in srgb, var(--deck-accent) 70%, transparent);
+  background: var(--panel-deep);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.deck-card:hover {
+  border-color: color-mix(in srgb, var(--accent-gold) 40%, var(--border));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-gold) 22%, transparent);
+}
+.deck-card.checked {
+  border-color: color-mix(in srgb, var(--accent-gold) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-gold) 8%, var(--panel-deep));
+}
+
+/* Head row: label left, status right (kept clear of the hover actions). */
+.deck-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.deck-card-main { display: flex; align-items: center; gap: 10px; }
+/* The stage beside the sprite — the bubble's full-width room. */
+.deck-card-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+/* Controls live in the corner and stay out of the way until hovered
+   (or while this card is checked for broadcast). */
+.deck-card { position: relative; }
+.deck-card-actions {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel-deep) 82%, transparent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.deck-card:hover .deck-card-actions,
+.deck-card.checked .deck-card-actions {
+  opacity: 1;
+}
+.deck-sprite-hit { flex: none; display: flex; }
+
+/* ── The code-sprite mascot ──
+   A little blob tinted with its persona colour. Its animation mirrors the
+   pane's state: working (bob + darting eyes), waiting (jumping + "!"),
+   sleeping (closed eyes + drifting z's), cheering (report just landed). */
+.deck-sprite {
+  --sprite-color: var(--accent-gold);
+  position: relative;
+  flex: none;
+  width: 58px;
+  height: 54px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sprite-body {
+  position: relative;
+  width: 48px;
+  height: 42px;
+  border-radius: 19px 19px 15px 15px;
+  background: radial-gradient(
+    circle at 30% 22%,
+    color-mix(in srgb, #fff 32%, var(--sprite-color)),
+    var(--sprite-color) 72%
+  );
+  box-shadow:
+    0 3px 10px color-mix(in srgb, var(--sprite-color) 45%, transparent),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.28);
+  transform-origin: bottom center;
+}
+.sprite-eye {
+  position: absolute;
+  top: 15px;
+  width: 6px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10141a;
+}
+.sprite-eye.l { left: 13px; }
+.sprite-eye.r { right: 13px; }
+.sprite-mouth {
+  position: absolute;
+  top: 27px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 3.5px;
+  border-radius: 0 0 7px 7px;
+  background: rgba(16, 20, 26, 0.75);
+}
+
+/* Mascot face: known CLIs wear their real avatar (claude → the Claude Code
+   mascot). The SVG replaces the drawn blob; state reads through the container
+   animations, the badges, and a themed glow that keeps the terminal-colour
+   mapping visible. */
+.sprite-mascot {
+  background: none;
+  box-shadow: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  filter: drop-shadow(0 3px 8px color-mix(in srgb, var(--sprite-color) 55%, transparent));
+  /* Re-skin the mascot to this card's terminal theme: body takes the accent,
+     legs a darker shade, sheen a lighter one. (The mascot SVG reads these vars
+     with its classic colours as fallback, so other usages are untouched.) */
+  --mascot-base: var(--sprite-color);
+  --mascot-deep: color-mix(in srgb, #000 28%, var(--sprite-color));
+  --mascot-sheen: color-mix(in srgb, #fff 30%, var(--sprite-color));
+}
+.sprite-mascot-svg {
+  width: 46px;
+  height: 46px;
+  display: block;
+}
+
+/* ── Blob shape variants (per-pane, hashed) ── */
+.deck-sprite.v1 .sprite-body { border-radius: 50% 50% 42% 42%; height: 44px; }
+.deck-sprite.v1 .sprite-eye { top: 18px; width: 7px; height: 8px; }
+.deck-sprite.v1 .sprite-mouth { top: 30px; }
+.deck-sprite.v2 .sprite-body { border-radius: 12px 12px 10px 10px; }
+.sprite-antenna {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  background: color-mix(in srgb, var(--sprite-color) 80%, #fff);
+  border-radius: 1px;
+}
+.sprite-antenna::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #fff 45%, var(--sprite-color));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--sprite-color) 80%, transparent);
+}
+.deck-sprite.v3 .sprite-body { border-radius: 16px 16px 14px 14px; width: 52px; }
+.sprite-ear {
+  position: absolute;
+  top: -7px;
+  width: 11px;
+  height: 12px;
+  border-radius: 6px 6px 2px 2px;
+  background: color-mix(in srgb, #fff 18%, var(--sprite-color));
+}
+.sprite-ear.l { left: 6px; transform: rotate(-14deg); }
+.sprite-ear.r { right: 6px; transform: rotate(14deg); }
+
+/* Working: each pane gets its own rhythm — bob (default), sway, or tap. */
+.deck-sprite.running .sprite-body { animation: sprite-bob 0.9s ease-in-out infinite; }
+.deck-sprite.running .sprite-eye { animation: sprite-dart 1.6s steps(2, end) infinite; }
+.deck-sprite.running.work1 .sprite-body { animation: sprite-sway 1.3s ease-in-out infinite; }
+.deck-sprite.running.work2 .sprite-body { animation: sprite-tap 0.72s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+@keyframes sprite-bob {
+  0%, 100% { transform: scaleY(1) translateY(0); }
+  50% { transform: scaleY(0.94) translateY(1.5px); }
+}
+@keyframes sprite-dart {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(2px); }
+}
+@keyframes sprite-sway {
+  0%, 100% { transform: rotate(-3deg) translateY(0); }
+  50% { transform: rotate(3deg) translateY(0.5px); }
+}
+@keyframes sprite-tap {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  30% { transform: translateY(-2.5px) scaleY(1.03); }
+  55% { transform: translateY(0) scaleY(0.96); }
+  70% { transform: translateY(-1px) scaleY(1); }
+}
+
+/* Waiting on the user: urgent little jumps + a bouncing "!". */
+.deck-sprite.waiting .sprite-body {
+  animation: sprite-jump 0.8s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite;
+}
+@keyframes sprite-jump {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-6px) scaleY(1.05); }
+  45% { transform: translateY(0) scaleY(0.92); }
+  60% { transform: translateY(-2px); }
+  75% { transform: translateY(0); }
+}
+.sprite-alert {
+  position: absolute;
+  top: -8px;
+  right: 2px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #f0b657;
+  text-shadow: 0 0 6px color-mix(in srgb, #f0b657 70%, transparent);
+  animation: sprite-alert 0.8s ease-in-out infinite;
+}
+@keyframes sprite-alert {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-3px); }
+}
+
+/* Sleeping: dimmed, slow breathing, closed eyes, drifting z's. */
+.deck-sprite.idle .sprite-body {
+  animation: sprite-breathe 3.2s ease-in-out infinite;
+  filter: saturate(0.7) brightness(0.9);
+}
+.deck-sprite.idle .sprite-eye {
+  top: 18px;
+  height: 2px;
+  border-radius: 2px;
+}
+@keyframes sprite-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.04); }
+}
+.sprite-zzz {
+  position: absolute;
+  top: -4px;
+  right: -1px;
+  font-size: 11px;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--text-soft, rgba(255, 255, 255, 0.78));
+  text-shadow: 0 0 5px color-mix(in srgb, var(--sprite-color) 60%, transparent);
+  animation: sprite-zzz 2.4s ease-in infinite;
+}
+.sprite-zzz span { font-size: 8px; }
+@keyframes sprite-zzz {
+  0% { opacity: 0; transform: translate(0, 2px); }
+  30% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(4px, -7px); }
+}
+
+/* Mascot filter composition: idle dims but keeps the themed glow; cheer
+   restores it at full strength. Declared after the generic state rules. */
+.deck-sprite.idle .sprite-mascot {
+  filter: saturate(0.6) brightness(0.85)
+    drop-shadow(0 3px 8px color-mix(in srgb, var(--sprite-color) 35%, transparent));
+}
+.deck-sprite.cheer .sprite-mascot {
+  filter: drop-shadow(0 3px 10px color-mix(in srgb, var(--sprite-color) 65%, transparent));
+}
+
+/* Cheer: quest done — a happy squash-and-stretch hop + open smile.
+   Declared after the state rules so it wins while the bubble is showing. */
+.deck-sprite.cheer .sprite-body {
+  animation: sprite-cheer 0.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) 2;
+  filter: none;
+}
+.deck-sprite.cheer .sprite-eye { top: 15px; height: 7px; border-radius: 50%; }
+.deck-sprite.cheer .sprite-mouth {
+  width: 13px;
+  height: 6px;
+  border-radius: 0 0 10px 10px;
+  background: #10141a;
+}
+@keyframes sprite-cheer {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  30% { transform: translateY(-8px) scale(0.95, 1.08); }
+  55% { transform: translateY(0) scale(1.08, 0.9); }
+  75% { transform: translateY(-3px) scale(1, 1); }
+}
+
+/* ── Quest-report speech bubble ── */
+.deck-bubble {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border-top-left-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent-gold) 10%, var(--panel-deep));
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-main);
+  animation: bubble-pop 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.deck-bubble::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 7px;
+  border: 4px solid transparent;
+  border-right-color: color-mix(in srgb, var(--accent-gold) 45%, var(--border));
+}
+@keyframes bubble-pop {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.deck-bubble-text { flex: 1; min-width: 0; word-break: break-word; }
+.deck-bubble-close {
+  flex: none;
+  display: flex;
+  padding: 1px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.deck-bubble-close:hover { color: var(--text-main); }
+.deck-bubble.thinking {
+  align-items: center;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.deck-card-check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1.5px solid color-mix(in srgb, var(--text-muted) 60%, transparent);
+  background: transparent;
+  color: #0d1117;
+  cursor: pointer;
+}
+.deck-card-check:hover { border-color: var(--accent-gold); }
+.deck-card-check.on {
+  background: var(--accent-gold);
+  border-color: var(--accent-gold);
+}
+.deck-card-label {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deck-card-label:hover { color: var(--accent-gold); }
+.deck-icon-btn {
+  display: flex;
+  padding: 3px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.deck-icon-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
+  color: var(--accent-gold);
+}
+.deck-icon-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* One quiet status word at the head row's right; identity details in its title.
+   Fades out while the hover actions occupy that corner, so they never overlap. */
+.deck-meta-state {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+  cursor: default;
+  transition: opacity 0.12s ease;
+}
+.deck-card:hover .deck-card-head .deck-meta-state,
+.deck-card.checked .deck-card-head .deck-meta-state {
+  opacity: 0;
+}
+.deck-meta-state.running { color: #3fb950; }
+.deck-meta-state.waiting { color: #f0b657; }
+/* Controlled-size preview tooltip: soft-wraps the recent dialogue in a compact
+   box that never covers the screen (unlike the native multi-line title did). */
+.app-tooltip:has(.deck-preview-tip) {
+  max-width: 360px;
+  white-space: normal;
+  padding: 8px 10px;
+}
+.deck-preview-tip {
+  display: block;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-main);
+  white-space: normal;
+  word-break: break-word;
+  max-height: 132px;
+  overflow: hidden;
+}
+
+.deck-card-reply { display: flex; gap: 5px; }
+.deck-card-reply .deck-reply-input { font-size: 11.5px; padding: 4px 8px; }
+.deck-reply-send { width: 26px; }
 
 .shell-overlay-bar {
   flex: none;

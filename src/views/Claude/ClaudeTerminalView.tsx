@@ -6,6 +6,8 @@ import { useShellStore } from "../../state/shellStore";
 import Toolbar from "./Toolbar";
 import { type ClaudeTerminalHandle } from "./ClaudeTerminal";
 import PaneLayout from "./PaneLayout";
+import SessionDeck from "./SessionDeck";
+import { useDeckStore } from "../../state/deckStore";
 import type { ClaudeSession, LayoutNode } from "../../hooks/useClaudeSessions";
 import { useDirectoryStore } from "../../state/directoryStore";
 import { useWindowStore } from "../../state/windowStore";
@@ -69,6 +71,7 @@ export default function ClaudeTerminalView({
   onAssignPaneProfile,
   onRespawnPane,
   onRenamePane,
+  onSetPaneAutoLabel,
   onSetPanePalette,
   modelLabel,
 }: {
@@ -89,6 +92,7 @@ export default function ClaudeTerminalView({
   onAssignPaneProfile: (sessionId: string, paneId: string, profileId: string, cli: string) => void;
   onRespawnPane: (sessionId: string, paneId: string) => void;
   onRenamePane: (sessionId: string, paneId: string, title: string) => void;
+  onSetPaneAutoLabel: (sessionId: string, paneId: string, label: string) => void;
   onSetPanePalette: (sessionId: string, paneId: string, palette?: string, accent?: string) => void;
   /** Model label of the active persona — passed to the toolbar status strip. */
   modelLabel?: string;
@@ -131,6 +135,10 @@ export default function ClaudeTerminalView({
 
   const { cwd } = useDirectoryStore();
   const mini = useWindowStore((s) => s.mini);
+  const deckOpen = useDeckStore((s) => s.open);
+  const deckEverOpened = useDeckStore((s) => s.everOpened);
+  const closeDeck = useDeckStore((s) => s.close);
+  const activeSession = sessions.find((s) => s.id === activeId) ?? null;
 
   const onScreenshot = useCallback(() => {
     void invoke("screenshot_open");
@@ -270,6 +278,7 @@ export default function ClaudeTerminalView({
                 }
                 onRespawn={(paneId) => onRespawnPane(s.id, paneId)}
                 onRename={(paneId, title) => onRenamePane(s.id, paneId, title)}
+                onSetAutoLabel={(paneId, label) => onSetPaneAutoLabel(s.id, paneId, label)}
                 onSetPanePalette={(paneId, palette, accent) => onSetPanePalette(s.id, paneId, palette, accent)}
                 onMissingCli={setMissing}
               />
@@ -277,6 +286,18 @@ export default function ClaudeTerminalView({
           );
         })}
       </section>
+      {!mini && deckEverOpened && activeSession && (
+        <SessionDeck
+          open={deckOpen}
+          layout={resolveLayout(activeSession)}
+          sessionProfileId={profileId}
+          onClose={closeDeck}
+          onSetAutoLabel={(paneId, label) => onSetPaneAutoLabel(activeSession.id, paneId, label)}
+          onSetPanePalette={(paneId, palette, accent) =>
+            onSetPanePalette(activeSession.id, paneId, palette, accent)
+          }
+        />
+      )}
       <Toolbar
         onScreenshot={onScreenshot}
         onCwdChange={onCwdChange}

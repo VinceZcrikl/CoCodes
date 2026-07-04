@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useDirectoryStore } from "../state/directoryStore";
+import { usePaletteStore } from "../state/paletteStore";
+import { PANEL_PALETTES, PANEL_PALETTE_ORDER } from "../state/panelPalettes";
 
 /** A leaf in the split layout: one terminal pane running its own CLI session.
  *  `convId` is the Claude conversation UUID handed to `--session-id`, so every
@@ -17,6 +19,11 @@ export interface PaneNode {
   cli: string;
   /** User-set custom header title. Absent → the header shows the CLI name. */
   title?: string;
+  /** AI-generated task label summarizing what this pane is working on. Shown
+   *  in the header/sidebar as a fallback below a manual `title`, so many open
+   *  panes stay tellable apart. Refreshed on idle + on demand; never overrides
+   *  an explicit user title. */
+  autoLabel?: string;
   /** True once the PTY has spawned this pane at least once. Per-pane (not
    *  per-session) so restoration resumes each conversation idempotently. */
   started: boolean;
@@ -201,6 +208,22 @@ export function findPane(node: LayoutNode, paneId: string): PaneNode | null {
   return findPane(node.children[0], paneId) ?? findPane(node.children[1], paneId);
 }
 
+/** Pick a random panel palette for a fresh terminal that differs from every
+ *  sibling pane's effective theme (and the global scheme), so each new terminal
+ *  is visually distinct at a glance. Light palettes are excluded — a random
+ *  bright pane amid dark ones is jarring. When every dark palette is already
+ *  taken, any non-global one is reused. No layout (a brand-new session's first
+ *  terminal) just avoids the global scheme. */
+function pickFreshPalette(layout?: LayoutNode | null): string {
+  const globalName = usePaletteStore.getState().name;
+  const used = new Set<string>([globalName]);
+  if (layout) forEachPane(layout, (p) => used.add(p.palette ?? globalName));
+  const dark = PANEL_PALETTE_ORDER.filter((n) => !PANEL_PALETTES[n].light);
+  const free = dark.filter((n) => !used.has(n));
+  const pool = free.length > 0 ? free : dark.filter((n) => n !== globalName);
+  return pool[Math.floor(Math.random() * pool.length)] ?? globalName;
+}
+
 /** Replace the pane `paneId` with a split holding the original pane plus a new
  *  sibling pane. Returns the same node if `paneId` isn't found. */
 function splitNode(
@@ -364,20 +387,33 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
 
   const newSession = useCallback(
     (groupId: string | null = null) => {
+      const id = newId();
       const session: ClaudeSession = {
-        id: newId(),
+        id,
         title: "New session",
         createdAt: Date.now(),
         updatedAt: Date.now(),
         started: false,
         pinned: false,
         groupId,
+        // The first terminal wears its own random theme too (distinct from the
+        // global scheme), matching split-created panes. Requires an explicit
+        // single-pane layout — the synthesized default can't carry a palette.
+        layout: {
+          type: "pane",
+          paneId: id,
+          convId: id,
+          cli,
+          started: false,
+          palette: pickFreshPalette(),
+          accent: "auto",
+        },
       };
       update((s) => ({ ...s, sessions: [session, ...s.sessions] }));
       setActiveId(session.id);
       return session;
     },
-    [update],
+    [update, cli],
   );
 
   const select = useCallback((id: string) => {
@@ -449,6 +485,11 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
             cli: forkConvId ? (source?.cli ?? cli) : "",
             started: false,
             cwd: source?.cwd ?? null,
+            // Every new terminal wears its own random theme, distinct from its
+            // neighbours', so panes (and their deck sprites) tell apart at a
+            // glance. "auto" accent = the palette's own coordinated accent.
+            palette: pickFreshPalette(layout),
+            accent: "auto",
           };
           return { ...sess, layout: splitNode(layout, paneId, dir, fresh) };
         }),
@@ -633,6 +674,35 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     [update, cli],
   );
 
+  /** Set (or clear, with an empty string) a pane's AI task label. Kept separate
+   *  from the manual `title` so a user rename always wins; the header prefers
+   *  `title`, then `autoLabel`. */
+  const setPaneAutoLabel = useCallback(
+    (sessionId: string, paneId: string, label: string) => {
+      update((s) => ({
+        ...s,
+        sessions: s.sessions.map((sess) => {
+          if (sess.id !== sessionId) return sess;
+          const layout = sess.layout ?? defaultLayout(sess, cli);
+          const patch = (node: LayoutNode): LayoutNode => {
+            if (node.type === "pane") {
+              if (node.paneId !== paneId) return node;
+              const trimmed = label.trim();
+              if (!trimmed) {
+                const { autoLabel: _drop, ...rest } = node;
+                return rest;
+              }
+              return { ...node, autoLabel: trimmed };
+            }
+            return { ...node, children: [patch(node.children[0]), patch(node.children[1])] };
+          };
+          return { ...sess, layout: patch(layout) };
+        }),
+      }));
+    },
+    [update, cli],
+  );
+
   /** Set (or clear) a pane's per-pane colour override. Pass both undefined to
    *  clear it (the pane reverts to following the global palette). */
   const setPanePalette = useCallback(
@@ -737,6 +807,7 @@ export function useClaudeSessions(profileId: string, cli = "claude") {
     loadConvIntoPane,
     respawnPane,
     renamePane,
+    setPaneAutoLabel,
     setPanePalette,
     togglePin,
     setGroup,

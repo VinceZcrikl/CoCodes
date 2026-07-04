@@ -28,6 +28,9 @@ export const DELEGATION_EVENT = "terminus:delegation";
 /** Fired on `window` to inject text into a specific pane by its pane ID. */
 export const INJECT_PANE_EVENT = "terminus:inject-to-pane";
 
+/** Fired on `window` to focus a specific pane (moves the active border) by ID. */
+export const FOCUS_PANE_EVENT = "terminus:focus-pane";
+
 export interface DelegationDetail {
   /** CLI name from the `[TASK→<cli>]` marker (e.g. "codex", "grok"). */
   targetCli: string;

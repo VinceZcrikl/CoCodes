@@ -1026,11 +1026,85 @@ fn extract_model_from_banner(buf: &[u8]) -> Option<String> {
         if candidate.is_empty() || candidate.len() > 40 {
             continue;
         }
-        if candidate.chars().any(|c| c.is_alphanumeric()) {
+        if looks_like_model(candidate) {
             return Some(candidate.to_string());
         }
     }
     None
+}
+
+/// Guard against matching arbitrary `·`-delimited status lines (e.g. a session
+/// label like "3893 transform: translateX · …") as the model. A real model token
+/// — `Opus 4.8`, `Sonnet 4.5`, `kimi-k2.7-code`, `claude-sonnet-4-5` — carries a
+/// version digit, has no `:`, isn't prose (≤2 words), and doesn't lead with a
+/// bare session number.
+fn looks_like_model(s: &str) -> bool {
+    if s.contains(':') {
+        return false;
+    }
+    // Every shipping model id carries a version/number somewhere.
+    if !s.chars().any(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    let words: Vec<&str> = s.split_whitespace().collect();
+    // Model ids are 1–2 tokens ("Opus 4.8", "kimi-k2.7-code"); prose is wordier.
+    if words.len() > 2 {
+        return false;
+    }
+    // A leading bare number is a session/ordinal id, not a model ("3893 …").
+    if words[0].chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    true
+}
+
+/// Cap on the transcript we hand the summarizer: the recent, human-readable tail
+/// of a pane's output. Small enough to keep the LLM call cheap, large enough to
+/// capture the current task.
+const TAIL_MAX_CHARS: usize = 6000;
+
+/// The recent visible output of a live session, ANSI-stripped and tail-capped —
+/// raw material for AI task-labeling (`ai_summary`). Returns an empty string for
+/// an unknown/closed id so the caller can simply skip labeling.
+#[tauri::command]
+pub async fn terminal_tail(id: String, reg: State<'_, TerminalRegistry>) -> Result<String, ()> {
+    let sessions = reg.sessions.lock().unwrap();
+    let Some(session) = sessions.get(&id) else {
+        return Ok(String::new());
+    };
+    let bytes = session.buffer.lock().unwrap().clone();
+    Ok(tail_transcript(&bytes))
+}
+
+/// The recent *dialogue* of a live session: the tail with code, diffs, and TUI
+/// chrome removed (via [`crate::ai_summary::denoise`]), so the Session Deck can
+/// preview a few readable content lines instead of the raw screen buffer — whose
+/// cursor-addressed repaints collapse into one line once ANSI is stripped.
+#[tauri::command]
+pub async fn terminal_transcript(id: String, reg: State<'_, TerminalRegistry>) -> Result<String, ()> {
+    let sessions = reg.sessions.lock().unwrap();
+    let Some(session) = sessions.get(&id) else {
+        return Ok(String::new());
+    };
+    let bytes = session.buffer.lock().unwrap().clone();
+    Ok(crate::ai_summary::denoise(&tail_transcript(&bytes)))
+}
+
+/// Turn buffered PTY bytes into a compact transcript: strip ANSI, drop blank
+/// lines (TUI padding), and keep the last `TAIL_MAX_CHARS` on a char boundary.
+fn tail_transcript(bytes: &[u8]) -> String {
+    let text = strip_ansi(&String::from_utf8_lossy(bytes));
+    let cleaned: String = text
+        .lines()
+        .map(str::trim_end)
+        .filter(|l| !l.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    if cleaned.chars().count() <= TAIL_MAX_CHARS {
+        return cleaned;
+    }
+    let start = cleaned.chars().count() - TAIL_MAX_CHARS;
+    cleaned.chars().skip(start).collect()
 }
 
 /// Write bytes to the PTY stdin. Shared by keystroke relay and composer
@@ -1170,13 +1244,31 @@ mod tests {
         // Third-party / billing line.
         let kimi = "\u{1b}[2m│\u{1b}[0m kimi-k2.7-code \u{00b7} API Usage Billing │\n";
         assert_eq!(extract_model_from_banner(kimi.as_bytes()).as_deref(), Some("kimi-k2.7-code"));
+        // Bare model slug without a billing suffix still needs a `·` line.
+        let claude_full = "  Opus 4.8 \u{00b7} Claude Max \u{00b7} acme's Organization\n";
+        assert_eq!(extract_model_from_banner(claude_full.as_bytes()).as_deref(), Some("Opus 4.8"));
         // No identity line yet → None.
         assert_eq!(extract_model_from_banner(b"booting up...\n"), None);
+        // A session/task label with a middle dot must NOT be read as the model.
+        let label = "3893 transform: translateX \u{00b7} default\n";
+        assert_eq!(extract_model_from_banner(label.as_bytes()), None);
+        // Prose status line with a dot is rejected too.
+        let prose = "Tips for getting started \u{00b7} Run /init to create a file\n";
+        assert_eq!(extract_model_from_banner(prose.as_bytes()), None);
     }
 
     #[test]
     fn strip_ansi_removes_csi_sequences() {
         assert_eq!(strip_ansi("\u{1b}[31mred\u{1b}[0m"), "red");
+    }
+
+    #[test]
+    fn tail_transcript_strips_ansi_blanks_and_caps() {
+        let raw = "\u{1b}[2m$ cargo build\u{1b}[0m\n\n\n   Compiling\n";
+        assert_eq!(tail_transcript(raw.as_bytes()), "$ cargo build\n   Compiling");
+        // Keeps only the last TAIL_MAX_CHARS on a char boundary.
+        let long = "x".repeat(TAIL_MAX_CHARS + 500);
+        assert_eq!(tail_transcript(long.as_bytes()).chars().count(), TAIL_MAX_CHARS);
     }
 
     #[test]

@@ -71,6 +71,7 @@ export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props
     loadConvIntoPane,
     respawnPane,
     renamePane,
+    setPaneAutoLabel,
     setPanePalette,
     togglePin,
     setGroup,
@@ -261,6 +262,7 @@ export default function ClaudeTab({ cli, profileId, visible, modelLabel }: Props
             onAssignPaneProfile={assignPaneProfile}
             onRespawnPane={respawnPane}
             onRenamePane={renamePane}
+            onSetPaneAutoLabel={setPaneAutoLabel}
             onSetPanePalette={setPanePalette}
             modelLabel={modelLabel}
           />

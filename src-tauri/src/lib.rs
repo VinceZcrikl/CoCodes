@@ -5,10 +5,12 @@
 //! later phases; the PTY engine here is already generic enough to drive them.
 
 pub mod ai_commit;
+pub mod ai_summary;
 pub mod codex_proxy;
 pub mod directory;
 pub mod fs;
 pub mod git;
+pub mod llm;
 pub mod mcp;
 pub mod notify_hooks;
 pub mod persona;
@@ -151,6 +153,8 @@ pub fn run() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_close,
+            terminal::terminal_tail,
+            terminal::terminal_transcript,
             persona::load_persona_context,
             persona::persona_list,
             persona::persona_get,
@@ -185,6 +189,8 @@ pub fn run() {
             git::git_commit,
             ai_commit::ai_commit_providers,
             ai_commit::ai_commit_message,
+            ai_summary::ai_summarize_terminal,
+            ai_summary::ai_pane_report,
             fs::fs_list,
             fs::fs_walk,
             fs::fs_drives,

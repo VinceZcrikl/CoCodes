@@ -7,8 +7,8 @@ import {
 } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import ClaudeTerminal, { type ClaudeTerminalHandle } from "./ClaudeTerminal";
-import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2 } from "lucide-react";
-import { INJECT_PANE_EVENT, type InjectPaneDetail } from "../../state/delegationMonitor";
+import { SplitSquareHorizontal, SplitSquareVertical, X, Send, Maximize2, Minimize2, Sparkles, Loader2 } from "lucide-react";
+import { INJECT_PANE_EVENT, FOCUS_PANE_EVENT, type InjectPaneDetail } from "../../state/delegationMonitor";
 import {
   registerTerminal,
   unregisterTerminal,
@@ -40,6 +40,8 @@ import {
   type AccentName,
 } from "../../state/panelPalettes";
 import { useTerminalBusy } from "../../hooks/useTerminalBusy";
+import { usePaneLabel } from "../../hooks/usePaneLabel";
+import { useDeckStore } from "../../state/deckStore";
 
 /** Ctrl+B — the tmux-style prefix. Sent to the PTY as 0x02 when the follow-up
  *  key isn't a pane command, so a real readline Ctrl+B still works. */
@@ -66,6 +68,8 @@ interface PaneCtx {
   onRespawn: (paneId: string) => void;
   /** Persist a pane's custom header title (empty string clears it). */
   onRename: (paneId: string, title: string) => void;
+  /** Persist a pane's AI-generated task label (empty string clears it). */
+  onSetAutoLabel: (paneId: string, label: string) => void;
   /** Recolour a single pane; pass both undefined to clear the override. */
   onSetPanePalette: (paneId: string, palette?: string, accent?: string) => void;
   /** Pane ID currently hovered by an OS file drag, or null. */
@@ -81,6 +85,8 @@ interface PaneCtx {
   multi: boolean;
   /** Set of paneIds that currently have a running agent (terminal output within last 4s). */
   runningPaneIds: Set<string>;
+  /** paneId the Session Deck is hovering → spotlight its border. */
+  spotlightPaneId: string | null;
 }
 
 interface Props {
@@ -103,6 +109,7 @@ interface Props {
   onAssignPaneProfile: (paneId: string, profileId: string, cli: string) => void;
   onRespawn: (paneId: string) => void;
   onRename: (paneId: string, title: string) => void;
+  onSetAutoLabel: (paneId: string, label: string) => void;
   /** Recolour a single pane; pass both undefined to clear the override. */
   onSetPanePalette: (paneId: string, palette?: string, accent?: string) => void;
 }
@@ -145,8 +152,10 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   const effAccent = (node.accent ?? gAccent) as AccentName;
   const paneDotColor = resolveAccentColor(PANEL_PALETTES[effPalette], effAccent);
 
-  // Custom title when set, otherwise the CLI name as the default placeholder.
-  const displayTitle = node.title ?? node.cli;
+  // Header title priority: an explicit user title always wins; otherwise the
+  // AI task label if one has been generated; otherwise the CLI name. This is
+  // what lets many open panes stay tellable apart.
+  const displayTitle = node.title ?? node.autoLabel ?? node.cli;
   const commitTitle = (value: string) => {
     setEditing(false);
     // Clearing the field reverts to the default (cli); an unchanged custom
@@ -166,6 +175,17 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   // visibly shows who/what it's running.
   const identity = usePersonaModel(effectiveProfileId, node.cli);
 
+  // AI task-labeling: auto-summarize this pane's work on idle, and expose a
+  // manual refresh for the header's Sparkles button. A user-set title takes
+  // precedence, so only auto-fill when there's no manual title.
+  const paneLabel = usePaneLabel({
+    terminalKey: `${node.paneId}:${node.convId}`,
+    profileId: effectiveProfileId,
+    busy: ctx.runningPaneIds.has(node.paneId),
+    started: node.started && !node.title,
+    onLabel: (label) => ctx.onSetAutoLabel(node.paneId, label),
+  });
+
   // The directory this pane spawns/resumes in. Once a pane has started, its cwd
   // is pinned (recorded at first spawn — `null` means home), so `--resume` runs
   // in the same project dir Claude saved the conversation under. Only a pane
@@ -178,6 +198,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
   let cls = "pane-leaf";
   if (active) cls += " active";
   if (ctx.runningPaneIds.has(node.paneId)) cls += " running";
+  if (ctx.spotlightPaneId === node.paneId) cls += " pane-spotlight";
   if (dropOver) cls += draggingSession ? " pane-session-drop-over" : " pane-drop-over";
   if (isFileDragOver) cls += " pane-file-drop-over";
   if (isZoomed && !isExiting) cls += " pane-zoomed";
@@ -280,7 +301,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
           />
         ) : (
           <span
-            className="pane-header-cli"
+            className={`pane-header-cli${displayTitle !== node.cli ? " is-label" : ""}`}
             title="Click to rename"
             onClick={(e) => { e.stopPropagation(); setEditing(true); }}
           >
@@ -339,6 +360,21 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
               </button>
             </Tooltip>
           </>
+        )}
+        {!isZoomed && (
+          <Tooltip label={paneLabel.error ? `Labeling failed: ${paneLabel.error}` : "Identify this terminal (AI task label)"}>
+            <button
+              type="button"
+              className={`pane-header-btn${ctx.multi ? "" : " ghost"}${paneLabel.error ? " relay-miss" : ""}`}
+              aria-label="Generate AI task label"
+              disabled={paneLabel.pending}
+              onClick={(e) => { e.stopPropagation(); paneLabel.refresh(); }}
+            >
+              {paneLabel.pending
+                ? <Loader2 size={13} strokeWidth={1.75} className="pane-label-spin" />
+                : <Sparkles size={13} strokeWidth={1.75} />}
+            </button>
+          </Tooltip>
         )}
         {!isZoomed && (
           <div className="pane-palette-wrap">
@@ -512,11 +548,13 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     onAssignPaneProfile,
     onRespawn,
     onRename,
+    onSetAutoLabel,
     onSetPanePalette,
   },
   ref,
 ) {
   const { busyPanes } = useTerminalBusy();
+  const spotlightPaneId = useDeckStore((s) => s.hoveredPaneId);
   const handles = useRef<Map<string, ClaudeTerminalHandle>>(new Map());
   const leafEls = useRef<Map<string, HTMLElement>>(new Map());
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
@@ -754,6 +792,19 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     return () => window.removeEventListener(INJECT_PANE_EVENT, handler);
   }, []);
 
+  // Focus a pane from outside (the Session Deck) — moves the gold active border,
+  // not just xterm focus. Only this session's PaneLayout owns these paneIds; a
+  // stray id for another session's layout is harmlessly ignored.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { paneId } = (e as CustomEvent<{ paneId: string }>).detail;
+      if (handles.current.has(paneId)) focusPane(paneId);
+    };
+    window.addEventListener(FOCUS_PANE_EVENT, handler);
+    return () => window.removeEventListener(FOCUS_PANE_EVENT, handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useImperativeHandle(ref, () => ({
     writeLine: (text: string) => {
       const id = activePaneId ?? order[0];
@@ -787,9 +838,9 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
       sessionId, profileId, defaultCwd, reloadKey, activePaneId,
       handles, leafEls, setActive: setActivePaneId,
       onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
-      onAssignPaneProfile, onRelay, onRespawn, onRename, onSetPanePalette,
+      onAssignPaneProfile, onRelay, onRespawn, onRename, onSetAutoLabel, onSetPanePalette,
       ...zoomCtx,
-      makeKeyHandler, multi: false, runningPaneIds: busyPanes,
+      makeKeyHandler, multi: false, runningPaneIds: busyPanes, spotlightPaneId,
     };
     return (
       <div className="pane-root">{pane ? <PaneLeaf node={pane} ctx={ctx} /> : null}</div>
@@ -800,9 +851,9 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
     sessionId, profileId, defaultCwd, reloadKey, activePaneId,
     handles, leafEls, setActive: setActivePaneId,
     onSplit, onClose, onSetRatio, onPaneStarted, onMissingCli,
-    onAssignPaneProfile, onRelay, onRespawn, onRename, onSetPanePalette,
+    onAssignPaneProfile, onRelay, onRespawn, onRename, onSetAutoLabel, onSetPanePalette,
     ...zoomCtx,
-    makeKeyHandler, multi: order.length > 1, runningPaneIds: busyPanes,
+    makeKeyHandler, multi: order.length > 1, runningPaneIds: busyPanes, spotlightPaneId,
   };
 
   // The backdrop is rendered inline (NOT portaled) so it shares the same

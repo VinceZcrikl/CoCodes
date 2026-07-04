@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Pin, Pencil, FolderInput } from "lucide-react";
-import type { ClaudeSession } from "../../hooks/useClaudeSessions";
+import type { ClaudeSession, LayoutNode } from "../../hooks/useClaudeSessions";
 import { formatItemTime } from "./formatTime";
 import {
   setDraggingSession,
@@ -25,6 +25,17 @@ interface Props {
 
 const DELETE_CONFIRM_MS = 3000;
 
+/** First pane label in a session's layout — its manual title, else its AI task
+ *  label. Used as a sidebar subtitle when the session title is still the
+ *  default, so an unnamed session still says what it's working on. */
+function firstPaneLabel(layout?: LayoutNode): string | null {
+  const walk = (n: LayoutNode): string | null => {
+    if (n.type === "pane") return n.title ?? n.autoLabel ?? null;
+    return walk(n.children[0]) ?? walk(n.children[1]);
+  };
+  return layout ? walk(layout) : null;
+}
+
 /** Session list row — inline rename, pin, move-to-group, delete-with-confirm.
  *  Ported from orb's SessionRow design, backed by Claude sessions. */
 export default function SessionRow({
@@ -38,6 +49,7 @@ export default function SessionRow({
   onTogglePin,
   onMoveGroup,
 }: Props) {
+  const subtitle = firstPaneLabel(session.layout);
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(session.title);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -192,12 +204,19 @@ export default function SessionRow({
         />
       ) : (
         <div className="session-row-body">
-          <span className="session-row-title" title={session.title}>
-            {session.title}
-          </span>
-          {formatItemTime(session.updatedAt) && (
-            <span className="session-row-time">
-              {formatItemTime(session.updatedAt)}
+          <div className="session-row-line">
+            <span className="session-row-title" title={session.title}>
+              {session.title}
+            </span>
+            {formatItemTime(session.updatedAt) && (
+              <span className="session-row-time">
+                {formatItemTime(session.updatedAt)}
+              </span>
+            )}
+          </div>
+          {session.title === "New session" && subtitle && (
+            <span className="session-row-subtitle" title={subtitle}>
+              {subtitle}
             </span>
           )}
         </div>
