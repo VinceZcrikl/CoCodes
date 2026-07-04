@@ -2063,21 +2063,10 @@ body.resizing-col {
   gap: 6px;
   min-width: 0;
 }
-/* The version strip pins to the right edge. */
+/* The Deck toggle + version strip pins to the right edge. */
 .cli-toolbar-right {
   flex: none;
-}
-
-/* Deck sits centered in the *free* space between the left cluster and the right
-   strip: auto side-margins pull it to the middle when there's room, and collapse
-   the left one first as space tightens, so it slides toward the open right side
-   instead of overlapping the left tools. It never shrinks below its content. */
-.cli-toolbar-center {
-  display: flex;
-  align-items: center;
-  flex: none;
-  margin-inline: auto;
-  min-width: 0;
+  margin-left: auto;
 }
 
 /* Functional grouping (R1): tools cluster by purpose, groups split by a hairline

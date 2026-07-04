@@ -284,11 +284,8 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
         </div>
       </div>
 
-      {/* ── Center: Session deck ──
-          A flow item with auto side-margins, so it floats to the toolbar's
-          center when there's room and slides toward the free (right) side —
-          never overlapping the left cluster — when space gets tight. */}
-      <div className="cli-toolbar-center">
+      {/* ── Right: session deck + app version (Git status lives beside the dir picker) ── */}
+      <div className="cli-toolbar-right">
         <Tooltip label={deckOpen ? "Hide session deck" : "Session deck — all terminals at a glance"}>
           <button
             type="button"
@@ -302,10 +299,6 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
             <span className="cli-tool-label">Deck</span>
           </button>
         </Tooltip>
-      </div>
-
-      {/* ── Right: app version (Git status now lives beside the dir picker) ── */}
-      <div className="cli-toolbar-right">
         {version && (
           <span className="cli-status-model" title={`CoCodes v${version}`}>
             CoCodes v{version}
