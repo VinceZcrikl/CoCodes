@@ -308,11 +308,12 @@ body {
   position: relative;
 }
 
-/* Attention queue: sessions waiting on the user's authorization. Bottom-right
-   stack, newest at the bottom; each row jumps to its waiting pane on click. */
+/* Attention queue: sessions waiting on the user's authorization. Top-right
+   stack under the header (next to the theme dot), newest at the top; each row
+   jumps to its waiting pane on click. */
 .attention-banner {
   position: fixed;
-  bottom: 16px;
+  top: 60px;
   right: 16px;
   z-index: 1200;
   display: flex;
@@ -1715,7 +1716,8 @@ body.resizing-col {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  z-index: 60;
+  /* Above the floating deck (72) — see .shell-overlay. */
+  z-index: 74;
   width: min(380px, 80vw);
   display: flex;
   flex-direction: column;
@@ -1973,7 +1975,8 @@ body.resizing-col {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  z-index: 60;
+  /* Above the floating deck (72) — see .shell-overlay. */
+  z-index: 74;
   min-width: 220px;
   max-width: 340px;
   padding: 4px;
@@ -2253,7 +2256,9 @@ body.resizing-col {
   left: 50%;
   bottom: 56px;
   transform: translateX(-50%);
-  z-index: 70;
+  /* Above the floating deck (z-index 72): toolbar panels hover over the toolbar
+     and may cover the deck — that's intended. */
+  z-index: 74;
   display: flex;
   flex-direction: column;
   width: min(760px, calc(100% - 32px));
@@ -2312,6 +2317,11 @@ body.resizing-col {
    toolbar. Cards lay out in a single horizontal, scrollable row. */
 .session-deck.docked {
   position: relative;
+  /* Drop below the floating toolbar panels (shell/git/mcp at z-index 70). The
+     docked band reserves a real flow row, so it needs no stacking boost — and
+     without this it keeps the base z-index:72 and would cover those overlays,
+     which are meant to hover above the toolbar. */
+  z-index: auto;
   left: auto;
   right: auto;
   bottom: auto;
@@ -3541,7 +3551,8 @@ body.resizing-row {
      from the same corner rather than the opposite side of the window. */
   left: 16px;
   bottom: 56px;
-  z-index: 70;
+  /* Above the floating deck (72) — see .shell-overlay. */
+  z-index: 74;
   display: flex;
   flex-direction: column;
   width: min(400px, calc(100% - 32px));
@@ -4078,7 +4089,8 @@ body.resizing-row {
   bottom: 100%;
   left: 0;
   right: 0;
-  z-index: 60;
+  /* Above the floating deck (72) — see .shell-overlay. */
+  z-index: 74;
   background: var(--panel-deep);
   border: 1px solid color-mix(in srgb, var(--border) 160%, transparent);
   border-bottom: none;
@@ -7113,7 +7125,8 @@ select.agent-editor-input {
   position: absolute;
   right: 16px;
   bottom: 56px;
-  z-index: 70;
+  /* Above the floating deck (72) — see .shell-overlay. */
+  z-index: 74;
   display: flex;
   flex-direction: column;
   width: min(360px, calc(100% - 32px));
