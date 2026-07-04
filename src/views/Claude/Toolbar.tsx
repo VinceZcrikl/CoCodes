@@ -237,20 +237,6 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
             Git entry point (it toggles the panel), so a second GitBranch
             button would be redundant. */}
         <div className="cli-tool-group">
-          <Tooltip label={deckOpen ? "Hide session deck" : "Session deck — all terminals at a glance"}>
-            <button
-              type="button"
-              data-panel-toggle="deck"
-              className={`cli-tool-btn labelled${deckOpen ? " active" : ""}`}
-              onClick={toggleDeck}
-              aria-label={deckOpen ? "Hide session deck" : "Session deck"}
-              aria-pressed={deckOpen}
-            >
-              <LayoutGrid size={15} strokeWidth={1.75} />
-              <span className="cli-tool-label">Deck</span>
-            </button>
-          </Tooltip>
-
           <Tooltip label={shellOpen ? "Hide shell" : "Open a shell over this panel"}>
             <button
               type="button"
@@ -296,6 +282,26 @@ export default function Toolbar({ onScreenshot, onCommand, busy, cli = "claude" 
             </button>
           </Tooltip>
         </div>
+      </div>
+
+      {/* ── Center: Session deck ──
+          A flow item with auto side-margins, so it floats to the toolbar's
+          center when there's room and slides toward the free (right) side —
+          never overlapping the left cluster — when space gets tight. */}
+      <div className="cli-toolbar-center">
+        <Tooltip label={deckOpen ? "Hide session deck" : "Session deck — all terminals at a glance"}>
+          <button
+            type="button"
+            data-panel-toggle="deck"
+            className={`cli-tool-btn labelled${deckOpen ? " active" : ""}`}
+            onClick={toggleDeck}
+            aria-label={deckOpen ? "Hide session deck" : "Session deck"}
+            aria-pressed={deckOpen}
+          >
+            <LayoutGrid size={15} strokeWidth={1.75} />
+            <span className="cli-tool-label">Deck</span>
+          </button>
+        </Tooltip>
       </div>
 
       {/* ── Right: app version (Git status now lives beside the dir picker) ── */}

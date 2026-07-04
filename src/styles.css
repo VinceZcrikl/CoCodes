@@ -2043,10 +2043,10 @@ body.resizing-col {
 
 /* ── Tool strip (replaces the composer) ───────────────────────────── */
 .cli-toolbar {
+  position: relative;
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   height: 44px;
   padding: 0 10px;
   border-top: 1px solid var(--border);
@@ -2058,6 +2058,22 @@ body.resizing-col {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+}
+/* The version strip pins to the right edge. */
+.cli-toolbar-right {
+  flex: none;
+}
+
+/* Deck sits centered in the *free* space between the left cluster and the right
+   strip: auto side-margins pull it to the middle when there's room, and collapse
+   the left one first as space tightens, so it slides toward the open right side
+   instead of overlapping the left tools. It never shrinks below its content. */
+.cli-toolbar-center {
+  display: flex;
+  align-items: center;
+  flex: none;
+  margin-inline: auto;
   min-width: 0;
 }
 
