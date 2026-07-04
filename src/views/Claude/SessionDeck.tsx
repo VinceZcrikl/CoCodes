@@ -5,6 +5,8 @@ import type { LayoutNode, PaneNode } from "../../hooks/useClaudeSessions";
 import { forEachPane } from "../../hooks/useClaudeSessions";
 import { useDeckStore } from "../../state/deckStore";
 import { useTerminalBusy } from "../../hooks/useTerminalBusy";
+import { getLastRun } from "../../state/terminalActivity";
+import { usePaneReportStore } from "../../state/paneReports";
 import { useAttentionStore } from "../../state/attentionStore";
 import { usePersonaModel } from "../../hooks/usePersonaModel";
 import { usePersonas } from "../../hooks/usePersonas";
@@ -119,6 +121,9 @@ export default function SessionDeck({
     forEachPane(layout, (p) => out.push(p));
     return out.filter((p) => p.cli); // skip unbound (empty) panes
   }, [layout]);
+
+  // The deck's cast — paneId → character costume, distinct across terminals.
+  const costumes = useMemo(() => castCostumes(panes), [panes]);
 
   // paneId → status. Attention (waiting on user) outranks running outranks idle.
   const waitingPaneIds = useMemo(() => {
@@ -362,6 +367,7 @@ export default function SessionDeck({
           <DeckCard
             key={p.paneId}
             pane={p}
+            costume={costumes.get(p.paneId) ?? 0}
             status={statusOf(p)}
             sessionProfileId={sessionProfileId}
             checked={checked?.has(p.paneId) ?? false}
@@ -385,12 +391,15 @@ export default function SessionDeck({
   );
 }
 
-/** How often a visible card refreshes its output preview. */
-const PREVIEW_POLL_MS = 2500;
-/** Chars of recent dialogue kept for the hover tooltip. */
-const PREVIEW_TOOLTIP_CHARS = 600;
+/** How long a fetched hover status stays fresh before another hover re-asks. */
+const TIP_TTL_MS = 30_000;
+/** Hovering must dwell this long before the AI status fetch fires, so sweeping
+ *  the mouse across the deck doesn't fire a model call per card. */
+const TIP_INTENT_MS = 300;
 /** A run must last at least this long before its end earns a spoken report —
- *  filters out tiny output blips that aren't a "task finishing". */
+ *  filters out tiny output blips that aren't a "task finishing". (Ledger runMs
+ *  includes the 4s quiet tail that marks the run over, so this is ~4s of real
+ *  output.) */
 const MIN_RUN_FOR_REPORT_MS = 8000;
 
 /** CLI → built-in mascot face. A claude pane's sprite IS the Claude Code mascot
@@ -410,14 +419,44 @@ function spriteHash(id: string): number {
   return h;
 }
 
+/** Costume count — cowboy / wizard / athlete / scholar / hero / imp / robot /
+ *  laureate (indices 0–7, see the m-* wardrobe CSS). */
+const COSTUME_COUNT = 8;
+
+/** Cast the deck: each terminal gets a character it keeps (drawn from its pane
+ *  id), and no two terminals on stage wear the same one — a hash collision
+ *  probes forward to the next free costume, in layout order. Characters repeat
+ *  only when a session has more panes than costumes. State changes a sprite's
+ *  pose and expression, never its costume. */
+function castCostumes(panes: PaneNode[]): Map<string, number> {
+  const out = new Map<string, number>();
+  const taken = new Set<number>();
+  for (const p of panes) {
+    let c = spriteHash(`cos:${p.paneId}`) % COSTUME_COUNT;
+    if (taken.size < COSTUME_COUNT) {
+      while (taken.has(c)) c = (c + 1) % COSTUME_COUNT;
+    }
+    taken.add(c);
+    out.set(p.paneId, c);
+  }
+  return out;
+}
+
 /** The card's animated mascot, mirroring the pane's state: working (bobbing /
- *  swaying / tapping — picked per pane), waiting on the user (jumping with a
- *  "!"), sleeping (closed eyes, drifting z's), cheering (report just landed).
+ *  swaying / tapping / pondering / scribbling — picked per pane; the strenuous
+ *  rhythms break a sweat, ponderers float thought dots, and every worker blinks
+ *  now and then), waiting on the user (jumping with a "!" or anxiously
+ *  shivering with a "?"), idling (sleeping with drifting z's, or daydreaming
+ *  with half-open eyes and rising bubbles), cheering (report just landed —
+ *  a happy hop under a burst of sparkles).
  *
  *  Faces are diverse: known CLIs wear their real mascot (claude → the Claude
  *  Code avatar); others get a drawn blob whose shape (round / square / antenna /
- *  ears) derives from the pane id. Every sprite runs at its own animation phase
- *  so a deck full of workers never moves in lockstep. */
+ *  ears) derives from the pane id. Mascots additionally wear the character the
+ *  deck cast them as (see castCostumes — distinct per terminal; state changes
+ *  pose and expression, never the costume) and swap in overlay "expression
+ *  eyes" for moods the static face can't make. Every sprite runs at its own
+ *  animation phase so a deck full of workers never moves in lockstep. */
 function DeckSprite({
   status,
   color,
@@ -425,6 +464,7 @@ function DeckSprite({
   name,
   cli,
   paneId,
+  costume,
 }: {
   status: PaneStatus;
   color: string;
@@ -432,21 +472,74 @@ function DeckSprite({
   name: string;
   cli: string;
   paneId: string;
+  /** The terminal's character (0–7), cast once per deck — state-invariant. */
+  costume: number;
 }) {
   const Mascot = SPRITE_MASCOTS[cli];
   const h = spriteHash(paneId);
   const variant = h % 4; // blob shape
-  const work = (h >> 2) % 3; // work-animation style
+  const work = (h >> 2) % 5; // work rhythm: bob / sway / tap / think / scribble
+  const waitV = (h >> 5) % 2; // waiting style: jump-"!" / shiver-"?"
+  const idleV = (h >> 6) % 2; // idle style: sleep-zzz / daydream-bubbles
+  const sweat = work === 2 || work === 4; // the strenuous rhythms break a sweat
   const phase = { animationDelay: `${-(h % 900)}ms` };
+  // Overlay eye mood — expression eyes drawn over the mascot's own (a skin
+  // patch hides the SVG eyes, the mood is drawn on top). null = its own eyes.
+  const eyeMood = cheer
+    ? "happy" // ∪∪ smiling arcs
+    : status === "waiting"
+      ? "plead" // glossy wide eyes begging for input
+      : status === "idle"
+        ? idleV === 0
+          ? "shut" // fast asleep
+          : "drowsy" // half-lidded daydream
+        : work === 3
+          ? "up" // pupils rolled up, mid-think
+          : work === 4
+            ? "grit" // determined slanted lids
+            : null; // bob/sway/tap keep the mascot's own eyes
   return (
     <div
-      className={`deck-sprite ${status} v${variant} work${work}${Mascot ? " mascot" : ""}${cheer ? " cheer" : ""}`}
+      className={`deck-sprite ${status} v${variant} work${work} wait${waitV} idle${idleV} cos${costume}${Mascot ? " mascot" : ""}${cheer ? " cheer" : ""}`}
       title={name}
       style={{ ["--sprite-color" as string]: color } as React.CSSProperties}
     >
       {Mascot ? (
         <div className="sprite-body sprite-mascot" style={phase}>
+          {/* Wardrobe — the terminal's cast character, layered around the
+              unchanged mascot: cowboy hat, wizard hat, athlete sweatband,
+              scholar specs, hero cape, imp horns, robot antenna, laurel wreath. */}
+          {costume === 0 && <span className="m-hat-cowboy" aria-hidden="true" />}
+          {costume === 1 && <span className="m-hat-wizard" aria-hidden="true" />}
+          {costume === 2 && <span className="m-band" aria-hidden="true" />}
+          {costume === 3 && <span className="m-specs" aria-hidden="true" />}
+          {costume === 4 && <span className="m-cape" aria-hidden="true" />}
+          {costume === 5 && (
+            <>
+              <span className="m-horn l" aria-hidden="true" />
+              <span className="m-horn r" aria-hidden="true" />
+            </>
+          )}
+          {costume === 6 && <span className="m-antenna" aria-hidden="true" />}
+          {costume === 7 && <span className="m-laurel" aria-hidden="true" />}
+          {/* State props — halo when sound asleep, wings when daydreaming. */}
+          {status === "idle" && !cheer && idleV === 0 && (
+            <span className="m-halo" aria-hidden="true" />
+          )}
+          {status === "idle" && !cheer && idleV === 1 && (
+            <>
+              <span className="m-wing l" aria-hidden="true" />
+              <span className="m-wing r" aria-hidden="true" />
+            </>
+          )}
           <Mascot className="sprite-mascot-svg" />
+          {/* Expression eyes — drawn over the mascot's own for moods its
+              static face can't make. */}
+          {eyeMood && (
+            <span className={`m-eyes ${eyeMood}`} aria-hidden="true">
+              <i className="l" /><i className="r" />
+            </span>
+          )}
         </div>
       ) : (
         <div className="sprite-body" style={phase}>
@@ -462,11 +555,27 @@ function DeckSprite({
           <span className="sprite-mouth" />
         </div>
       )}
-      {status === "idle" && !cheer && (
+      {status === "idle" && !cheer && idleV === 0 && (
         <span className="sprite-zzz" aria-hidden="true">z<span>z</span></span>
       )}
+      {status === "idle" && !cheer && idleV === 1 && (
+        <span className="sprite-dream" aria-hidden="true"><i /><i /></span>
+      )}
       {status === "waiting" && (
-        <span className="sprite-alert" aria-hidden="true">!</span>
+        <span className={`sprite-alert${waitV === 1 ? " ask" : ""}`} aria-hidden="true">
+          {waitV === 1 ? "?" : "!"}
+        </span>
+      )}
+      {status === "running" && work === 3 && (
+        <span className="sprite-dots" aria-hidden="true"><i /><i /><i /></span>
+      )}
+      {status === "running" && sweat && (
+        <span className="sprite-sweat" aria-hidden="true" />
+      )}
+      {cheer && (
+        <span className="sprite-sparkles" aria-hidden="true">
+          <i>✦</i><i>✦</i><i>✦</i>
+        </span>
       )}
     </div>
   );
@@ -474,6 +583,7 @@ function DeckSprite({
 
 function DeckCard({
   pane,
+  costume,
   status,
   sessionProfileId,
   checked,
@@ -485,6 +595,8 @@ function DeckCard({
   getPersona,
 }: {
   pane: PaneNode;
+  /** The terminal's character (0–7), cast once per deck by castCostumes. */
+  costume: number;
   status: PaneStatus;
   sessionProfileId: string;
   checked: boolean;
@@ -516,72 +628,90 @@ function DeckCard({
     ...(hasThemeOverride ? cssVarsForPalette(effPalette, effAccent) : {}),
   } as React.CSSProperties;
 
-  // Live preview text for the hover tooltip: the pane's recent dialogue (code /
-  // diffs / TUI chrome removed by the backend). A full-screen TUI's screen buffer
-  // has few real newlines, so this is one long-ish blob we soft-wrap in the
-  // tooltip; we keep only its tail to stay readable.
-  const [preview, setPreview] = useState("");
-  useEffect(() => {
-    let alive = true;
-    const tick = async () => {
-      try {
-        const text = await invoke<string>("terminal_transcript", { id: `${pane.paneId}:${pane.convId}` });
-        if (!alive) return;
-        const clean = text.replace(/\s+/g, " ").trim();
-        setPreview(clean.slice(-PREVIEW_TOOLTIP_CHARS));
-      } catch {
-        /* ignore */
-      }
-    };
-    void tick();
-    const t = window.setInterval(tick, PREVIEW_POLL_MS);
-    return () => { alive = false; window.clearInterval(t); };
-  }, [pane.paneId, pane.convId]);
+  // Hover status: like the bubble, the sprite's tooltip is one short AI status
+  // sentence — "where things stand right now" — not a raw transcript dump.
+  // Fetched lazily on hover (after a short dwell, so sweeping the deck is free)
+  // and cached for TIP_TTL_MS; a finished pane that already has a quest report
+  // just shows that report, with no extra model call.
+  const [tip, setTip] = useState<{ text: string; ts: number } | null>(null);
+  const tipLoading = useRef(false);
+  const tipTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(tipTimer.current), []);
 
-  // Quest report: when a decent-length run ends (running → idle), the sprite
-  // "speaks" — one AI-generated sentence on what it just did. Dismissing hides
-  // the bubble but keeps the report (the 💬 action reopens it); only the next
-  // run discards it.
-  const [report, setReport] = useState<string | null>(null);
-  const [bubbleOpen, setBubbleOpen] = useState(true);
-  const [reporting, setReporting] = useState(false);
-  const prevStatus = useRef<PaneStatus>(status);
-  // If the card mounts mid-run the true start is unknown; count from mount so a
-  // blip observed for <8s never earns a report.
-  const runStartRef = useRef(performance.now());
-
-  const makeReport = async () => {
-    setReporting(true);
+  const fetchTip = async () => {
+    if (tipLoading.current) return;
+    if (tip && performance.now() - tip.ts < TIP_TTL_MS) return;
+    tipLoading.current = true;
     try {
       const transcript = await invoke<string>("terminal_tail", { id: `${pane.paneId}:${pane.convId}` });
       if (transcript.trim().length < 40) return;
       const providerId = await resolveProviderId(getPersona, profileId);
       if (!providerId) return;
       const text = await invoke<string>("ai_pane_report", { providerId, transcript });
-      if (text.trim()) {
-        setReport(text);
-        setBubbleOpen(true);
-      }
+      if (text.trim()) setTip({ text, ts: performance.now() });
     } catch {
-      /* a failed report just means no bubble */
+      /* the tooltip just keeps the last status */
     } finally {
-      setReporting(false);
+      tipLoading.current = false;
     }
+  };
+
+  // Quest report: when a decent-length run ends, the sprite "speaks" — one
+  // AI-generated sentence on what it just did. Run ends come from the global
+  // activity ledger (busy edges), not this card's own status transitions, so a
+  // run that finishes into a pending permission prompt ("waiting"), or while
+  // this card isn't mounted (deck closed, another session active), still gets
+  // its bubble the moment the card looks. Reports live in a global store so a
+  // remount shows the same text without a second AI call. Dismissing hides the
+  // bubble but keeps the report (the 💬 action reopens it); only the next run
+  // discards it.
+  const reportEntry = usePaneReportStore((s) => s.reports[pane.paneId]);
+  const pendingFor = usePaneReportStore((s) => s.pending[pane.paneId]);
+  const report = reportEntry && !reportEntry.dismissed ? reportEntry.text : null;
+  const reporting = pendingFor !== undefined;
+  const prevStatus = useRef<PaneStatus>(status);
+
+  const makeReport = async (endedAt: number) => {
+    const store = usePaneReportStore.getState();
+    store.begin(pane.paneId, endedAt);
+    let text: string | null = null;
+    try {
+      const transcript = await invoke<string>("terminal_tail", { id: `${pane.paneId}:${pane.convId}` });
+      if (transcript.trim().length >= 40) {
+        const providerId = await resolveProviderId(getPersona, profileId);
+        if (providerId) {
+          const raw = await invoke<string>("ai_pane_report", { providerId, transcript });
+          if (raw.trim()) text = raw;
+        }
+      }
+    } catch (err) {
+      console.warn("pane report failed", err); // a failed report just means no bubble
+    }
+    usePaneReportStore.getState().finish(pane.paneId, endedAt, text);
   };
 
   useEffect(() => {
     const prev = prevStatus.current;
     prevStatus.current = status;
     if (status === "running" && prev !== "running") {
-      runStartRef.current = performance.now();
-      setReport(null); // back to work — the old quest report is history
-      setBubbleOpen(true);
+      usePaneReportStore.getState().clear(pane.paneId); // back to work — the old quest report is history
     }
-    if (prev === "running" && status === "idle") {
-      if (performance.now() - runStartRef.current >= MIN_RUN_FOR_REPORT_MS) void makeReport();
-    }
+  }, [status, pane.paneId]);
+
+  // The ledger's endedAt bumping (cards re-render on the 200ms busy poll) is
+  // the report trigger; status/report/pending re-checks let a run that ended
+  // unreported (e.g. generation raced a new run) get picked up later.
+  const lastRunEndedAt = getLastRun(pane.paneId)?.endedAt ?? 0;
+  useEffect(() => {
+    if (!lastRunEndedAt) return;
+    const run = getLastRun(pane.paneId);
+    if (!run || run.runMs < MIN_RUN_FOR_REPORT_MS) return;
+    if (status === "running") return; // a new run already started — it'll report instead
+    if (reportEntry && reportEntry.forEndedAt >= run.endedAt) return; // already covered
+    if (pendingFor === run.endedAt) return; // generation in flight
+    void makeReport(run.endedAt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [lastRunEndedAt, status, reportEntry, pendingFor]);
 
   const [reply, setReply] = useState("");
   const send = () => {
@@ -618,12 +748,12 @@ function DeckCard({
     >
       {/* Hover-revealed controls; the checked state keeps them visible. */}
       <span className="deck-card-actions">
-        {report && !bubbleOpen && (
+        {reportEntry?.dismissed && (
           <Tooltip label="Show the last report">
             <button
               type="button"
               className="deck-icon-btn"
-              onClick={() => setBubbleOpen(true)}
+              onClick={() => usePaneReportStore.getState().reopen(pane.paneId)}
               aria-label="Show last report"
             >
               <MessageCircle size={12} />
@@ -668,20 +798,33 @@ function DeckCard({
       </div>
 
       <div className="deck-card-main">
-        {/* Hovering the sprite peeks at what it's "thinking" — recent output. */}
+        {/* Hovering the sprite asks it "how's it going?" — one short AI status
+            sentence (or the finished run's report, free). "…" while it thinks. */}
         <Tooltip
           side="bottom"
           delay={200}
-          label={preview ? <span className="deck-preview-tip">{preview}</span> : null}
+          label={
+            <span className="deck-preview-tip">
+              {(status !== "running" && reportEntry?.text) || tip?.text || "…"}
+            </span>
+          }
         >
-          <div className="deck-sprite-hit">
+          <div
+            className="deck-sprite-hit"
+            onMouseEnter={() => {
+              if (status !== "running" && reportEntry) return; // the quest report IS the status
+              tipTimer.current = window.setTimeout(() => void fetchTip(), TIP_INTENT_MS);
+            }}
+            onMouseLeave={() => window.clearTimeout(tipTimer.current)}
+          >
             <DeckSprite
               status={status}
               color={spriteColor}
-              cheer={!!report && bubbleOpen}
+              cheer={!!report}
               name={identity.name}
               cli={pane.cli}
               paneId={pane.paneId}
+              costume={costume}
             />
           </div>
         </Tooltip>
@@ -693,13 +836,13 @@ function DeckCard({
               <span>writing report…</span>
             </div>
           )}
-          {report && bubbleOpen && (
+          {report && (
             <div className="deck-bubble" role="status">
               <span className="deck-bubble-text">{report}</span>
               <button
                 type="button"
                 className="deck-bubble-close"
-                onClick={() => setBubbleOpen(false)}
+                onClick={() => usePaneReportStore.getState().dismiss(pane.paneId)}
                 aria-label="Dismiss report"
               >
                 <X size={11} />

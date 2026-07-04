@@ -3,21 +3,41 @@ import { ChevronRight, ExternalLink, KeyRound, RefreshCw, Trash2, Upload } from 
 import { usePersonas, useProviders, type PersonaDoc } from "../../hooks/usePersonas";
 import ProviderManager from "./ProviderManager";
 import { PROVIDER_PRESETS, CODEX_PROVIDER_PRESETS, effectiveModelsUrl } from "./providerPresets";
-import PersonaAvatar, { MASCOT_SENTINEL } from "./PersonaAvatar";
+import PersonaAvatar, { MASCOT_SENTINEL, costumeSentinel } from "./PersonaAvatar";
 import { useProviderModels } from "../../hooks/useProviderModels";
 import { openExternal } from "../../util/openExternal";
 import ClaudeMascot from "./ClaudeMascot";
 import CodexMascot from "./CodexMascot";
 import GrokMascot from "./GrokMascot";
 import KimiMascot from "./KimiMascot";
+import CostumedClaudeMascot, {
+  MASCOT_COSTUMES,
+  COSTUME_LABELS,
+} from "./CostumedClaudeMascot";
 
-const EMOJI_PRESETS = ["🤖", "🦊", "🧠", "✨", "🐙", "📝", "🎨", "🚀", "🦉", "👾"];
-
-const MASCOT_PRESETS = [
-  { sentinel: MASCOT_SENTINEL.claude, label: "Claude", Component: ClaudeMascot },
-  { sentinel: MASCOT_SENTINEL.codex,  label: "Codex",  Component: CodexMascot  },
-  { sentinel: MASCOT_SENTINEL.grok,   label: "Grok",   Component: GrokMascot   },
-  { sentinel: MASCOT_SENTINEL.kimi,   label: "Kimi",   Component: KimiMascot   },
+/** Gallery rows, one per CLI: the CLI's mark leads its row, followed by that
+ *  CLI's character variants (only the Claude creature has a wardrobe so far —
+ *  the other marks are logos, but their rows leave room for future variants). */
+const AVATAR_ROWS: {
+  label: string;
+  cells: { sentinel: string; title: string; Component: React.ComponentType<{ className?: string }> }[];
+}[] = [
+  {
+    label: "Claude",
+    cells: [
+      { sentinel: MASCOT_SENTINEL.claude, title: "Claude mascot", Component: ClaudeMascot },
+      ...MASCOT_COSTUMES.map((costume) => ({
+        sentinel: costumeSentinel(costume),
+        title: COSTUME_LABELS[costume],
+        Component: ({ className }: { className?: string }) => (
+          <CostumedClaudeMascot costume={costume} className={className} />
+        ),
+      })),
+    ],
+  },
+  { label: "Codex", cells: [{ sentinel: MASCOT_SENTINEL.codex, title: "Codex mark", Component: CodexMascot }] },
+  { label: "Grok", cells: [{ sentinel: MASCOT_SENTINEL.grok, title: "Grok mark", Component: GrokMascot }] },
+  { label: "Kimi", cells: [{ sentinel: MASCOT_SENTINEL.kimi, title: "Kimi mark", Component: KimiMascot }] },
 ];
 
 const CLI_OPTIONS = [
@@ -381,62 +401,58 @@ export default function PersonaEditor({
                 />
               </div>
               <div className="avatar-picker-gallery">
-                {MASCOT_PRESETS.map(({ sentinel, label, Component }) => (
-                  <button
-                    key={sentinel}
-                    type="button"
-                    className={`avatar-picker-cell avatar-picker-mascot-cell${avatar === sentinel ? " selected" : ""}`}
-                    onClick={() => setAvatar(sentinel)}
-                    title={`${label} mascot`}
-                    aria-label={`${label} mascot`}
-                  >
-                    <Component className="avatar-picker-mascot-svg" />
-                  </button>
+                {AVATAR_ROWS.map(({ label, cells }) => (
+                  <div key={label} className="avatar-picker-row">
+                    <span className="avatar-picker-row-label">{label}</span>
+                    {cells.map(({ sentinel, title, Component }) => (
+                      <button
+                        key={sentinel}
+                        type="button"
+                        className={`avatar-picker-cell avatar-picker-mascot-cell${avatar === sentinel ? " selected" : ""}`}
+                        onClick={() => setAvatar(sentinel)}
+                        title={title}
+                        aria-label={title}
+                      >
+                        <Component className="avatar-picker-mascot-svg" />
+                      </button>
+                    ))}
+                  </div>
                 ))}
-                <div className="avatar-picker-sep-v" aria-hidden="true" />
-                {EMOJI_PRESETS.map((e) => (
-                  <button
-                    key={e}
-                    type="button"
-                    className={`avatar-picker-cell${avatar === e ? " selected" : ""}`}
-                    onClick={() => setAvatar(e)}
-                    title={`Use ${e}`}
-                  >
-                    {e}
-                  </button>
-                ))}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  // Explicit extensions, not the `image/*` wildcard: on recent
-                  // macOS the wildcard makes WKWebView offer the system Photos
-                  // picker, which triggers a "would like to access your Photo
-                  // Library" prompt attributed to the app. Listing extensions
-                  // uses the plain file panel and still filters to images.
-                  accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.bmp"
-                  style={{ display: "none" }}
-                  onChange={onUpload}
-                />
-                <button
-                  type="button"
-                  className="avatar-picker-cell avatar-picker-upload-cell"
-                  onClick={() => fileRef.current?.click()}
-                  title="Upload an image"
-                  aria-label="Upload an image"
-                >
-                  <Upload size={15} strokeWidth={2} />
-                </button>
-                {avatar && (
+                <div className="avatar-picker-row">
+                  <span className="avatar-picker-row-label">Custom</span>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    // Explicit extensions, not the `image/*` wildcard: on recent
+                    // macOS the wildcard makes WKWebView offer the system Photos
+                    // picker, which triggers a "would like to access your Photo
+                    // Library" prompt attributed to the app. Listing extensions
+                    // uses the plain file panel and still filters to images.
+                    accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.bmp"
+                    style={{ display: "none" }}
+                    onChange={onUpload}
+                  />
                   <button
                     type="button"
-                    className="avatar-picker-cell avatar-picker-clear"
-                    onClick={() => setAvatar("")}
-                    title="Reset to default"
-                    aria-label="Reset avatar"
+                    className="avatar-picker-cell avatar-picker-upload-cell"
+                    onClick={() => fileRef.current?.click()}
+                    title="Upload an image"
+                    aria-label="Upload an image"
                   >
-                    ×
+                    <Upload size={15} strokeWidth={2} />
                   </button>
-                )}
+                  {avatar && (
+                    <button
+                      type="button"
+                      className="avatar-picker-cell avatar-picker-clear"
+                      onClick={() => setAvatar("")}
+                      title="Reset to default"
+                      aria-label="Reset avatar"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
