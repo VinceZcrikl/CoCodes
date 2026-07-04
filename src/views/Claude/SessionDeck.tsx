@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Sparkles, Maximize2, CornerDownLeft, Loader2, RefreshCw, X, Check, Rows3, PanelBottomClose, Dices, MessageCircle } from "lucide-react";
+import { Sparkles, Maximize2, CornerDownLeft, Loader2, RefreshCw, X, Check, Rows3, PanelBottomClose, Dices, MessageCircle, Cpu, ChevronDown, Megaphone } from "lucide-react";
 import type { LayoutNode, PaneNode } from "../../hooks/useClaudeSessions";
 import { forEachPane } from "../../hooks/useClaudeSessions";
 import { useDeckStore } from "../../state/deckStore";
@@ -54,9 +54,14 @@ function focusPaneExternal(paneId: string) {
   window.dispatchEvent(new CustomEvent(FOCUS_PANE_EVENT, { detail: { paneId } }));
 }
 
-/** Resolve a provider id to summarize with: the persona's base_model when
- *  usable, else the first usable provider on file. Mirrors usePaneLabel. */
-async function resolveProviderId(getDoc: (id: string) => Promise<{ base_model?: string | null } | null>, profileId: string): Promise<string | null> {
+/** Resolve a provider id to summarize with: an explicit override (the deck's
+ *  model picker) when still usable, else the persona's base_model when usable,
+ *  else the first usable provider on file. Mirrors usePaneLabel. */
+async function resolveProviderId(
+  getDoc: (id: string) => Promise<{ base_model?: string | null } | null>,
+  profileId: string,
+  override?: string | null,
+): Promise<string | null> {
   let usable: { id: string }[] = [];
   try {
     usable = await invoke<{ id: string }[]>("ai_commit_providers");
@@ -64,6 +69,7 @@ async function resolveProviderId(getDoc: (id: string) => Promise<{ base_model?: 
     return null;
   }
   if (usable.length === 0) return null;
+  if (override && usable.some((p) => p.id === override)) return override;
   try {
     const doc = await getDoc(profileId);
     const base = doc?.base_model;
@@ -114,6 +120,33 @@ export default function SessionDeck({
   const { busyPanes } = useTerminalBusy();
   const attention = useAttentionStore((s) => s.queue);
   const { get: getPersona } = usePersonas();
+
+  // Model picker — which provider the sprites summarize with (speech bubble +
+  // hover status). "Auto" follows each pane persona's base model; an explicit
+  // pick overrides it for the whole deck and persists across restarts.
+  const reportProviderId = useDeckStore((s) => s.reportProviderId);
+  const setReportProvider = useDeckStore((s) => s.setReportProvider);
+  const [providers, setProviders] = useState<{ id: string; label: string; model: string }[]>([]);
+  const [modelOpen, setModelOpen] = useState(false);
+  const modelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    void invoke<{ id: string; label: string; model: string }[]>("ai_commit_providers")
+      .then((list) => { if (alive) setProviders(list); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [open]);
+  useEffect(() => {
+    if (!modelOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (modelRef.current?.contains(e.target as Node)) return;
+      setModelOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    return () => window.removeEventListener("mousedown", onClick);
+  }, [modelOpen]);
+  const reportProvider = providers.find((p) => p.id === reportProviderId) ?? null;
 
   // Panes of the current session, in layout order.
   const panes = useMemo(() => {
@@ -268,6 +301,46 @@ export default function SessionDeck({
           <span className="deck-badge">{panes.length} panes</span>
         </span>
         <span className="deck-spacer" />
+        <div className="deck-model" ref={modelRef}>
+          <Tooltip label="Model the sprites report with — Auto follows each persona's base model">
+            <button
+              type="button"
+              className={`deck-model-btn${modelOpen ? " open" : ""}`}
+              onClick={() => setModelOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={modelOpen}
+            >
+              <Cpu size={12} />
+              <span className="deck-model-current">{reportProvider?.label ?? "Auto"}</span>
+              <ChevronDown size={11} />
+            </button>
+          </Tooltip>
+          {modelOpen && (
+            <div className="deck-model-menu" role="menu">
+              <button
+                type="button"
+                className={`deck-model-item${reportProvider ? "" : " current"}`}
+                onClick={() => { setReportProvider(null); setModelOpen(false); }}
+              >
+                <Check size={12} strokeWidth={2.2} className="deck-model-tick" />
+                <span className="deck-model-label">Auto</span>
+                <span className="deck-model-name">persona base model</span>
+              </button>
+              {providers.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`deck-model-item${p.id === reportProvider?.id ? " current" : ""}`}
+                  onClick={() => { setReportProvider(p.id); setModelOpen(false); }}
+                >
+                  <Check size={12} strokeWidth={2.2} className="deck-model-tick" />
+                  <span className="deck-model-label">{p.label}</span>
+                  <span className="deck-model-name">{p.model}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <Tooltip label="Give terminals still on the global theme a random one">
           <button
             type="button"
@@ -401,6 +474,11 @@ const TIP_INTENT_MS = 300;
  *  includes the 4s quiet tail that marks the run over, so this is ~4s of real
  *  output.) */
 const MIN_RUN_FOR_REPORT_MS = 8000;
+/** Hard ceiling on a report generation. If `terminal_tail`/`ai_pane_report`
+ *  never settles (a wedged provider or backend call), the "writing report…"
+ *  bubble would otherwise hang forever and block every retry. After this we give
+ *  up, clear the writing state, and let the run be reported again later. */
+const REPORT_TIMEOUT_MS = 45000;
 
 /** CLI → built-in mascot face. A claude pane's sprite IS the Claude Code mascot
  *  (the same avatar as the pane header), and likewise for the other CLIs; only
@@ -419,9 +497,109 @@ function spriteHash(id: string): number {
   return h;
 }
 
-/** Costume count — cowboy / wizard / athlete / scholar / hero / imp / robot /
- *  laureate (indices 0–7, see the m-* wardrobe CSS). */
-const COSTUME_COUNT = 8;
+/** Costume count — indices into the mascot wardrobe (see COSTUME_PROPS and the
+ *  m-* CSS): 0–7 archetypes (cowboy, wizard, athlete, scholar, hero, imp,
+ *  robot, laureate), 8–15 coding scenes (detective, builder, astronaut,
+ *  scientist, firefighter, artist, surgeon, conductor), 16–23 practical roles
+ *  (writer, teacher, anchor, editor, explorer, analyst, pilot, chef). */
+const COSTUME_COUNT = 24;
+
+/** The wardrobe — each costume is layered around the unchanged mascot. */
+const COSTUME_PROPS: Record<number, React.ReactNode> = {
+  0: <span className="m-hat-cowboy" aria-hidden="true" />,
+  1: <span className="m-hat-wizard" aria-hidden="true" />,
+  2: <span className="m-band" aria-hidden="true" />,
+  3: <span className="m-specs" aria-hidden="true" />,
+  4: <span className="m-cape" aria-hidden="true" />,
+  5: (
+    <>
+      <span className="m-horn l" aria-hidden="true" />
+      <span className="m-horn r" aria-hidden="true" />
+    </>
+  ),
+  6: <span className="m-antenna" aria-hidden="true" />,
+  7: <span className="m-laurel" aria-hidden="true" />,
+  8: (
+    <>
+      <span className="m-hat-sleuth" aria-hidden="true" />
+      <span className="m-monocle" aria-hidden="true" />
+    </>
+  ),
+  9: <span className="m-hat-hard" aria-hidden="true" />,
+  10: <span className="m-helmet" aria-hidden="true" />,
+  11: <span className="m-goggles" aria-hidden="true" />,
+  12: <span className="m-hat-fire" aria-hidden="true" />,
+  13: <span className="m-beret" aria-hidden="true" />,
+  14: (
+    <>
+      <span className="m-hat-scrub" aria-hidden="true" />
+      <span className="m-mirror" aria-hidden="true" />
+    </>
+  ),
+  15: (
+    <>
+      <span className="m-bowtie" aria-hidden="true" />
+      <span className="m-baton" aria-hidden="true" />
+    </>
+  ),
+  16: <span className="m-quill" aria-hidden="true" />,
+  17: <span className="m-mortar" aria-hidden="true" />,
+  18: (
+    <>
+      <span className="m-headset" aria-hidden="true" />
+      <span className="m-tie" aria-hidden="true" />
+    </>
+  ),
+  19: <span className="m-phones" aria-hidden="true" />,
+  20: <span className="m-pith" aria-hidden="true" />,
+  21: <span className="m-visor" aria-hidden="true" />,
+  22: <span className="m-hat-pilot" aria-hidden="true" />,
+  23: <span className="m-toque" aria-hidden="true" />,
+};
+
+/** What each character's eyes do while it works (see the m-eyes moods). Keys
+ *  absent → the mascot keeps its own eyes. */
+const RUN_EYES: Record<number, string> = {
+  1: "up", // wizard channels upward
+  13: "up", // artist studies the canvas
+  2: "grit", // athlete strains
+  5: "grit", // imp grinds
+  9: "grit", // builder hammers
+  12: "grit", // firefighter charges
+  3: "down", // scholar reads
+  14: "down", // surgeon watches the table
+  16: "down", // writer watches the page
+  19: "down", // editor watches the timeline
+  21: "down", // analyst watches the figures
+  8: "magnify", // detective peers through the monocle
+  20: "scan", // explorer sweeps the horizon
+  15: "drowsy", // conductor, lost in the music
+};
+
+/** Characters that break a sweat while working. */
+const RUN_SWEAT = new Set([2, 5, 12]);
+
+/** The badge each character emits while working (rendered at the sprite root).
+ *  Scholar's thought dots and the sweat drop are handled separately. */
+const RUN_BADGES: Record<number, React.ReactNode> = {
+  1: <span className="sprite-spell" aria-hidden="true"><i>✦</i><i>✦</i></span>,
+  8: <span className="sprite-clues" aria-hidden="true"><i /><i /></span>,
+  9: <span className="sprite-sparks" aria-hidden="true"><i>✧</i><i>✧</i></span>,
+  10: <span className="sprite-thrust" aria-hidden="true" />,
+  11: <span className="sprite-bubbles" aria-hidden="true"><i /><i /></span>,
+  12: <span className="sprite-flame" aria-hidden="true" />,
+  13: <span className="sprite-paint" aria-hidden="true"><i /><i /><i /></span>,
+  14: <span className="sprite-med" aria-hidden="true" />,
+  15: <span className="sprite-notes" aria-hidden="true"><i>♪</i><i>♩</i></span>,
+  16: <span className="sprite-ink" aria-hidden="true"><i /><i /></span>,
+  17: <span className="sprite-chalk" aria-hidden="true"><i /><i /><i /></span>,
+  18: <span className="sprite-live" aria-hidden="true"><i />LIVE</span>,
+  19: <span className="sprite-play" aria-hidden="true" />,
+  20: <span className="sprite-search" aria-hidden="true" />,
+  21: <span className="sprite-bars" aria-hidden="true"><i /><i /><i /></span>,
+  22: <span className="sprite-beacon" aria-hidden="true" />,
+  23: <span className="sprite-steam" aria-hidden="true"><i /><i /></span>,
+};
 
 /** Cast the deck: each terminal gets a character it keeps (drawn from its pane
  *  id), and no two terminals on stage wear the same one — a hash collision
@@ -481,10 +659,21 @@ function DeckSprite({
   const work = (h >> 2) % 5; // work rhythm: bob / sway / tap / think / scribble
   const waitV = (h >> 5) % 2; // waiting style: jump-"!" / shiver-"?"
   const idleV = (h >> 6) % 2; // idle style: sleep-zzz / daydream-bubbles
-  const sweat = work === 2 || work === 4; // the strenuous rhythms break a sweat
+  const isMascot = !!Mascot;
   const phase = { animationDelay: `${-(h % 900)}ms` };
+  // Running props follow the character for mascots (see RUN_SWEAT / RUN_BADGES
+  // / RUN_EYES); blobs keep their hashed work rhythm's props.
+  const sweat = isMascot ? RUN_SWEAT.has(costume) : work === 2 || work === 4;
+  const dots = isMascot ? costume === 3 : work === 3;
   // Overlay eye mood — expression eyes drawn over the mascot's own (a skin
   // patch hides the SVG eyes, the mood is drawn on top). null = its own eyes.
+  const runningMood = isMascot
+    ? (RUN_EYES[costume] ?? null)
+    : work === 3
+      ? "up"
+      : work === 4
+        ? "grit"
+        : null;
   const eyeMood = cheer
     ? "happy" // ∪∪ smiling arcs
     : status === "waiting"
@@ -493,11 +682,7 @@ function DeckSprite({
         ? idleV === 0
           ? "shut" // fast asleep
           : "drowsy" // half-lidded daydream
-        : work === 3
-          ? "up" // pupils rolled up, mid-think
-          : work === 4
-            ? "grit" // determined slanted lids
-            : null; // bob/sway/tap keep the mascot's own eyes
+        : runningMood;
   return (
     <div
       className={`deck-sprite ${status} v${variant} work${work} wait${waitV} idle${idleV} cos${costume}${Mascot ? " mascot" : ""}${cheer ? " cheer" : ""}`}
@@ -507,21 +692,8 @@ function DeckSprite({
       {Mascot ? (
         <div className="sprite-body sprite-mascot" style={phase}>
           {/* Wardrobe — the terminal's cast character, layered around the
-              unchanged mascot: cowboy hat, wizard hat, athlete sweatband,
-              scholar specs, hero cape, imp horns, robot antenna, laurel wreath. */}
-          {costume === 0 && <span className="m-hat-cowboy" aria-hidden="true" />}
-          {costume === 1 && <span className="m-hat-wizard" aria-hidden="true" />}
-          {costume === 2 && <span className="m-band" aria-hidden="true" />}
-          {costume === 3 && <span className="m-specs" aria-hidden="true" />}
-          {costume === 4 && <span className="m-cape" aria-hidden="true" />}
-          {costume === 5 && (
-            <>
-              <span className="m-horn l" aria-hidden="true" />
-              <span className="m-horn r" aria-hidden="true" />
-            </>
-          )}
-          {costume === 6 && <span className="m-antenna" aria-hidden="true" />}
-          {costume === 7 && <span className="m-laurel" aria-hidden="true" />}
+              unchanged mascot (see COSTUME_PROPS). */}
+          {COSTUME_PROPS[costume]}
           {/* State props — halo when sound asleep, wings when daydreaming. */}
           {status === "idle" && !cheer && idleV === 0 && (
             <span className="m-halo" aria-hidden="true" />
@@ -566,12 +738,13 @@ function DeckSprite({
           {waitV === 1 ? "?" : "!"}
         </span>
       )}
-      {status === "running" && work === 3 && (
+      {status === "running" && dots && (
         <span className="sprite-dots" aria-hidden="true"><i /><i /><i /></span>
       )}
       {status === "running" && sweat && (
         <span className="sprite-sweat" aria-hidden="true" />
       )}
+      {status === "running" && isMascot && RUN_BADGES[costume]}
       {cheer && (
         <span className="sprite-sparkles" aria-hidden="true">
           <i>✦</i><i>✦</i><i>✦</i>
@@ -645,7 +818,9 @@ function DeckCard({
     try {
       const transcript = await invoke<string>("terminal_tail", { id: `${pane.paneId}:${pane.convId}` });
       if (transcript.trim().length < 40) return;
-      const providerId = await resolveProviderId(getPersona, profileId);
+      const providerId = await resolveProviderId(
+        getPersona, profileId, useDeckStore.getState().reportProviderId,
+      );
       if (!providerId) return;
       const text = await invoke<string>("ai_pane_report", { providerId, transcript });
       if (text.trim()) setTip({ text, ts: performance.now() });
@@ -671,19 +846,36 @@ function DeckCard({
   const reporting = pendingFor !== undefined;
   const prevStatus = useRef<PaneStatus>(status);
 
+  // While the pane waits on a permission prompt, the sprite speaks up: the
+  // pending attention item's message (from the CLI's hook) in an amber bubble
+  // that jumps to the terminal. Shown instead of the quest report until the
+  // prompt is answered.
+  const attentionMsg = useAttentionStore(
+    (s) => s.queue.find((q) => q.id.startsWith(`${pane.paneId}:`))?.message ?? null,
+  );
+
   const makeReport = async (endedAt: number) => {
     const store = usePaneReportStore.getState();
     store.begin(pane.paneId, endedAt);
     let text: string | null = null;
     try {
-      const transcript = await invoke<string>("terminal_tail", { id: `${pane.paneId}:${pane.convId}` });
-      if (transcript.trim().length >= 40) {
-        const providerId = await resolveProviderId(getPersona, profileId);
-        if (providerId) {
+      // Race the whole generation against a timeout so a wedged backend/provider
+      // call can never leave the "writing report…" bubble stuck forever.
+      text = await Promise.race([
+        (async () => {
+          const transcript = await invoke<string>("terminal_tail", { id: `${pane.paneId}:${pane.convId}` });
+          if (transcript.trim().length < 40) return null;
+          const providerId = await resolveProviderId(
+            getPersona, profileId, useDeckStore.getState().reportProviderId,
+          );
+          if (!providerId) return null;
           const raw = await invoke<string>("ai_pane_report", { providerId, transcript });
-          if (raw.trim()) text = raw;
-        }
-      }
+          return raw.trim() ? raw : null;
+        })(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("report timed out")), REPORT_TIMEOUT_MS),
+        ),
+      ]);
     } catch (err) {
       console.warn("pane report failed", err); // a failed report just means no bubble
     }
@@ -707,11 +899,22 @@ function DeckCard({
     const run = getLastRun(pane.paneId);
     if (!run || run.runMs < MIN_RUN_FOR_REPORT_MS) return;
     if (status === "running") return; // a new run already started — it'll report instead
-    if (reportEntry && reportEntry.forEndedAt >= run.endedAt) return; // already covered
+    // A stale (restored-from-last-session) report has a forEndedAt on the old
+    // clock, so it can't "cover" a live run — let this run report over it.
+    if (reportEntry && !reportEntry.stale && reportEntry.forEndedAt >= run.endedAt) return; // already covered
     if (pendingFor === run.endedAt) return; // generation in flight
     void makeReport(run.endedAt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastRunEndedAt, status, reportEntry, pendingFor]);
+
+  // Manual report — ask the sprite to summarize what this terminal is doing (or
+  // just did) right now, without waiting for a run edge. Keyed to the last
+  // run's end when there is one, so the auto trigger sees it as covered; a
+  // still-running pane keys to "now" and the real end still reports later.
+  const askReport = () => {
+    if (reporting) return;
+    void makeReport(getLastRun(pane.paneId)?.endedAt ?? performance.now());
+  };
 
   const [reply, setReply] = useState("");
   const send = () => {
@@ -830,13 +1033,26 @@ function DeckCard({
         </Tooltip>
         {/* The stage beside the sprite — full remaining width for its speech. */}
         <div className="deck-card-stage">
-          {reporting && !report && (
+          {status === "waiting" && (
+            <button
+              type="button"
+              className="deck-bubble attention"
+              onClick={onJump}
+              title="Jump to this terminal"
+            >
+              <span className="deck-bubble-text">
+                {attentionMsg || "Needs your confirmation — click to jump over"}
+              </span>
+              <CornerDownLeft size={11} className="deck-bubble-go" aria-hidden="true" />
+            </button>
+          )}
+          {status !== "waiting" && reporting && !report && (
             <div className="deck-bubble thinking" aria-hidden="true">
               <Loader2 size={11} className="deck-spin" />
               <span>writing report…</span>
             </div>
           )}
-          {report && (
+          {status !== "waiting" && report && (
             <div className="deck-bubble" role="status">
               <span className="deck-bubble-text">{report}</span>
               <button
@@ -869,6 +1085,17 @@ function DeckCard({
         <button type="button" className="deck-reply-send" onClick={send} disabled={!reply.trim()} aria-label="Send">
           <CornerDownLeft size={12} />
         </button>
+        <Tooltip label="Ask for a report on the current or last task">
+          <button
+            type="button"
+            className="deck-reply-report"
+            onClick={askReport}
+            disabled={reporting}
+            aria-label="Summarize this terminal"
+          >
+            {reporting ? <Loader2 size={12} className="deck-spin" /> : <Megaphone size={12} />}
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 const HEIGHT_KEY = "cocodes:deck-docked-height";
+const PROVIDER_KEY = "cocodes:deck-report-provider";
 
 export const DECK_MIN_HEIGHT = 160;
 export const DECK_MAX_HEIGHT = 640;
@@ -30,11 +31,15 @@ interface DeckState {
   dockedHeight: number;
   /** paneId currently hovered in the deck → that pane spotlights. null = none. */
   hoveredPaneId: string | null;
+  /** Provider the sprites summarize with (speech bubble + hover status).
+   *  null = auto: each pane persona's base model. Persisted. */
+  reportProviderId: string | null;
   toggle: () => void;
   close: () => void;
   toggleDocked: () => void;
   setDockedHeight: (h: number) => void;
   setHovered: (paneId: string | null) => void;
+  setReportProvider: (id: string | null) => void;
 }
 
 export const useDeckStore = create<DeckState>((set) => ({
@@ -43,6 +48,8 @@ export const useDeckStore = create<DeckState>((set) => ({
   docked: false,
   dockedHeight: loadHeight(),
   hoveredPaneId: null,
+  reportProviderId:
+    typeof localStorage === "undefined" ? null : localStorage.getItem(PROVIDER_KEY),
   toggle: () => set((s) => ({ open: !s.open, everOpened: s.everOpened || !s.open })),
   close: () => set({ open: false, hoveredPaneId: null }),
   toggleDocked: () => set((s) => ({ docked: !s.docked })),
@@ -56,4 +63,13 @@ export const useDeckStore = create<DeckState>((set) => ({
     set({ dockedHeight: clamped });
   },
   setHovered: (paneId) => set({ hoveredPaneId: paneId }),
+  setReportProvider: (id) => {
+    try {
+      if (id) localStorage.setItem(PROVIDER_KEY, id);
+      else localStorage.removeItem(PROVIDER_KEY);
+    } catch {
+      /* private mode — ignore */
+    }
+    set({ reportProviderId: id });
+  },
 }));
