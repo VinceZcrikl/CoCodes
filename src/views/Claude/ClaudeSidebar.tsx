@@ -132,7 +132,7 @@ export default function ClaudeSidebar({
   };
 
   const onGroupKey = (id: string) => (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
       commitGroupRename(id);
     } else if (e.key === "Escape") {

@@ -335,7 +335,12 @@ export default function SessionDeck({
           value={broadcast}
           onChange={(e) => setBroadcast(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); sendBroadcast(); }
+            // Ignore Enter while an IME is composing — that Enter picks a
+            // candidate, it must not submit the message.
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              sendBroadcast();
+            }
           }}
         />
         <Tooltip label="Send to targets (Enter)">
@@ -711,7 +716,11 @@ function DeckCard({
           value={reply}
           onChange={(e) => setReply(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); send(); }
+            // Ignore Enter while an IME is composing (candidate selection).
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              send();
+            }
           }}
         />
         <button type="button" className="deck-reply-send" onClick={send} disabled={!reply.trim()} aria-label="Send">

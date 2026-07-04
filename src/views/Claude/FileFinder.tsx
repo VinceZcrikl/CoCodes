@@ -170,7 +170,7 @@ export default function FileFinder({ cwd, onInsertPath, onSetCwd, onClose }: Pro
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActive((a) => Math.max(a - 1, 0));
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
       choose(items[active]);
     } else if (e.key === "Escape") {

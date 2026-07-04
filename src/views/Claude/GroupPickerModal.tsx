@@ -75,7 +75,7 @@ export default function GroupPickerModal({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") createAndPick();
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) createAndPick();
               }}
               placeholder="New group name…"
             />

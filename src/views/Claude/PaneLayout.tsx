@@ -295,7 +295,7 @@ function PaneLeaf({ node, ctx }: { node: PaneNode; ctx: PaneCtx }) {
             onBlur={(e) => commitTitle(e.currentTarget.value)}
             onKeyDown={(e) => {
               e.stopPropagation();
-              if (e.key === "Enter") commitTitle(e.currentTarget.value);
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) commitTitle(e.currentTarget.value);
               else if (e.key === "Escape") setEditing(false);
             }}
           />

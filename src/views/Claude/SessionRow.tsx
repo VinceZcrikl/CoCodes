@@ -146,7 +146,7 @@ export default function SessionRow({
   };
 
   const onEditKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
       e.preventDefault();
       commitEdit();
     } else if (e.key === "Escape") {

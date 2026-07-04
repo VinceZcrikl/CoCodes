@@ -184,7 +184,7 @@ function BranchMenu({
           disabled={busy}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); submit(); }
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
           }}
         />
       </div>

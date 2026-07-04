@@ -280,7 +280,8 @@ export default function CommandPalette({ open, onClose, onCommand }: Props) {
           onChange={(e) => { setQuery(e.target.value); setTip(null); }}
           onKeyDown={(e) => {
             if (e.key === "Escape") { onClose(); return; }
-            if (e.key === "Enter" && filtered && filtered.length > 0) run(filtered[0]);
+            // Enter during IME composition selects a candidate — don't run.
+            if (e.key === "Enter" && !e.nativeEvent.isComposing && filtered && filtered.length > 0) run(filtered[0]);
           }}
           autoComplete="off"
           spellCheck={false}
