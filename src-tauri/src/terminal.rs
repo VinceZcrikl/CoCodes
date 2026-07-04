@@ -1076,20 +1076,6 @@ pub async fn terminal_tail(id: String, reg: State<'_, TerminalRegistry>) -> Resu
     Ok(tail_transcript(&bytes))
 }
 
-/// The recent *dialogue* of a live session: the tail with code, diffs, and TUI
-/// chrome removed (via [`crate::ai_summary::denoise`]), so the Session Deck can
-/// preview a few readable content lines instead of the raw screen buffer — whose
-/// cursor-addressed repaints collapse into one line once ANSI is stripped.
-#[tauri::command]
-pub async fn terminal_transcript(id: String, reg: State<'_, TerminalRegistry>) -> Result<String, ()> {
-    let sessions = reg.sessions.lock().unwrap();
-    let Some(session) = sessions.get(&id) else {
-        return Ok(String::new());
-    };
-    let bytes = session.buffer.lock().unwrap().clone();
-    Ok(crate::ai_summary::denoise(&tail_transcript(&bytes)))
-}
-
 /// Turn buffered PTY bytes into a compact transcript: strip ANSI, drop blank
 /// lines (TUI padding), and keep the last `TAIL_MAX_CHARS` on a char boundary.
 fn tail_transcript(bytes: &[u8]) -> String {

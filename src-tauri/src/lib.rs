@@ -154,7 +154,6 @@ pub fn run() {
             terminal::terminal_resize,
             terminal::terminal_close,
             terminal::terminal_tail,
-            terminal::terminal_transcript,
             persona::load_persona_context,
             persona::persona_list,
             persona::persona_get,
