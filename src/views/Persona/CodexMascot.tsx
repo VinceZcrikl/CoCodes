@@ -1,15 +1,13 @@
-/** Codex mark — a glassy blue→violet blossom with a white terminal prompt cut
- *  into it, identifying the Codex CLI alongside the Claude/Grok marks. */
+/** The Codex "little creature" — the Claude mascot's sibling: same body plan
+ *  (rounded body, oval eyes, stubby legs, top sheen) wearing Codex's identity
+ *  instead of clay — glassy blue→violet skin, a three-petal blossom crown
+ *  (echoing the six-lobe Codex mark), and a white ❯_ prompt on its belly.
+ *
+ *  Skin colours are CSS-variable driven (--mascot-base/deep/sheen) with the
+ *  blue-violet as fallback, so a themed context (the Session Deck sprite)
+ *  re-tints it exactly like the Claude creature. Untinted, the body falls back
+ *  to a glassy gradient (a var() fallback may be a url() paint server). */
 export default function CodexMascot({ className = "" }: { className?: string }) {
-  // Petal centres of a 6-lobe blossom around (16,16).
-  const petals: Array<[number, number]> = [
-    [22, 16],
-    [19, 21.2],
-    [13, 21.2],
-    [10, 16],
-    [13, 10.8],
-    [19, 10.8],
-  ];
   return (
     <svg
       className={className}
@@ -19,49 +17,56 @@ export default function CodexMascot({ className = "" }: { className?: string }) 
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        {/* userSpaceOnUse → one continuous gradient across all the petals */}
         <linearGradient
-          id="codexGrad"
-          x1="6"
-          y1="5"
+          id="codexSkin"
+          x1="8"
+          y1="6"
           x2="26"
-          y2="28"
+          y2="23"
           gradientUnits="userSpaceOnUse"
         >
-          <stop offset="0" stopColor="#7ea6ff" />
-          <stop offset="0.55" stopColor="#6f86f5" />
-          <stop offset="1" stopColor="#9070f0" />
+          <stop offset="0" stopColor="#6f79ea" />
+          <stop offset="1" stopColor="#5a4fd4" />
         </linearGradient>
-        <radialGradient id="codexGlass" cx="0.36" cy="0.3" r="0.72">
-          <stop offset="0" stopColor="#ffffff" stopOpacity="0.55" />
-          <stop offset="0.5" stopColor="#ffffff" stopOpacity="0.08" />
-          <stop offset="1" stopColor="#ffffff" stopOpacity="0" />
-        </radialGradient>
       </defs>
 
-      {/* blossom body — overlapping petals share the gradient seamlessly */}
-      <circle cx="16" cy="16" r="7.4" fill="url(#codexGrad)" />
-      {petals.map(([cx, cy], i) => (
-        <circle key={i} cx={cx} cy={cy} r="5.6" fill="url(#codexGrad)" />
-      ))}
+      {/* three-petal blossom crown */}
+      <ellipse
+        cx="10.9" cy="5.7" rx="1.9" ry="2.9" opacity="0.9"
+        transform="rotate(-38 10.9 5.7)"
+        style={{ fill: "var(--mascot-sheen, #9a9df2)" }}
+      />
+      <ellipse
+        cx="21.1" cy="5.7" rx="1.9" ry="2.9" opacity="0.9"
+        transform="rotate(38 21.1 5.7)"
+        style={{ fill: "var(--mascot-sheen, #9a9df2)" }}
+      />
+      <ellipse cx="16" cy="4.3" rx="2" ry="3.1" style={{ fill: "var(--mascot-sheen, #9a9df2)" }} />
 
-      {/* glassy top-left highlight */}
-      <ellipse cx="13" cy="12" rx="10" ry="8" fill="url(#codexGlass)" />
+      {/* legs */}
+      <rect x="9" y="20" width="4.4" height="6" rx="1.6" style={{ fill: "var(--mascot-deep, #4a4aa8)" }} />
+      <rect x="18.6" y="20" width="4.4" height="6" rx="1.6" style={{ fill: "var(--mascot-deep, #4a4aa8)" }} />
 
-      {/* terminal prompt — chevron + dash */}
+      {/* body — softer corners than Claude's; glassy gradient until themed */}
+      <rect x="5" y="6.5" width="22" height="15.5" rx="6.5" style={{ fill: "var(--mascot-base, url(#codexSkin))" }} />
+
+      {/* top sheen */}
+      <rect x="7.5" y="8.5" width="17" height="3" rx="1.5" opacity="0.5" style={{ fill: "var(--mascot-sheen, #9a9df2)" }} />
+
+      {/* eyes — family-standard ovals, blue-black */}
+      <rect x="11" y="11.5" width="3.4" height="5.4" rx="1.7" fill="#141428" />
+      <rect x="17.6" y="11.5" width="3.4" height="5.4" rx="1.7" fill="#141428" />
+
+      {/* belly mark — the terminal prompt ❯_ */}
       <path
-        d="M12.8 12.4 L16.6 16 L12.8 19.6"
-        stroke="#ffffff"
-        strokeWidth="2.4"
+        d="M13.2 17.4 L15.3 18.8 L13.2 20.2"
+        stroke="#fff"
+        strokeWidth="1.15"
         strokeLinecap="round"
         strokeLinejoin="round"
+        opacity="0.92"
       />
-      <path
-        d="M18 18.7 L22 18.7"
-        stroke="#ffffff"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-      />
+      <rect x="16.4" y="19.2" width="2.4" height="1.15" rx="0.55" fill="#fff" opacity="0.85" />
     </svg>
   );
 }

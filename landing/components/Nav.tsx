@@ -18,6 +18,7 @@ export default function Nav() {
 
   const links = [
     { href: "#features", label: t.nav.features },
+    { href: "#deck", label: t.nav.deck },
     { href: "#personas", label: t.nav.personas },
     { href: "#themes", label: t.nav.themes },
     { href: "#download", label: t.nav.download },

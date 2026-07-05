@@ -67,6 +67,7 @@ export const PERSONAS: PersonaSpec[] = [
 export interface Content {
   nav: {
     features: string;
+    deck: string;
     personas: string;
     themes: string;
     download: string;
@@ -87,6 +88,14 @@ export interface Content {
     title: string;
     body: string;
     cards: { title: string; body: string; tag: string }[];
+  };
+  deck: {
+    kicker: string;
+    title: string;
+    body: string;
+    spotlightNote: string;
+    highlights: { title: string; body: string }[];
+    footnote: string;
   };
   personas: {
     kicker: string;
@@ -148,6 +157,7 @@ export const CONTENT: Record<Lang, Content> = {
   en: {
     nav: {
       features: "Features",
+      deck: "Deck",
       personas: "Personas",
       themes: "Themes",
       download: "Download",
@@ -185,6 +195,41 @@ export const CONTENT: Record<Lang, Content> = {
           tag: "keep-alive · --resume",
         },
       ],
+    },
+    deck: {
+      kicker: "Session Deck",
+      title: "Mission control, with a cast of characters.",
+      body: "Open the Deck and every terminal becomes a live task card — status light, AI-written label, one-line output preview, and a reply box that types straight into that pane. Your whole squadron, on one stage.",
+      spotlightNote:
+        "In the app, hovering a card spotlights the matching pane across the layout — click to fly straight to it.",
+      highlights: [
+        {
+          title: "Living sprites",
+          body: "Each terminal is cast as a character from a 24-costume wardrobe — wizard, detective, astronaut, chef… no two panes on stage ever wear the same one.",
+        },
+        {
+          title: "Moods that mirror state",
+          body: "Sprites bob and break a sweat while working, jump with a “!” when the agent needs you, doze off with drifting z's when idle — and cheer the moment a job lands.",
+        },
+        {
+          title: "Quest reports",
+          body: "When a run finishes, the sprite speaks a one-sentence AI report of what just happened. Reports survive restarts; pick the reporting model, or let Auto follow each persona's own.",
+        },
+        {
+          title: "Broadcast",
+          body: "Type once, send to every terminal — or only the idle ones, or a hand-picked subset. One prompt, whole squadron.",
+        },
+        {
+          title: "Spotlight & jump",
+          body: "Hover a card and the matching pane glows across the layout; click and you're there, cursor ready.",
+        },
+        {
+          title: "Float or dock",
+          body: "Keep the Deck as a floating mini panel, or dock it as a full-width band beneath the terminals — drag to resize, height remembered.",
+        },
+      ],
+      footnote:
+        "Also on deck: one dice-roll dresses every terminal in its own distinct theme, and one click regenerates every AI task label.",
     },
     personas: {
       kicker: "A constellation of personas",
@@ -247,8 +292,8 @@ export const CONTENT: Record<Lang, Content> = {
       title: "Built-in instruments.",
       items: [
         {
-          title: "Session Deck",
-          body: "Every terminal becomes a themed task card with an AI-written label — your missions at a glance.",
+          title: "AI task labels",
+          body: "Every pane carries an AI-written task label drafted from its own transcript — regenerate any time.",
         },
         {
           title: "Session · Explore · Git sidebar",
@@ -301,6 +346,7 @@ export const CONTENT: Record<Lang, Content> = {
   zh: {
     nav: {
       features: "功能",
+      deck: "甲板",
       personas: "人格",
       themes: "主题",
       download: "下载",
@@ -338,6 +384,39 @@ export const CONTENT: Record<Lang, Content> = {
           tag: "keep-alive · --resume",
         },
       ],
+    },
+    deck: {
+      kicker: "Session Deck",
+      title: "任务总控，自带一整个剧团。",
+      body: "打开 Deck，每个终端化作一张实时任务卡——状态灯、AI 撰写的任务标签、单行输出预览，以及直接敲进该终端的回复框。整支机队，同台一览。",
+      spotlightNote: "在应用里悬停任意卡片，对应窗格会在布局中亮起聚光——点击即刻飞抵现场。",
+      highlights: [
+        {
+          title: "会演戏的 Sprite",
+          body: "每个终端都被选角成一个角色，衣橱里有 24 套戏服——巫师、侦探、宇航员、大厨……同台的窗格绝不撞衫。",
+        },
+        {
+          title: "心情映射状态",
+          body: "工作时上下颠簸、忙到冒汗；等你输入时跳起来喊「!」；空闲时打盹飘 z——任务落地的那一刻，欢呼撒花。",
+        },
+        {
+          title: "任务战报",
+          body: "一次运行结束，sprite 会用一句 AI 总结播报刚刚发生了什么。战报跨重启保留；播报模型可指定，Auto 则跟随各 persona 的基座模型。",
+        },
+        {
+          title: "广播",
+          body: "输入一次，发给所有终端——或只发给空闲的，或手动勾选的子集。一条指令，全队执行。",
+        },
+        {
+          title: "聚光与跳转",
+          body: "悬停卡片，对应窗格在布局中亮起；一次点击，光标已就位。",
+        },
+        {
+          title: "悬浮或停靠",
+          body: "Deck 可以是悬浮迷你面板，也能停靠成横贯所有终端的全宽甲板——拖拽调高，高度自动记忆。",
+        },
+      ],
+      footnote: "甲板上还有：掷一次骰子，给每个终端换上互不重复的主题；一次点击，重写全部 AI 任务标签。",
     },
     personas: {
       kicker: "人格星座",
@@ -400,8 +479,8 @@ export const CONTENT: Record<Lang, Content> = {
       title: "内置仪器。",
       items: [
         {
-          title: "Session Deck",
-          body: "每个终端变成一张主题任务卡，配 AI 撰写的标签——任务一览无余。",
+          title: "AI 任务标签",
+          body: "每个窗格都有一枚由 AI 根据实际转录起草的任务标签——随时一键重写。",
         },
         {
           title: "Session · Explore · Git 侧栏",

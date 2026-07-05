@@ -21,6 +21,7 @@ import {
   type AccentName,
 } from "../../state/panelPalettes";
 import { PERSONA_RESTART_EVENT } from "../../hooks/usePersonas";
+import { noteTerminalInput } from "../../state/terminalActivity";
 
 /** Imperative handle the parent view uses to drive the terminal — composer
  *  injection calls `writeLine`. */
@@ -201,16 +202,21 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         // separate, slightly delayed keystroke so the TUI registers a discrete
         // submit. The textarea-paste path may strip a leading `/`, so feed the
         // body without the CR, then CR alone.
+        noteTerminalInput(id);
         void invoke("terminal_write", { id, data: text }).then(() => {
           window.setTimeout(() => {
             const cur = sessionIdRef.current;
-            if (cur) void invoke("terminal_write", { id: cur, data: "\r" });
+            if (cur) {
+              noteTerminalInput(cur);
+              void invoke("terminal_write", { id: cur, data: "\r" });
+            }
           }, 30);
         });
       },
       insert: (text: string) => {
         const id = sessionIdRef.current;
         if (!id) return;
+        noteTerminalInput(id);
         void invoke("terminal_write", { id, data: text });
         termRef.current?.focus();
       },
@@ -319,6 +325,7 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
         if (term.cols === lastCols && term.rows === lastRows) return;
         lastCols = term.cols;
         lastRows = term.rows;
+        noteTerminalInput(id);
         void invoke("terminal_resize", { id, cols: term.cols, rows: term.rows });
       };
 
@@ -400,6 +407,11 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
                   return;
                 }
                 sessionIdRef.current = id;
+                // A fresh spawn's welcome banner is startup chrome, not a
+                // running task — keep it out of the busy tracker so a new pane
+                // doesn't flash "running" in the deck. A reconnect (replay
+                // non-null) may be mid-task, so its output counts as usual.
+                if (!replay) noteTerminalInput(id, SPAWN_GRACE_MS + 1500);
                 // Reconnecting to a live session: replay its buffered output so
                 // the running task is visible instead of a blank terminal.
                 if (replay) term.write(decodeBase64(replay));
@@ -464,7 +476,10 @@ const ClaudeTerminal = forwardRef<ClaudeTerminalHandle, Props>(
       // Relay keystrokes → PTY stdin.
       const onData = term.onData((data) => {
         const id = sessionIdRef.current;
-        if (id) void invoke("terminal_write", { id, data });
+        if (id) {
+          noteTerminalInput(id);
+          void invoke("terminal_write", { id, data });
+        }
       });
       cleanup.push(() => onData.dispose());
 

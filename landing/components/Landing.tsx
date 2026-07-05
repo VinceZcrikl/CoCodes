@@ -4,6 +4,7 @@ import { LangProvider } from "@/lib/lang";
 import Nav from "./Nav";
 import Hero from "./Hero";
 import LiveCliStrip from "./LiveCliStrip";
+import DeckShowcase from "./DeckShowcase";
 import PersonaConstellation from "./PersonaConstellation";
 import DelegationDemo from "./DelegationDemo";
 import ProviderGrid from "./ProviderGrid";
@@ -19,6 +20,7 @@ export default function Landing() {
       <main>
         <Hero />
         <LiveCliStrip />
+        <DeckShowcase />
         <PersonaConstellation />
         <DelegationDemo />
         <ProviderGrid />

@@ -18,6 +18,26 @@ interface ExitEvent { id: string; code: number | null; }
 /** How long after the last output chunk a terminal is considered idle. */
 const IDLE_MS = 4000;
 
+/** Output arriving within this window after user keystrokes (or an injected
+ *  reply / a resize) is echo or a TUI repaint, not agent activity — without
+ *  this, typing in a terminal makes its deck sprite flash "running". */
+const INPUT_ECHO_MS = 400;
+
+/** Terminal id → suppress output as activity until this timestamp. */
+const quietUntil = new Map<string, number>();
+
+/** Note user input (keystrokes, injected text, resize) on a terminal so the
+ *  ensuing echo/repaint doesn't read as a running agent. `quietMs` can stretch
+ *  the window for noisy one-offs like the spawn banner. A terminal that is
+ *  already busy is left alone — typing alongside a streaming agent must not
+ *  mute the live stream into a phantom idle (and a premature run-end). */
+export function noteTerminalInput(id: string, quietMs = INPUT_ECHO_MS): void {
+  const now = performance.now();
+  const e = activity.get(id);
+  if (e && now - e.lastMs < IDLE_MS) return;
+  quietUntil.set(id, now + quietMs);
+}
+
 const activity = new Map<string, ActivityEntry>();
 let unlistenData: UnlistenFn | null = null;
 let unlistenExit: UnlistenFn | null = null;
@@ -61,10 +81,12 @@ export async function startTracking(): Promise<void> {
   edgeTimer ??= window.setInterval(pollRunEdges, 300);
 
   unlistenData = await listen<DataEvent>("terminal://data", (ev) => {
+    const now = performance.now();
+    if ((quietUntil.get(ev.payload.id) ?? 0) > now) return; // echo/repaint, not work
     const reg = lookupTerminal(ev.payload.id);
     if (reg) {
       activity.set(ev.payload.id, {
-        lastMs: performance.now(),
+        lastMs: now,
         sessionId: reg.sessionId,
         paneId: reg.paneId,
       });
@@ -73,6 +95,7 @@ export async function startTracking(): Promise<void> {
 
   unlistenExit = await listen<ExitEvent>("terminal://exit", (ev) => {
     activity.delete(ev.payload.id);
+    quietUntil.delete(ev.payload.id);
   });
 }
 
@@ -84,6 +107,7 @@ export function stopTracking(): void {
   unlistenData = null;
   unlistenExit = null;
   activity.clear();
+  quietUntil.clear();
   if (edgeTimer !== null) {
     window.clearInterval(edgeTimer);
     edgeTimer = null;

@@ -854,22 +854,37 @@ function DeckCard({
     (s) => s.queue.find((q) => q.id.startsWith(`${pane.paneId}:`))?.message ?? null,
   );
 
-  const makeReport = async (endedAt: number) => {
+  // Generate one report. Resolves to null on success, or a short human-readable
+  // reason when no report was produced — the manual 📣 path shows that reason
+  // instead of a generic shrug; auto triggers just drop it.
+  const makeReport = async (endedAt: number): Promise<string | null> => {
     const store = usePaneReportStore.getState();
     store.begin(pane.paneId, endedAt);
     let text: string | null = null;
+    let fail: string | null = null;
     try {
       // Race the whole generation against a timeout so a wedged backend/provider
       // call can never leave the "writing report…" bubble stuck forever.
       text = await Promise.race([
         (async () => {
           const transcript = await invoke<string>("terminal_tail", { id: `${pane.paneId}:${pane.convId}` });
-          if (transcript.trim().length < 40) return null;
+          if (transcript.length === 0) {
+            fail = "couldn't read this terminal's output"; // unknown/closed id
+            return null;
+          }
+          if (transcript.trim().length < 40) {
+            fail = "too little output to summarize yet";
+            return null;
+          }
           const providerId = await resolveProviderId(
             getPersona, profileId, useDeckStore.getState().reportProviderId,
           );
-          if (!providerId) return null;
+          if (!providerId) {
+            fail = "no usable AI provider configured";
+            return null;
+          }
           const raw = await invoke<string>("ai_pane_report", { providerId, transcript });
+          if (!raw.trim()) fail = "the model returned an empty reply";
           return raw.trim() ? raw : null;
         })(),
         new Promise<never>((_, reject) =>
@@ -877,9 +892,11 @@ function DeckCard({
         ),
       ]);
     } catch (err) {
+      fail = typeof err === "string" ? err : err instanceof Error ? err.message : "the model call failed";
       console.warn("pane report failed", err); // a failed report just means no bubble
     }
     usePaneReportStore.getState().finish(pane.paneId, endedAt, text);
+    return text ? null : fail ?? "the model call failed";
   };
 
   useEffect(() => {
@@ -911,9 +928,21 @@ function DeckCard({
   // just did) right now, without waiting for a run edge. Keyed to the last
   // run's end when there is one, so the auto trigger sees it as covered; a
   // still-running pane keys to "now" and the real end still reports later.
-  const askReport = () => {
+  // An explicit ask must always answer visibly: `asked` lifts the waiting-state
+  // bubble suppression (attention normally owns the stage), and a generation
+  // that produced nothing says so instead of silently stopping the spinner.
+  const [asked, setAsked] = useState(false);
+  const [askFailed, setAskFailed] = useState<string | null>(null);
+  const askReport = async () => {
     if (reporting) return;
-    void makeReport(getLastRun(pane.paneId)?.endedAt ?? performance.now());
+    setAsked(true);
+    setAskFailed(null);
+    const key = getLastRun(pane.paneId)?.endedAt ?? performance.now();
+    const fail = await makeReport(key);
+    const entry = usePaneReportStore.getState().reports[pane.paneId];
+    // Anything at-or-after our key means a report landed (ours, or a newer
+    // auto one) — older/absent means this generation came back empty.
+    setAskFailed(!entry || entry.forEndedAt < key ? fail ?? "the model call failed" : null);
   };
 
   const [reply, setReply] = useState("");
@@ -1046,13 +1075,26 @@ function DeckCard({
               <CornerDownLeft size={11} className="deck-bubble-go" aria-hidden="true" />
             </button>
           )}
-          {status !== "waiting" && reporting && !report && (
+          {(status !== "waiting" || asked) && reporting && !report && (
             <div className="deck-bubble thinking" aria-hidden="true">
               <Loader2 size={11} className="deck-spin" />
               <span>writing report…</span>
             </div>
           )}
-          {status !== "waiting" && report && (
+          {askFailed && !reporting && !report && (
+            <div className="deck-bubble thinking" role="status">
+              <span>No report — {askFailed}</span>
+              <button
+                type="button"
+                className="deck-bubble-close"
+                onClick={() => setAskFailed(null)}
+                aria-label="Dismiss"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          )}
+          {(status !== "waiting" || asked) && report && (
             <div className="deck-bubble" role="status">
               <span className="deck-bubble-text">{report}</span>
               <button
@@ -1089,7 +1131,7 @@ function DeckCard({
           <button
             type="button"
             className="deck-reply-report"
-            onClick={askReport}
+            onClick={() => void askReport()}
             disabled={reporting}
             aria-label="Summarize this terminal"
           >

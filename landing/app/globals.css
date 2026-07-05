@@ -141,6 +141,340 @@ body {
   }
 }
 
+/* ---- Session Deck showcase sprites ---- */
+@keyframes dk-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes dk-hop {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes dk-doze {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.045);
+  }
+}
+@keyframes dk-cheer {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    transform: translateY(-9px) scale(1.06);
+  }
+  55% {
+    transform: translateY(0) scale(0.97);
+  }
+  75% {
+    transform: translateY(-4px) scale(1.02);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes dk-zzz {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(9px, -16px) scale(1.2);
+  }
+}
+@keyframes dk-alert {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes dk-spark {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: translateY(0) scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.1);
+  }
+}
+@keyframes dk-sweat {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+}
+@keyframes dk-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.7) translateY(-8px);
+  }
+}
+@keyframes dk-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes dk-writing {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.dk-sprite {
+  position: relative;
+  width: 58px;
+  height: 60px;
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.dk-body {
+  position: relative;
+  width: 46px;
+  height: 40px;
+  border-radius: 46%;
+}
+.dk-sprite.running .dk-body {
+  animation: dk-bob 1.15s ease-in-out infinite;
+}
+.dk-sprite.waiting .dk-body {
+  animation: dk-hop 1.4s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+}
+.dk-sprite.idle .dk-body {
+  animation: dk-doze 3.2s ease-in-out infinite;
+}
+.dk-sprite.cheer .dk-body {
+  animation: dk-cheer 1s ease-in-out infinite;
+}
+
+.dk-eye {
+  position: absolute;
+  top: 15px;
+  width: 5px;
+  height: 6px;
+  border-radius: 50%;
+  background: #0a0e1a;
+}
+.dk-eye.l {
+  left: 12px;
+}
+.dk-eye.r {
+  right: 12px;
+}
+.dk-sprite.idle .dk-eye {
+  height: 2px;
+  border-radius: 1px;
+  top: 18px;
+}
+.dk-sprite.waiting .dk-eye {
+  height: 7px;
+  width: 6px;
+  box-shadow: inset 1px -1.5px 0 rgba(255, 255, 255, 0.55);
+}
+.dk-sprite.cheer .dk-eye {
+  height: 4px;
+  width: 7px;
+  background: transparent;
+  border-radius: 0 0 7px 7px;
+  border-bottom: 2.2px solid #0a0e1a;
+}
+.dk-mouth {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  width: 8px;
+  height: 3px;
+  transform: translateX(-50%);
+  border-radius: 0 0 6px 6px;
+  background: rgba(10, 14, 26, 0.75);
+}
+.dk-sprite.cheer .dk-mouth {
+  height: 5px;
+  width: 10px;
+}
+.dk-sprite.idle .dk-mouth {
+  width: 5px;
+  height: 2px;
+}
+
+/* wardrobe */
+.dk-hat-wizard {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-8deg);
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-bottom: 15px solid #8f7bd8;
+}
+.dk-hat-wizard::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: -12px;
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+  background: #7a67c2;
+}
+.dk-hat-hard {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 13px;
+  border-radius: 13px 13px 3px 3px;
+  background: #f2c14e;
+  box-shadow: 0 2px 0 #d9a83c;
+}
+.dk-hat-sleuth {
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 9px;
+  border-radius: 8px 8px 2px 2px;
+  background: #8a6f52;
+}
+.dk-hat-sleuth::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: -4px;
+  width: 36px;
+  height: 3.5px;
+  border-radius: 3px;
+  background: #75604a;
+}
+.dk-monocle {
+  position: absolute;
+  top: 13px;
+  right: 9px;
+  width: 11px;
+  height: 11px;
+  border: 1.6px solid #e8c879;
+  border-radius: 50%;
+}
+.dk-toque {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 14px;
+  background: #f3ecd9;
+  border-radius: 9px 9px 2px 2px;
+}
+
+/* status props */
+.dk-zzz-i {
+  position: absolute;
+  top: 2px;
+  right: -2px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 11px;
+  color: rgba(243, 236, 217, 0.75);
+  animation: dk-zzz 2.6s ease-out infinite;
+}
+.dk-alert-badge {
+  position: absolute;
+  top: -6px;
+  right: -3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #f2b34e;
+  color: #0a0e1a;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10px;
+  animation: dk-alert 1.4s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+}
+.dk-spark-i {
+  position: absolute;
+  color: #cfc0ff;
+  font-size: 10px;
+  animation: dk-spark 1.5s ease-in-out infinite;
+}
+.dk-sweat-drop {
+  position: absolute;
+  top: 6px;
+  right: 0;
+  width: 6px;
+  height: 8px;
+  background: #8fd0f0;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  animation: dk-sweat 1.6s ease-in infinite;
+}
+.dk-sparkle-i {
+  position: absolute;
+  color: #e8c879;
+  font-size: 11px;
+  animation: dk-burst 1.2s ease-out infinite;
+}
+.dk-bubble {
+  animation: dk-pop 0.35s ease-out both;
+}
+.dk-writing {
+  animation: dk-writing 1.1s ease-in-out infinite;
+}
+
 /* ---- gold shimmer text ---- */
 .gold-shimmer {
   background: linear-gradient(
