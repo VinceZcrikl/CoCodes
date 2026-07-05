@@ -18,6 +18,11 @@ use serde_json::json;
 
 use crate::providers;
 
+/// Response token budget. A commit subject is one short line, but reasoning
+/// models emit a `thinking` block first and need room to finish it *and* the
+/// answer — too small a cap truncates before any `text` block is produced.
+const MAX_TOKENS: u32 = 1024;
+
 /// Run one blocking completion against `provider_id`. Returns the raw text reply
 /// (callers sanitize/trim); errors are human strings suitable for inline display.
 pub fn complete(provider_id: &str, system: &str, user: &str) -> Result<String, String> {
@@ -57,7 +62,10 @@ fn anthropic_messages(
     let url = format!("{}/v1/messages", base_url.trim_end_matches('/'));
     let body = json!({
         "model": model,
-        "max_tokens": 128,
+        // Generous headroom: reasoning models (e.g. deepseek-v4-pro) spend the
+        // budget on a leading `thinking` block and, if cut short, never emit the
+        // `text` answer — a tiny cap makes the whole call fail. See MAX_TOKENS.
+        "max_tokens": MAX_TOKENS,
         "system": system,
         "messages": [{ "role": "user", "content": user }],
     });
@@ -70,12 +78,13 @@ fn anthropic_messages(
     }
     let resp = req.send().map_err(|e| e.to_string())?;
     let json = ok_json(resp)?;
-    // { content: [ { type: "text", text: "…" } ] }
+    // { content: [ { type: "text", text: "…" } ] } — a reasoning model may emit
+    // only `thinking` blocks (no `text`) when truncated at `max_tokens`.
     json.get("content")
         .and_then(|c| c.as_array())
         .and_then(|arr| arr.iter().find_map(|b| b.get("text").and_then(|t| t.as_str())))
         .map(str::to_string)
-        .ok_or_else(|| "no text in provider response".into())
+        .ok_or_else(|| no_text_error(&json))
 }
 
 /// `POST <base>/chat/completions` (OpenAI wire). `base_url` ends in `/v1`.
@@ -90,7 +99,7 @@ fn openai_chat(
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = json!({
         "model": model,
-        "max_tokens": 128,
+        "max_tokens": MAX_TOKENS,
         "messages": [
             { "role": "system", "content": system },
             { "role": "user", "content": user },
@@ -111,6 +120,16 @@ fn openai_chat(
         .and_then(|c| c.as_str())
         .map(str::to_string)
         .ok_or_else(|| "no content in provider response".into())
+}
+
+/// Build the error for an Anthropic reply that carried no `text` block. When the
+/// model was cut off at the token limit (only a `thinking` block came back), say
+/// so — the actionable cause — instead of a bare "no text".
+fn no_text_error(json: &serde_json::Value) -> String {
+    if json.get("stop_reason").and_then(|s| s.as_str()) == Some("max_tokens") {
+        return "model hit the token limit before answering (raise max_tokens)".into();
+    }
+    "no text in provider response".into()
 }
 
 /// Parse a successful JSON body, or turn a non-2xx into a trimmed error string
