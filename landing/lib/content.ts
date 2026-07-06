@@ -165,10 +165,10 @@ export const CONTENT: Record<Lang, Content> = {
     },
     hero: {
       badge: "macOS · Windows · Linux — MIT licensed",
-      title1: "Agent coding",
-      title2: "cockpit",
+      title1: "A cast of agents,",
+      title2: "working as one crew.",
       subtitle:
-        "A terminal-native desktop home for your AI coding CLIs. Claude Code, Codex, Grok and Kimi run live inside real pseudo-terminals — nothing re-implemented, nothing proxied. You fly the actual CLI, with a layer of orchestration on top.",
+        "A terminal-native desktop home for your AI coding CLIs. Claude Code, Codex, Grok and Kimi run live inside real pseudo-terminals, each given its own persona — and can delegate tasks to one another mid-flight.",
       downloadMac: "Download for macOS",
       downloadOther: "All downloads",
       platforms: "Free & open source · auto-updates from GitHub Releases",
@@ -337,7 +337,7 @@ export const CONTENT: Record<Lang, Content> = {
       requirements: "Node ≥ 18 · Rust ≥ 1.77 · Tauri 2 toolchain",
     },
     footer: {
-      tagline: "Agent coding cockpit",
+      tagline: "A cast of agents, working as one crew.",
       license: "MIT License",
       built: "A Tauri 2 desktop app · this page runs on Next.js",
     },
@@ -354,10 +354,10 @@ export const CONTENT: Record<Lang, Content> = {
     },
     hero: {
       badge: "macOS · Windows · Linux — MIT 开源",
-      title1: "智能体编码",
-      title2: "座舱",
+      title1: "众智能体各显人格，",
+      title2: "协同如一。",
       subtitle:
-        "为 AI 编码 CLI 打造的终端原生桌面基地。Claude Code、Codex、Grok、Kimi 在真实伪终端中原生运行——不重写、不代理，你驾驶的就是官方 CLI 本体，外加一层编排系统。",
+        "为 AI 编码 CLI 打造的终端原生桌面基地。Claude Code、Codex、Grok、Kimi 在真实伪终端中原生运行——不重写、不代理，每个都拥有自己的人格（persona），还能在工作中途互相委派任务。",
       downloadMac: "下载 macOS 版",
       downloadOther: "全部下载",
       platforms: "免费开源 · 由 GitHub Releases 自动更新",
@@ -524,7 +524,7 @@ export const CONTENT: Record<Lang, Content> = {
       requirements: "Node ≥ 18 · Rust ≥ 1.77 · Tauri 2 工具链",
     },
     footer: {
-      tagline: "智能体编码座舱",
+      tagline: "众智能体各显人格，协同如一。",
       license: "MIT 许可证",
       built: "Tauri 2 桌面应用 · 本页由 Next.js 驱动",
     },
