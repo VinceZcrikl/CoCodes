@@ -8,6 +8,7 @@ import PersonaEditor from "../Persona/PersonaEditor";
 import PalettePanel from "./PalettePanel";
 import UpdateButton, { checkForUpdate } from "./UpdateButton";
 import AttentionCenter from "./AttentionCenter";
+import AttentionInbox from "./AttentionInbox";
 import { NAV_CLI_EVENT, type NavCliDetail } from "../../state/attentionNav";
 import RingIcon from "./RingIcon";
 import ThemeFrame from "./ThemeFrame";
@@ -405,6 +406,7 @@ export default function Cockpit() {
         ))}
 
       <AttentionCenter />
+      <AttentionInbox />
     </div>
   );
 }

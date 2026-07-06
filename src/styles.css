@@ -9051,3 +9051,373 @@ select.agent-editor-input {
   cursor: default;
   pointer-events: none;
 }
+
+/* ═══ Deck delights — hand-held sign, pats, confetti, standup, relay courier,
+   and the attention inbox. ═══ */
+
+/* ── Waiting sign — the sprite holds up what it's asking for ("Bash?"). ── */
+.sprite-sign {
+  position: absolute;
+  bottom: 0;
+  right: -12px;
+  z-index: 4;
+  max-width: 60px;
+  padding: 2px 5px 1px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #e8d9b0;
+  color: #4a3a1c;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transform-origin: bottom left;
+  animation: sprite-sign-wave 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.sprite-sign::after {
+  /* the little stick it's nailed to */
+  content: "";
+  position: absolute;
+  left: 5px;
+  bottom: -4px;
+  width: 2px;
+  height: 5px;
+  background: #8a6b3a;
+}
+@keyframes sprite-sign-wave {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(5deg) translateY(-1px); }
+}
+
+/* ── Pat — clicking a sprite pets it: hearts drift up, a happy squish. ── */
+.deck-sprite { cursor: pointer; }
+.sprite-hearts {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.sprite-hearts i {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  font-style: normal;
+  font-size: 10px;
+  color: #ff7d9c;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  animation: sprite-heart 1.1s ease-out forwards;
+}
+.sprite-hearts i:nth-child(1) { margin-left: -15px; }
+.sprite-hearts i:nth-child(2) { margin-left: -3px; font-size: 12px; animation-delay: 90ms; }
+.sprite-hearts i:nth-child(3) { margin-left: 9px; animation-delay: 180ms; }
+@keyframes sprite-heart {
+  0% { opacity: 0; transform: translateY(3px) scale(0.6); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-18px) scale(1.15); }
+}
+/* The squish shows on sprites whose body isn't mid-performance (the 4-class
+   running acts out-rank it — hearts still show there). */
+.deck-sprite.pat .sprite-body { animation: sprite-pat-squish 0.55s ease; }
+@keyframes sprite-pat-squish {
+  0% { transform: scale(1, 1); }
+  35% { transform: scale(1.1, 0.88); }
+  70% { transform: scale(0.95, 1.06); }
+  100% { transform: scale(1, 1); }
+}
+
+/* ── Confetti — a long run just landed. ── */
+.deck-confetti {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.deck-confetti i {
+  position: absolute;
+  top: -10px;
+  width: 5px;
+  height: 9px;
+  border-radius: 1px;
+  opacity: 0;
+  animation: deck-confetti-fall 2.2s ease-in forwards;
+}
+.deck-confetti i:nth-child(1) { left: 5%; background: #f6c453; }
+.deck-confetti i:nth-child(2) { left: 14%; background: #7bd88f; animation-delay: 120ms; }
+.deck-confetti i:nth-child(3) { left: 23%; background: #6f9ff5; animation-delay: 40ms; }
+.deck-confetti i:nth-child(4) { left: 31%; background: #f2789f; animation-delay: 200ms; }
+.deck-confetti i:nth-child(5) { left: 40%; background: #b58cf2; animation-delay: 80ms; }
+.deck-confetti i:nth-child(6) { left: 49%; background: #59d3c8; animation-delay: 260ms; }
+.deck-confetti i:nth-child(7) { left: 58%; background: #f6c453; animation-delay: 160ms; }
+.deck-confetti i:nth-child(8) { left: 66%; background: #f2789f; animation-delay: 20ms; }
+.deck-confetti i:nth-child(9) { left: 74%; background: #7bd88f; animation-delay: 220ms; }
+.deck-confetti i:nth-child(10) { left: 82%; background: #6f9ff5; animation-delay: 120ms; }
+.deck-confetti i:nth-child(11) { left: 90%; background: #b58cf2; animation-delay: 60ms; }
+.deck-confetti i:nth-child(12) { left: 96%; background: #59d3c8; animation-delay: 180ms; }
+.deck-confetti i:nth-child(odd) { width: 4px; height: 7px; }
+@keyframes deck-confetti-fall {
+  0% { opacity: 0; transform: translateY(-6px) rotate(0turn); }
+  8% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(130px) rotate(1.6turn); }
+}
+
+/* ── Standup — the reporting sprite's card takes the floor. ── */
+.deck-standup.on { color: var(--accent-gold); }
+.deck-card.standup-turn {
+  border-color: color-mix(in srgb, var(--deck-accent) 75%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--deck-accent) 45%, transparent),
+    0 0 18px color-mix(in srgb, var(--deck-accent) 30%, transparent);
+}
+
+/* The deck header's waiting badge doubles as the inbox button. */
+button.deck-badge.clickable {
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+}
+button.deck-badge.clickable:hover {
+  filter: brightness(1.2);
+}
+
+/* ── Relay — hand this terminal's report to a sibling. ── */
+.deck-relay { position: relative; display: flex; }
+.deck-relay-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 80;
+  min-width: 150px;
+  max-width: 230px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  animation: shell-overlay-pop 120ms ease;
+}
+.deck-relay-title {
+  padding: 3px 7px 2px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.deck-relay-item {
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-main);
+  font-size: 11.5px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.deck-relay-item:hover {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+}
+
+/* A card the dragged sprite hovers — the envelope's landing pad. */
+.deck-card.drop-target {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--deck-accent) 80%, transparent);
+  background: color-mix(in srgb, var(--deck-accent) 10%, var(--panel-deep));
+}
+.deck-card.deck-drop-bounce { animation: deck-drop-bounce 0.6s ease; }
+@keyframes deck-drop-bounce {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-5px); }
+  60% { transform: translateY(2px); }
+}
+.deck-sprite-hit[draggable="true"] { cursor: grab; }
+
+/* ── The courier — an envelope-carrying sprite crossing the deck. ── */
+.deck-cards { position: relative; } /* the courier's coordinate space */
+.deck-courier {
+  position: absolute;
+  z-index: 40;
+  width: 58px;
+  height: 54px;
+  pointer-events: none;
+  will-change: transform;
+}
+.deck-courier-body {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  margin: 5px auto 0;
+  animation: deck-courier-run 0.38s ease-in-out infinite;
+}
+.deck-courier-svg { width: 100%; height: 100%; }
+.deck-courier-blob {
+  display: block;
+  width: 36px;
+  height: 32px;
+  margin: 6px auto 0;
+  border-radius: 14px 14px 11px 11px;
+  background: var(--accent-gold);
+  box-shadow: inset 0 -4px 8px rgba(0, 0, 0, 0.28);
+}
+.deck-courier-mail {
+  position: absolute;
+  right: -7px;
+  bottom: 1px;
+  font-size: 13px;
+  transform: rotate(-12deg);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+@keyframes deck-courier-run {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-4px) rotate(3deg); }
+}
+
+/* ── Attention inbox — triage every waiting prompt from the keyboard. ── */
+.attention-inbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300; /* above the toast banner (1200) */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.35);
+  animation: attention-inbox-fade 120ms ease;
+}
+@keyframes attention-inbox-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.attention-inbox {
+  width: min(560px, 92vw);
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  animation: shell-overlay-pop 130ms ease;
+  overflow: hidden;
+}
+.attention-inbox-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.attention-inbox-bell { color: var(--accent-gold); }
+.attention-inbox-title {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.attention-inbox-count {
+  padding: 1px 7px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent-gold) 20%, transparent);
+  color: var(--accent-gold);
+  font-size: 11px;
+  font-weight: 700;
+}
+.attention-inbox-close {
+  display: flex;
+  padding: 3px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.attention-inbox-close:hover { color: var(--text-main); }
+.attention-inbox-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+}
+.attention-inbox-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-main);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.attention-inbox-item.sel {
+  background: color-mix(in srgb, var(--accent-gold) 14%, transparent);
+}
+.attention-inbox-n {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-main) 10%, transparent);
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+.attention-inbox-label {
+  flex: none;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--accent-gold);
+}
+.attention-inbox-msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.attention-inbox-age {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+.attention-inbox-go {
+  flex: none;
+  opacity: 0;
+  color: var(--accent-gold);
+}
+.attention-inbox-item.sel .attention-inbox-go { opacity: 1; }
+.attention-inbox-empty {
+  padding: 22px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.attention-inbox-hints {
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}

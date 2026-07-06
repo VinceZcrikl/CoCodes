@@ -99,6 +99,16 @@ export default function AttentionCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Dock badge — how many prompts are still waiting (macOS dock / Linux
+  // taskbar; a no-op elsewhere). Cleared when the queue empties.
+  useEffect(() => {
+    getCurrentWindow()
+      .setBadgeCount(queue.length > 0 ? queue.length : undefined)
+      .catch(() => {
+        /* unsupported platform / missing permission — the banner still works */
+      });
+  }, [queue.length]);
+
   if (queue.length === 0) return null;
 
   return (

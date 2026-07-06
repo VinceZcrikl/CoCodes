@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Sparkles, Maximize2, CornerDownLeft, Loader2, RefreshCw, X, Check, Rows3, PanelBottomClose, Dices, MessageCircle, Cpu, ChevronDown, Megaphone } from "lucide-react";
+import { Sparkles, Maximize2, CornerDownLeft, Loader2, RefreshCw, X, Check, Rows3, PanelBottomClose, Dices, MessageCircle, Cpu, ChevronDown, Megaphone, Users, Forward, ArrowDownToLine } from "lucide-react";
 import type { LayoutNode, PaneNode } from "../../hooks/useClaudeSessions";
 import { forEachPane } from "../../hooks/useClaudeSessions";
 import { useDeckStore } from "../../state/deckStore";
@@ -16,6 +16,7 @@ import {
   type InjectPaneDetail,
 } from "../../state/delegationMonitor";
 import Tooltip from "../../components/Tooltip";
+import { ATTENTION_INBOX_EVENT } from "../Cockpit/AttentionInbox";
 import ClaudeMascot from "../Persona/ClaudeMascot";
 import CodexMascot from "../Persona/CodexMascot";
 import GrokMascot from "../Persona/GrokMascot";
@@ -50,8 +51,29 @@ function sendToPane(paneId: string, text: string) {
   window.dispatchEvent(new CustomEvent(INJECT_PANE_EVENT, { detail }));
 }
 
+/** Fill a pane's input box WITHOUT submitting — the user reviews/edits the pulled
+ *  context before sending. Same channel as `sendToPane`, `submit: false`. */
+function fillPane(paneId: string, text: string) {
+  const detail: InjectPaneDetail = { paneId, text, submit: false };
+  window.dispatchEvent(new CustomEvent(INJECT_PANE_EVENT, { detail }));
+}
+
 function focusPaneExternal(paneId: string) {
   window.dispatchEvent(new CustomEvent(FOCUS_PANE_EVENT, { detail: { paneId } }));
+}
+
+/** Distill a permission prompt onto the sprite's hand-held sign — the tool
+ *  being authorized ("Bash?"), or a generic go-ahead. */
+function signTextFor(msg: string | null): string {
+  const m =
+    msg?.match(/\b(?:use|run|execute)\s+([A-Za-z][\w-]{1,14})/i) ??
+    msg?.match(/\b(Bash|Edit|Write|Read|Fetch|Search|MCP|Task|Grep|Glob|Notebook)\b/);
+  return m ? `${m[1]}?` : "OK?";
+}
+
+/** A pane's display label, everywhere the deck speaks about it. */
+function paneLabel(p: PaneNode): string {
+  return p.title ?? p.autoLabel ?? p.cli;
 }
 
 /** Resolve a provider id to summarize with: an explicit override (the deck's
@@ -245,6 +267,232 @@ export default function SessionDeck({
     }
   }, [panes, sessionProfileId, getPersona, onSetAutoLabel]);
 
+  // Resolve a provider id to its display model name (for the bubble's
+  // attribution chip) from the already-fetched provider list.
+  const modelNameOf = useCallback(
+    (providerId: string | null): string | undefined => {
+      if (!providerId) return undefined;
+      const p = providers.find((x) => x.id === providerId);
+      return p ? p.model || p.label || p.id : providerId;
+    },
+    [providers],
+  );
+
+  // ── Standup — the sprites report in turn, scrum style. ──
+  // Walks the cast in layout order: spotlight the card, write (or reuse) its
+  // report, dwell a beat, move on. Clicking the button again stops the round.
+  const [standupPane, setStandupPane] = useState<string | null>(null);
+  const [standupIdx, setStandupIdx] = useState(0);
+  const standupCancel = useRef(false);
+  const standupRunning = standupPane !== null;
+
+  const standupReport = useCallback(
+    async (p: PaneNode) => {
+      const store = usePaneReportStore.getState();
+      const key = getLastRun(p.paneId)?.endedAt ?? performance.now();
+      const existing = store.reports[p.paneId];
+      if (existing && !existing.stale && existing.forEndedAt >= key) {
+        // Already spoken for this run — just make sure the bubble shows.
+        if (existing.dismissed) store.reopen(p.paneId);
+        return;
+      }
+      store.begin(p.paneId, key);
+      let text: string | null = null;
+      let usedProviderId: string | null = null;
+      try {
+        text = await Promise.race([
+          (async () => {
+            const transcript = await invoke<string>("terminal_tail", { id: `${p.paneId}:${p.convId}` });
+            if (transcript.trim().length < 40) return null;
+            const providerId = await resolveProviderId(
+              getPersona,
+              p.profileId ?? sessionProfileId,
+              useDeckStore.getState().reportProviderId,
+            );
+            if (!providerId) return null;
+            usedProviderId = providerId;
+            const raw = await invoke<string>("ai_pane_report", { providerId, transcript });
+            return raw.trim() ? raw : null;
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("standup report timed out")), REPORT_TIMEOUT_MS),
+          ),
+        ]);
+      } catch {
+        /* this sprite passes its turn */
+      }
+      usePaneReportStore.getState().finish(p.paneId, key, text, modelNameOf(usedProviderId));
+    },
+    [getPersona, sessionProfileId, modelNameOf],
+  );
+
+  const runStandup = useCallback(async () => {
+    if (standupRunning) {
+      standupCancel.current = true;
+      return;
+    }
+    standupCancel.current = false;
+    for (let i = 0; i < panes.length; i++) {
+      if (standupCancel.current) break;
+      setStandupIdx(i);
+      setStandupPane(panes[i].paneId);
+      await standupReport(panes[i]);
+      if (standupCancel.current) break;
+      // Dwell so each report gets its moment before the next sprite speaks.
+      await new Promise((r) => setTimeout(r, 1200));
+    }
+    setStandupPane(null);
+  }, [standupRunning, panes, standupReport]);
+
+  // ── Relay + courier — hand one terminal's report to another. ──
+  // The courier sprite physically runs the envelope from the source card to the
+  // target card (pure decoration; the message itself is sent immediately).
+  const cardsRef = useRef<HTMLDivElement | null>(null);
+  const courierRef = useRef<HTMLDivElement | null>(null);
+  const [courier, setCourier] = useState<{
+    key: number;
+    cli: string;
+    toId: string;
+    x: number;
+    y: number;
+    dx: number;
+    dy: number;
+  } | null>(null);
+
+  const fireCourier = useCallback(
+    (fromId: string, toId: string) => {
+      const box = cardsRef.current;
+      if (!box) return;
+      const from = box.querySelector<HTMLElement>(`[data-deck-pane="${CSS.escape(fromId)}"] .deck-sprite`);
+      const to = box.querySelector<HTMLElement>(`[data-deck-pane="${CSS.escape(toId)}"] .deck-sprite`);
+      if (!from || !to) return;
+      const b = box.getBoundingClientRect();
+      const f = from.getBoundingClientRect();
+      const t = to.getBoundingClientRect();
+      setCourier({
+        key: performance.now(),
+        cli: panes.find((p) => p.paneId === fromId)?.cli ?? "",
+        toId,
+        x: f.left - b.left + box.scrollLeft,
+        y: f.top - b.top + box.scrollTop,
+        dx: t.left - f.left,
+        dy: t.top - f.top,
+      });
+    },
+    [panes],
+  );
+
+  // Fly the courier (WAAPI so the path is computed per delivery); on arrival the
+  // envelope pops and the receiving card gives a little bounce.
+  useEffect(() => {
+    if (!courier) return;
+    const el = courierRef.current;
+    if (!el) {
+      setCourier(null);
+      return;
+    }
+    const anim = el.animate(
+      [
+        { transform: "translate(0px, 0px) scale(0.5)", opacity: 0 },
+        { transform: "translate(0px, 0px) scale(1)", opacity: 1, offset: 0.12 },
+        { transform: `translate(${courier.dx}px, ${courier.dy}px) scale(1)`, opacity: 1, offset: 0.88 },
+        { transform: `translate(${courier.dx}px, ${courier.dy}px) scale(0.5)`, opacity: 0 },
+      ],
+      { duration: 1100, easing: "cubic-bezier(0.45, 0.05, 0.55, 0.95)" },
+    );
+    anim.onfinish = () => {
+      const target = cardsRef.current?.querySelector<HTMLElement>(
+        `[data-deck-pane="${CSS.escape(courier.toId)}"]`,
+      );
+      if (target) {
+        target.classList.add("deck-drop-bounce");
+        window.setTimeout(() => target.classList.remove("deck-drop-bounce"), 700);
+      }
+      setCourier(null);
+    };
+    return () => anim.cancel();
+  }, [courier]);
+
+  const relay = useCallback(
+    async (fromId: string, toId: string) => {
+      if (fromId === toId) return;
+      const from = panes.find((p) => p.paneId === fromId);
+      if (!from) return;
+      fireCourier(fromId, toId);
+      // Prefer the report already on file; otherwise write one for the handoff.
+      let text = usePaneReportStore.getState().reports[fromId]?.text ?? null;
+      if (!text) {
+        try {
+          const transcript = await invoke<string>("terminal_tail", { id: `${fromId}:${from.convId}` });
+          if (transcript.trim().length >= 40) {
+            const providerId = await resolveProviderId(
+              getPersona,
+              from.profileId ?? sessionProfileId,
+              useDeckStore.getState().reportProviderId,
+            );
+            if (providerId) {
+              const raw = await invoke<string>("ai_pane_report", { providerId, transcript });
+              if (raw.trim()) text = raw.trim();
+            }
+          }
+        } catch {
+          /* fall through to the generic handoff line */
+        }
+      }
+      sendToPane(
+        toId,
+        text
+          ? `Handoff from the "${paneLabel(from)}" terminal: ${text}`
+          : `Handoff from the "${paneLabel(from)}" terminal — it has an update for you.`,
+      );
+    },
+    [panes, fireCourier, getPersona, sessionProfileId],
+  );
+
+  // Pull a sibling terminal's context INTO this one — the richer cousin of
+  // relay. Where relay forwards a one-line quest report, this summarizes the
+  // source's recent transcript into a factual handoff brief (ai_pane_context)
+  // and FILLS the target's input box without submitting, so the user can edit
+  // before sending. `fromId` = source (whose history we pull), `toId` = the
+  // pane that receives the context.
+  const pullContext = useCallback(
+    async (fromId: string, toId: string) => {
+      if (fromId === toId) return;
+      const from = panes.find((p) => p.paneId === fromId);
+      if (!from) return;
+      fireCourier(fromId, toId);
+      let brief: string | null = null;
+      try {
+        const transcript = await invoke<string>("terminal_tail", { id: `${fromId}:${from.convId}` });
+        if (transcript.trim().length >= 40) {
+          const providerId = await resolveProviderId(
+            getPersona,
+            from.profileId ?? sessionProfileId,
+            useDeckStore.getState().reportProviderId,
+          );
+          if (providerId) {
+            const raw = await invoke<string>("ai_pane_context", { providerId, transcript });
+            if (raw.trim()) brief = raw.trim();
+          }
+        }
+      } catch {
+        /* fall through to the on-file report, then a generic line */
+      }
+      // Fall back to any report already on file if the summary couldn't be made.
+      if (!brief) brief = usePaneReportStore.getState().reports[fromId]?.text ?? null;
+      const label = paneLabel(from);
+      fillPane(
+        toId,
+        brief
+          ? `Context from the "${label}" terminal:\n${brief}\n\nUse this as background for the current task.`
+          : `Context from the "${label}" terminal — check what it has been working on before continuing.`,
+      );
+    },
+    [panes, fireCourier, getPersona, sessionProfileId],
+  );
+
+  const CourierMascot = courier ? SPRITE_MASCOTS[courier.cli] : null;
+
   // Dismiss on outside-click (ignoring the toolbar toggle) and Escape.
   useEffect(() => {
     if (!open) return;
@@ -296,7 +544,16 @@ export default function SessionDeck({
       <header className="deck-header">
         <span className="deck-title">Session Deck</span>
         <span className="deck-counts">
-          {counts.waiting > 0 && <span className="deck-badge waiting">{counts.waiting} waiting</span>}
+          {counts.waiting > 0 && (
+            <button
+              type="button"
+              className="deck-badge waiting clickable"
+              onClick={() => window.dispatchEvent(new CustomEvent(ATTENTION_INBOX_EVENT))}
+              title="Open the attention inbox (⌘⇧A)"
+            >
+              {counts.waiting} waiting
+            </button>
+          )}
           {counts.running > 0 && <span className="deck-badge running">{counts.running} running</span>}
           <span className="deck-badge">{panes.length} panes</span>
         </span>
@@ -341,6 +598,17 @@ export default function SessionDeck({
             </div>
           )}
         </div>
+        <Tooltip label={standupRunning ? "Stop the standup" : "Standup — each sprite reports in turn"}>
+          <button
+            type="button"
+            className={`deck-relabel deck-standup${standupRunning ? " on" : ""}`}
+            onClick={() => void runStandup()}
+            disabled={panes.length === 0}
+          >
+            {standupRunning ? <Loader2 size={12} className="deck-spin" /> : <Users size={12} />}
+            <span>{standupRunning ? `${standupIdx + 1}/${panes.length}` : "Standup"}</span>
+          </button>
+        </Tooltip>
         <Tooltip label="Give terminals still on the global theme a random one">
           <button
             type="button"
@@ -434,7 +702,22 @@ export default function SessionDeck({
         </Tooltip>
       </div>
 
-      <div className="deck-cards">
+      <div className="deck-cards" ref={cardsRef}>
+        {/* The relay courier — an envelope-carrying sprite crossing the deck. */}
+        {courier && (
+          <div
+            key={courier.key}
+            ref={courierRef}
+            className="deck-courier"
+            style={{ left: courier.x, top: courier.y }}
+            aria-hidden="true"
+          >
+            <div className="deck-courier-body">
+              {CourierMascot ? <CourierMascot className="deck-courier-svg" /> : <span className="deck-courier-blob" />}
+              <span className="deck-courier-mail">✉</span>
+            </div>
+          </div>
+        )}
         {/* Layout order — cards map one-to-one onto the terminals' on-screen order. */}
         {panes.map((p) => (
           <DeckCard
@@ -444,6 +727,11 @@ export default function SessionDeck({
             status={statusOf(p)}
             sessionProfileId={sessionProfileId}
             checked={checked?.has(p.paneId) ?? false}
+            standupTurn={standupPane === p.paneId}
+            others={panes.filter((o) => o.paneId !== p.paneId).map((o) => ({ paneId: o.paneId, label: paneLabel(o) }))}
+            onRelay={(toId) => void relay(p.paneId, toId)}
+            onDropRelay={(fromId) => void relay(fromId, p.paneId)}
+            onPullContext={(fromId) => void pullContext(fromId, p.paneId)}
             onToggleCheck={() =>
               setChecked((prev) => {
                 const next = new Set(prev ?? []);
@@ -479,6 +767,11 @@ const MIN_RUN_FOR_REPORT_MS = 8000;
  *  bubble would otherwise hang forever and block every retry. After this we give
  *  up, clear the writing state, and let the run be reported again later. */
 const REPORT_TIMEOUT_MS = 45000;
+/** A run at least this long earns confetti when it lands — an accomplishment,
+ *  not a quick errand. */
+const CELEBRATE_MIN_RUN_MS = 120_000;
+/** DataTransfer type for dragging a sprite onto another card (a relay). */
+const RELAY_DRAG_TYPE = "application/x-cocodes-pane";
 
 /** CLI → built-in mascot face. A claude pane's sprite IS the Claude Code mascot
  *  (the same avatar as the pane header), and likewise for the other CLIs; only
@@ -643,6 +936,7 @@ function DeckSprite({
   cli,
   paneId,
   costume,
+  sign,
 }: {
   status: PaneStatus;
   color: string;
@@ -652,8 +946,20 @@ function DeckSprite({
   paneId: string;
   /** The terminal's character (0–7), cast once per deck — state-invariant. */
   costume: number;
+  /** Waiting only: the hand-held sign's text ("Bash?"). null = no sign. */
+  sign: string | null;
 }) {
   const Mascot = SPRITE_MASCOTS[cli];
+  // Pat — clicking the sprite pets it: a happy squeeze under drifting hearts.
+  const [pat, setPat] = useState(false);
+  const patTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(patTimer.current), []);
+  const onPat = () => {
+    setPat(false); // restart the burst even mid-pat
+    window.clearTimeout(patTimer.current);
+    requestAnimationFrame(() => setPat(true));
+    patTimer.current = window.setTimeout(() => setPat(false), 1300);
+  };
   const h = spriteHash(paneId);
   const variant = h % 4; // blob shape
   const work = (h >> 2) % 5; // work rhythm: bob / sway / tap / think / scribble
@@ -674,20 +980,23 @@ function DeckSprite({
       : work === 4
         ? "grit"
         : null;
-  const eyeMood = cheer
-    ? "happy" // ∪∪ smiling arcs
-    : status === "waiting"
-      ? "plead" // glossy wide eyes begging for input
-      : status === "idle"
-        ? idleV === 0
-          ? "shut" // fast asleep
-          : "drowsy" // half-lidded daydream
-        : runningMood;
+  const eyeMood = pat
+    ? "happy" // being petted beats every other mood
+    : cheer
+      ? "happy" // ∪∪ smiling arcs
+      : status === "waiting"
+        ? "plead" // glossy wide eyes begging for input
+        : status === "idle"
+          ? idleV === 0
+            ? "shut" // fast asleep
+            : "drowsy" // half-lidded daydream
+          : runningMood;
   return (
     <div
-      className={`deck-sprite ${status} v${variant} work${work} wait${waitV} idle${idleV} cos${costume}${Mascot ? " mascot" : ""}${cheer ? " cheer" : ""}`}
+      className={`deck-sprite ${status} v${variant} work${work} wait${waitV} idle${idleV} cos${costume}${Mascot ? " mascot" : ""}${cheer ? " cheer" : ""}${pat ? " pat" : ""}`}
       title={name}
       style={{ ["--sprite-color" as string]: color } as React.CSSProperties}
+      onClick={onPat}
     >
       {Mascot ? (
         <div className="sprite-body sprite-mascot" style={phase}>
@@ -738,6 +1047,15 @@ function DeckSprite({
           {waitV === 1 ? "?" : "!"}
         </span>
       )}
+      {/* The hand-held sign — what this sprite is asking permission for. */}
+      {status === "waiting" && sign && (
+        <span className="sprite-sign" aria-hidden="true">{sign}</span>
+      )}
+      {pat && (
+        <span className="sprite-hearts" aria-hidden="true">
+          <i>♥</i><i>♥</i><i>♥</i>
+        </span>
+      )}
       {status === "running" && dots && (
         <span className="sprite-dots" aria-hidden="true"><i /><i /><i /></span>
       )}
@@ -760,6 +1078,11 @@ function DeckCard({
   status,
   sessionProfileId,
   checked,
+  standupTurn,
+  others,
+  onRelay,
+  onDropRelay,
+  onPullContext,
   onToggleCheck,
   onHover,
   onJump,
@@ -773,6 +1096,17 @@ function DeckCard({
   status: PaneStatus;
   sessionProfileId: string;
   checked: boolean;
+  /** This sprite is the one speaking in the running standup — spotlight it. */
+  standupTurn: boolean;
+  /** The other terminals on deck — relay targets. */
+  others: { paneId: string; label: string }[];
+  /** Relay this pane's report to another pane. */
+  onRelay: (toId: string) => void;
+  /** A sprite was dropped onto this card — relay from that pane to this one. */
+  onDropRelay: (fromId: string) => void;
+  /** Pull a chosen sibling terminal's context INTO this card's pane (fills its
+   *  input box with an AI brief of that sibling's recent work, unsubmitted). */
+  onPullContext: (fromId: string) => void;
   onToggleCheck: () => void;
   onHover: (hover: boolean) => void;
   onJump: () => void;
@@ -970,6 +1304,55 @@ function DeckCard({
     setReply(""); // focus stays for continuous replies
   };
 
+  // Celebration — a run that lasted long enough to feel like an accomplishment
+  // ends in confetti (once per run; the cheer bubble handles the words). Only a
+  // *fresh* landing counts: no confetti for runs that ended before this card
+  // looked, and none while the "end" is really a pending permission prompt.
+  const [celebrate, setCelebrate] = useState(false);
+  const celebratedRun = useRef(0);
+  const lastRunEnd = getLastRun(pane.paneId)?.endedAt ?? 0;
+  useEffect(() => {
+    const run = getLastRun(pane.paneId);
+    if (!run || run.runMs < CELEBRATE_MIN_RUN_MS) return;
+    if (status !== "idle") return;
+    if (run.endedAt === celebratedRun.current) return;
+    if (performance.now() - run.endedAt > 15_000) return; // old news
+    celebratedRun.current = run.endedAt;
+    setCelebrate(true);
+    const t = window.setTimeout(() => setCelebrate(false), 2600);
+    return () => window.clearTimeout(t);
+  }, [lastRunEnd, status, pane.paneId]);
+
+  // Relay — forward this terminal's report to a chosen sibling. The sprite can
+  // also be dragged onto another card for the same handoff.
+  const [relayOpen, setRelayOpen] = useState(false);
+  const relayRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!relayOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (relayRef.current?.contains(e.target as Node)) return;
+      setRelayOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    return () => window.removeEventListener("mousedown", onClick);
+  }, [relayOpen]);
+
+  // Pull context — bring a chosen sibling terminal's recent work INTO this pane
+  // as an editable brief in the input box (the inbound counterpart to relay).
+  const [pullOpen, setPullOpen] = useState(false);
+  const pullRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!pullOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (pullRef.current?.contains(e.target as Node)) return;
+      setPullOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
+    return () => window.removeEventListener("mousedown", onClick);
+  }, [pullOpen]);
+
+  const [dropHover, setDropHover] = useState(false);
+
   // Manual relabel for just this pane.
   const [relabeling, setRelabeling] = useState(false);
   const relabel = async () => {
@@ -990,10 +1373,29 @@ function DeckCard({
 
   return (
     <div
-      className={`deck-card status-${status}${checked ? " checked" : ""}`}
+      className={`deck-card status-${status}${checked ? " checked" : ""}${standupTurn ? " standup-turn" : ""}${dropHover ? " drop-target" : ""}`}
       style={cardStyle}
+      data-deck-pane={pane.paneId}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(RELAY_DRAG_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDropHover(true);
+      }}
+      onDragLeave={(e) => {
+        // Ignore leave events into our own children (they'd flicker the halo).
+        if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+        setDropHover(false);
+      }}
+      onDrop={(e) => {
+        setDropHover(false);
+        const fromId = e.dataTransfer.getData(RELAY_DRAG_TYPE);
+        if (!fromId || fromId === pane.paneId) return;
+        e.preventDefault();
+        onDropRelay(fromId);
+      }}
     >
       {/* Hover-revealed controls; the checked state keeps them visible. */}
       <span className="deck-card-actions">
@@ -1060,6 +1462,11 @@ function DeckCard({
         >
           <div
             className="deck-sprite-hit"
+            draggable={others.length > 0}
+            onDragStart={(e) => {
+              e.dataTransfer.setData(RELAY_DRAG_TYPE, pane.paneId);
+              e.dataTransfer.effectAllowed = "copy";
+            }}
             onMouseEnter={() => {
               if (status !== "running" && reportEntry) return; // the quest report IS the status
               tipTimer.current = window.setTimeout(() => void fetchTip(), TIP_INTENT_MS);
@@ -1074,6 +1481,7 @@ function DeckCard({
               cli={pane.cli}
               paneId={pane.paneId}
               costume={costume}
+              sign={status === "waiting" ? signTextFor(attentionMsg) : null}
             />
           </div>
         </Tooltip>
@@ -1165,7 +1573,84 @@ function DeckCard({
             {reporting ? <Loader2 size={12} className="deck-spin" /> : <Megaphone size={12} />}
           </button>
         </Tooltip>
+        {others.length > 0 && (
+          <div className="deck-relay" ref={relayRef}>
+            <Tooltip label="Relay this terminal's report to another terminal — or drag the sprite onto its card">
+              <button
+                type="button"
+                className={`deck-reply-report${relayOpen ? " open" : ""}`}
+                onClick={() => setRelayOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={relayOpen}
+                aria-label="Relay to another terminal"
+              >
+                <Forward size={12} />
+              </button>
+            </Tooltip>
+            {relayOpen && (
+              <div className="deck-relay-menu" role="menu">
+                <span className="deck-relay-title">Relay to…</span>
+                {others.map((o) => (
+                  <button
+                    key={o.paneId}
+                    type="button"
+                    className="deck-relay-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setRelayOpen(false);
+                      onRelay(o.paneId);
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {others.length > 0 && (
+          <div className="deck-relay" ref={pullRef}>
+            <Tooltip label="Pull another terminal's context into this one — fills the input with a brief of its recent work">
+              <button
+                type="button"
+                className={`deck-reply-report${pullOpen ? " open" : ""}`}
+                onClick={() => setPullOpen((v) => !v)}
+                aria-haspopup="menu"
+                aria-expanded={pullOpen}
+                aria-label="Pull context from another terminal"
+              >
+                <ArrowDownToLine size={12} />
+              </button>
+            </Tooltip>
+            {pullOpen && (
+              <div className="deck-relay-menu" role="menu">
+                <span className="deck-relay-title">Pull context from…</span>
+                {others.map((o) => (
+                  <button
+                    key={o.paneId}
+                    type="button"
+                    className="deck-relay-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setPullOpen(false);
+                      onPullContext(o.paneId);
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+      {celebrate && (
+        <span className="deck-confetti" aria-hidden="true">
+          {Array.from({ length: 12 }, (_, i) => (
+            <i key={i} />
+          ))}
+        </span>
+      )}
     </div>
   );
 }
