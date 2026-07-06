@@ -190,6 +190,7 @@ pub fn run() {
             ai_commit::ai_commit_message,
             ai_summary::ai_summarize_terminal,
             ai_summary::ai_pane_report,
+            ai_summary::ai_pane_context,
             fs::fs_list,
             fs::fs_walk,
             fs::fs_drives,

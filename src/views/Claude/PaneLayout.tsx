@@ -785,8 +785,13 @@ const PaneLayout = forwardRef<ClaudeTerminalHandle, Props>(function PaneLayout(
   // monitor routing layer in ClaudeTab.
   useEffect(() => {
     const handler = (e: Event) => {
-      const { paneId: tgt, text } = (e as CustomEvent<InjectPaneDetail>).detail;
-      handles.current.get(tgt)?.writeLine(text);
+      const { paneId: tgt, text, submit } = (e as CustomEvent<InjectPaneDetail>).detail;
+      const h = handles.current.get(tgt);
+      if (!h) return;
+      // Default to running the line; submit === false only fills the input box
+      // (the cross-pane context pull, so the user can edit before sending).
+      if (submit === false) h.insert(text);
+      else h.writeLine(text);
     };
     window.addEventListener(INJECT_PANE_EVENT, handler);
     return () => window.removeEventListener(INJECT_PANE_EVENT, handler);

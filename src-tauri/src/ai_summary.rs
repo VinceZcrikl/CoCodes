@@ -84,6 +84,63 @@ pub async fn ai_pane_report(
     .map_err(|e| e.to_string())?
 }
 
+/// Cap on a context brief — a short handoff paragraph, not the whole transcript.
+const CONTEXT_MAX_CHARS: usize = 600;
+
+const CONTEXT_PROMPT: &str = "You brief one coding-assistant terminal on what a \
+SIBLING terminal has been doing, so it can pick up with the right context. Given \
+the recent transcript of that sibling terminal, write a compact factual handoff of \
+2 to 5 sentences: what task it worked on, the key decisions, files, or commands \
+involved, and where things stand now (done / blocked / mid-way). Write it as \
+background addressed to another AI assistant — third person about the sibling, no \
+first-person mascot voice. Reply in the SAME LANGUAGE as the transcript. No quotes, \
+no markdown, no code fences. Output ONLY the brief.";
+
+/// Summarize a pane's recent transcript into a short factual context brief meant
+/// to be handed to ANOTHER pane's assistant as background. Same provider plumbing
+/// as labels/reports; same "never invent from nothing" rule. Distinct from
+/// `ai_pane_report` (a playful one-liner) — this is denser and third-person, so
+/// the receiving terminal gets usable context rather than a status quip.
+#[tauri::command]
+pub async fn ai_pane_context(
+    provider_id: String,
+    transcript: String,
+) -> Result<String, String> {
+    if transcript.trim().is_empty() {
+        return Err("no terminal output to summarize".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let cleaned = denoise(&transcript);
+        let body = if cleaned.trim().is_empty() { &transcript } else { &cleaned };
+        let user = format!("Sibling terminal transcript:\n\n{body}");
+        let raw = crate::llm::complete(&provider_id, CONTEXT_PROMPT, &user)?;
+        let brief = sanitize_context(&raw);
+        if brief.is_empty() {
+            return Err("model returned an empty context brief".into());
+        }
+        Ok(brief)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Clean a context-brief reply: drop code-fence lines, strip surrounding quotes,
+/// collapse to the multi-sentence body, and cap. Unlike a label/report this keeps
+/// several sentences, so we join the non-fence lines rather than take just one.
+fn sanitize_context(raw: &str) -> String {
+    let body: String = raw
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.starts_with("```"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let trimmed = body
+        .trim()
+        .trim_matches(|c| c == '"' || c == '`' || c == '\'')
+        .trim();
+    trimmed.chars().take(CONTEXT_MAX_CHARS).collect::<String>().trim().to_string()
+}
+
 /// Reduce a report reply to one clean spoken sentence: first non-empty line,
 /// stripped of quotes/fences, capped. Unlike labels, case is preserved — it's a
 /// sentence the character "says", not a chip.
@@ -174,7 +231,21 @@ fn sanitize(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{denoise, is_prose, sanitize, sanitize_report};
+    use super::{denoise, is_prose, sanitize, sanitize_context, sanitize_report};
+
+    #[test]
+    fn sanitize_context_joins_lines_strips_and_caps() {
+        // Multi-line brief → single spaced paragraph, fences dropped.
+        assert_eq!(
+            sanitize_context("```\nRefactored the git panel.\nTests pass now.\n```"),
+            "Refactored the git panel. Tests pass now."
+        );
+        // Surrounding quotes stripped.
+        assert_eq!(sanitize_context("\"重构了 Git 面板。\""), "重构了 Git 面板。");
+        // Capped at CONTEXT_MAX_CHARS on a char boundary.
+        let long = "词".repeat(800);
+        assert_eq!(sanitize_context(&long).chars().count(), 600);
+    }
 
     #[test]
     fn sanitize_report_keeps_case_strips_and_caps() {

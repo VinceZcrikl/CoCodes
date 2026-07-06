@@ -41,8 +41,11 @@ export interface DelegationDetail {
 export interface InjectPaneDetail {
   /** The `PaneNode.paneId` of the target pane. */
   paneId: string;
-  /** Text to inject (submitted with CR by `writeLine`). */
+  /** Text to inject. Submitted with CR by `writeLine` unless `submit` is false. */
   text: string;
+  /** Default true → run the line. False → `insert` into the input box without a
+   *  CR, leaving the user to edit/submit (used by the cross-pane context pull). */
+  submit?: boolean;
 }
 
 /** Fired on `window` when a result block is detected in any PTY output. */
