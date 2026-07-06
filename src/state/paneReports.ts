@@ -9,6 +9,10 @@ export interface PaneReport {
   text: string;
   /** `endedAt` of the run this report covers. */
   forEndedAt: number;
+  /** Short name of the model that produced `text` (shown as a chip on the
+   *  bubble, so a user can see which deck-selected provider actually spoke).
+   *  Absent for reports written before this was tracked. */
+  model?: string;
   /** Dismissed hides the bubble but keeps the text for the 💬 reopen action. */
   dismissed: boolean;
   /** True for a report restored from a previous session. Its `forEndedAt` is on
@@ -56,8 +60,9 @@ interface PaneReportState {
   /** paneId → endedAt of the run whose report is being generated right now. */
   pending: Record<string, number>;
   begin: (paneId: string, endedAt: number) => void;
-  /** Store the generated text (null = generation failed / nothing to say). */
-  finish: (paneId: string, endedAt: number, text: string | null) => void;
+  /** Store the generated text (null = generation failed / nothing to say) and
+   *  the model that produced it (for the bubble's attribution chip). */
+  finish: (paneId: string, endedAt: number, text: string | null, model?: string) => void;
   dismiss: (paneId: string) => void;
   reopen: (paneId: string) => void;
   /** A new run started — the old quest report is history. */
@@ -69,7 +74,7 @@ export const usePaneReportStore = create<PaneReportState>((set) => ({
   pending: {},
   begin: (paneId, endedAt) =>
     set((s) => ({ pending: { ...s.pending, [paneId]: endedAt } })),
-  finish: (paneId, endedAt, text) =>
+  finish: (paneId, endedAt, text, model) =>
     set((s) => {
       const pending = { ...s.pending };
       // Clear the writing state for this pane. Match on endedAt so a newer run's
@@ -82,7 +87,7 @@ export const usePaneReportStore = create<PaneReportState>((set) => ({
       if (!text) return { pending };
       const reports = {
         ...s.reports,
-        [paneId]: { text, forEndedAt: endedAt, dismissed: false },
+        [paneId]: { text, forEndedAt: endedAt, dismissed: false, model },
       };
       saveReports(reports);
       return { pending, reports };

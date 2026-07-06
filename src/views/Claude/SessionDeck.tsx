@@ -862,6 +862,9 @@ function DeckCard({
     store.begin(pane.paneId, endedAt);
     let text: string | null = null;
     let fail: string | null = null;
+    // The provider actually used, captured inside the race so the bubble can
+    // attribute the report to the model that produced it.
+    let usedProviderId: string | null = null;
     try {
       // Race the whole generation against a timeout so a wedged backend/provider
       // call can never leave the "writing report…" bubble stuck forever.
@@ -883,6 +886,7 @@ function DeckCard({
             fail = "no usable AI provider configured";
             return null;
           }
+          usedProviderId = providerId;
           const raw = await invoke<string>("ai_pane_report", { providerId, transcript });
           if (!raw.trim()) fail = "the model returned an empty reply";
           return raw.trim() ? raw : null;
@@ -895,7 +899,20 @@ function DeckCard({
       fail = typeof err === "string" ? err : err instanceof Error ? err.message : "the model call failed";
       console.warn("pane report failed", err); // a failed report just means no bubble
     }
-    usePaneReportStore.getState().finish(pane.paneId, endedAt, text);
+    // Resolve the used provider id to a display model name for the bubble's
+    // attribution chip (same list resolveProviderId picks from). Best-effort:
+    // a failed lookup just omits the chip.
+    let model: string | undefined;
+    if (usedProviderId) {
+      try {
+        const list = await invoke<{ id: string; label: string; model: string }[]>("ai_commit_providers");
+        const p = list.find((x) => x.id === usedProviderId);
+        model = p ? p.model || p.label || p.id : usedProviderId;
+      } catch {
+        model = usedProviderId;
+      }
+    }
+    usePaneReportStore.getState().finish(pane.paneId, endedAt, text, model);
     return text ? null : fail ?? "the model call failed";
   };
 
@@ -1096,7 +1113,17 @@ function DeckCard({
           )}
           {(status !== "waiting" || asked) && report && (
             <div className="deck-bubble" role="status">
-              <span className="deck-bubble-text">{report}</span>
+              <span className="deck-bubble-text">
+                {reportEntry?.model && (
+                  <span
+                    className="deck-bubble-model"
+                    title={`Summarized by ${reportEntry.model}`}
+                  >
+                    {reportEntry.model}
+                  </span>
+                )}
+                {report}
+              </span>
               <button
                 type="button"
                 className="deck-bubble-close"
