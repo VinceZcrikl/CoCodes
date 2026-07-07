@@ -3,12 +3,16 @@ import {
   isValidElement,
   useCallback,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+
+/** Keep a tooltip at least this far from the viewport edge. */
+const EDGE_PAD = 8;
 
 interface Props {
   /** Tooltip body — short text, or rich nodes for keyboard hints etc. */
@@ -41,8 +45,27 @@ interface Pos {
  *  its own handlers; we just compose ours on top and wire `aria-describedby`. */
 export default function Tooltip({ label, side = "top", delay = 350, children }: Props) {
   const [pos, setPos] = useState<Pos | null>(null);
+  const [shiftX, setShiftX] = useState(0);
+  const tipRef = useRef<HTMLDivElement | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const id = useId();
+
+  // After the tooltip renders, measure it and shift horizontally so the whole
+  // box (it's translateX(-50%), so it extends w/2 past `left` on each side)
+  // stays within the viewport. Fixes long labels running off the right edge.
+  useLayoutEffect(() => {
+    if (!pos) {
+      setShiftX(0);
+      return;
+    }
+    const el = tipRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    let dx = 0;
+    if (r.right > window.innerWidth - EDGE_PAD) dx = window.innerWidth - EDGE_PAD - r.right;
+    else if (r.left < EDGE_PAD) dx = EDGE_PAD - r.left;
+    setShiftX(dx);
+  }, [pos]);
 
   const show = useCallback(
     (el: HTMLElement, immediate = false) => {
@@ -100,9 +123,14 @@ export default function Tooltip({ label, side = "top", delay = 350, children }: 
             id={id}
             role="tooltip"
             className={`app-tooltip app-tooltip--${pos.side}`}
+            ref={tipRef}
             style={{
-              left: Math.min(Math.max(pos.x, 12), window.innerWidth - 12),
+              left: pos.x,
               top: pos.y,
+              transform:
+                pos.side === "top"
+                  ? `translate(calc(-50% + ${shiftX}px), -100%)`
+                  : `translateX(calc(-50% + ${shiftX}px))`,
             }}
           >
             {label}

@@ -2636,11 +2636,20 @@ body.resizing-row {
   gap: 8px;
   min-width: 0;
 }
-.deck-card-main { display: flex; align-items: center; gap: 10px; }
-/* The stage beside the sprite — the bubble's full-width room. */
+/* Fixed height so every card is the same size regardless of report length —
+   the bubble scrolls internally instead of stretching the card. */
+.deck-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 62px;
+}
+/* The stage beside the sprite — the bubble's full-width room. It caps the
+   bubble to the row height; a long report scrolls inside the bubble. */
 .deck-card-stage {
   flex: 1;
   min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -4680,6 +4689,8 @@ body.resizing-row {
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-main);
+  /* Never taller than the fixed card row — overflow scrolls in the text. */
+  max-height: 100%;
   animation: bubble-pop 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
 .deck-bubble::before {
@@ -4694,7 +4705,16 @@ body.resizing-row {
   from { opacity: 0; transform: translateY(4px) scale(0.96); }
   to { opacity: 1; transform: none; }
 }
-.deck-bubble-text { flex: 1; min-width: 0; word-break: break-word; }
+.deck-bubble-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+  /* Scroll a long report inside the bubble rather than growing the card. */
+  overflow-y: auto;
+  max-height: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent-gold) 35%, transparent) transparent;
+}
 /* Attribution chip: which model produced this report. Floated into the text so
    it reads inline ("[model] the sentence…") without stealing a flex column. */
 .deck-bubble-close {
@@ -6423,7 +6443,10 @@ body.resizing-row {
   color: var(--text-main);
   font-size: 11.5px;
   line-height: 1.4;
-  white-space: nowrap;
+  /* Wrap long labels so max-width actually caps them — nowrap would let a long
+     single line blow past max-width and run off-screen (deck relay/pull tips). */
+  white-space: normal;
+  text-align: center;
   pointer-events: none;
   animation: app-tooltip-in 110ms ease;
 }

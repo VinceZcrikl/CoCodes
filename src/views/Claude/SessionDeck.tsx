@@ -585,7 +585,7 @@ export default function SessionDeck({
         </span>
         <span className="deck-spacer" />
         <div className="deck-model" ref={modelRef}>
-          <Tooltip label="Model the sprites report with — Auto follows each persona's base model">
+          <Tooltip label="Model the sprites report with">
             <button
               type="button"
               className={`deck-model-btn${modelOpen ? " open" : ""}`}
@@ -1585,7 +1585,7 @@ function DeckCard({
         <button type="button" className="deck-reply-send" onClick={send} disabled={!reply.trim()} aria-label="Send">
           <CornerDownLeft size={12} />
         </button>
-        <Tooltip label="Ask for a report on the current or last task">
+        <Tooltip label="Report on the current or last task">
           <button
             type="button"
             className="deck-reply-report"
@@ -1598,7 +1598,7 @@ function DeckCard({
         </Tooltip>
         {others.length > 0 && (
           <div className="deck-relay" ref={relayRef}>
-            <Tooltip label="Relay this terminal's report to another terminal — or drag the sprite onto its card">
+            <Tooltip label="Relay report to another terminal">
               <button
                 type="button"
                 className={`deck-reply-report${relayOpen ? " open" : ""}`}
@@ -1633,7 +1633,7 @@ function DeckCard({
         )}
         {others.length > 0 && (
           <div className="deck-relay" ref={pullRef}>
-            <Tooltip label="Pull another terminal's context into this one — fills the input with a brief of its recent work">
+            <Tooltip label="Pull another terminal's context here">
               <button
                 type="button"
                 className={`deck-reply-report${pullOpen ? " open" : ""}`}
