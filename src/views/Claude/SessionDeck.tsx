@@ -62,6 +62,32 @@ function focusPaneExternal(paneId: string) {
   window.dispatchEvent(new CustomEvent(FOCUS_PANE_EVENT, { detail: { paneId } }));
 }
 
+/** Handle a paste that carries an image: save each pasted image to a temp file
+ *  and inject its path (space-suffixed) into every target pane, the same way the
+ *  screenshot tool hands a captured image to a CLI. A plain input can't hold an
+ *  image, so without this a pasted screenshot would be silently dropped. Returns
+ *  true if it consumed an image (so the caller suppresses the default paste). */
+async function handleImagePaste(
+  e: React.ClipboardEvent,
+  targets: string[],
+): Promise<boolean> {
+  const files = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith("image/"));
+  if (files.length === 0) return false;
+  e.preventDefault();
+  if (targets.length === 0) return true;
+  for (const file of files) {
+    try {
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      const ext = file.type.split("/")[1] || "png";
+      const path = await invoke<string>("save_pasted_image", { bytes, ext });
+      for (const id of targets) fillPane(id, `${path} `);
+    } catch (err) {
+      console.warn("paste image failed", err);
+    }
+  }
+  return true;
+}
+
 /** Distill a permission prompt onto the sprite's hand-held sign — the tool
  *  being authorized ("Bash?"), or a generic go-ahead. */
 function signTextFor(msg: string | null): string {
@@ -680,6 +706,7 @@ export default function SessionDeck({
           }
           value={broadcast}
           onChange={(e) => setBroadcast(e.target.value)}
+          onPaste={(e) => void handleImagePaste(e, [...targets])}
           onKeyDown={(e) => {
             // Ignore Enter while an IME is composing — that Enter picks a
             // candidate, it must not submit the message.
@@ -1440,6 +1467,11 @@ function DeckCard({
         <button type="button" className="deck-card-label" onClick={onJump} title="Jump to this terminal">
           {label}
         </button>
+        {reportEntry?.model && (
+          <span className="deck-card-model" title={`Latest report summarized by ${reportEntry.model}`}>
+            {reportEntry.model}
+          </span>
+        )}
         <span
           className={`deck-meta-state ${status}`}
           title={`${identity.name} · ${identity.model} · ${cwdTail}`}
@@ -1551,6 +1583,7 @@ function DeckCard({
           placeholder="Reply to this terminal…"
           value={reply}
           onChange={(e) => setReply(e.target.value)}
+          onPaste={(e) => void handleImagePaste(e, [pane.paneId])}
           onKeyDown={(e) => {
             // Ignore Enter while an IME is composing (candidate selection).
             if (e.key === "Enter" && !e.nativeEvent.isComposing) {

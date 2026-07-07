@@ -16,6 +16,29 @@ fn err_string<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
+/// Persist raw image bytes (a pasted clipboard image) to a temp file and return
+/// its path, so a CLI that references images by path can pick it up — the same
+/// hand-off `screenshot_grab` uses. `ext` is the file extension inferred from the
+/// clipboard MIME type (e.g. "png", "jpeg"); it falls back to "png".
+#[tauri::command]
+pub async fn save_pasted_image(bytes: Vec<u8>, ext: Option<String>) -> Result<String, String> {
+    if bytes.is_empty() {
+        return Err("empty image".to_string());
+    }
+    let ext = ext
+        .as_deref()
+        .map(|e| e.trim().trim_start_matches('.'))
+        .filter(|e| !e.is_empty() && e.chars().all(|c| c.is_ascii_alphanumeric()))
+        .unwrap_or("png");
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let path = std::env::temp_dir().join(format!("cocodes-paste-{ts}.{ext}"));
+    std::fs::write(&path, &bytes).map_err(err_string)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// Position the overlay over the monitor under the cursor and show it.
 #[tauri::command]
 pub async fn screenshot_open(app: AppHandle) -> Result<(), String> {

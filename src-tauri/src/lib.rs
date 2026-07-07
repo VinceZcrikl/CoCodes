@@ -173,6 +173,7 @@ pub fn run() {
             screenshot::screenshot_cancel,
             screenshot::screenshot_grab,
             screenshot::screenshot_windows,
+            screenshot::save_pasted_image,
             git::git_status,
             git::git_log,
             git::git_commit_files,
