@@ -1553,17 +1553,7 @@ function DeckCard({
           )}
           {(status !== "waiting" || asked) && report && (
             <div className="deck-bubble" role="status">
-              <span className="deck-bubble-text">
-                {reportEntry?.model && (
-                  <span
-                    className="deck-bubble-model"
-                    title={`Summarized by ${reportEntry.model}`}
-                  >
-                    {reportEntry.model}
-                  </span>
-                )}
-                {report}
-              </span>
+              <span className="deck-bubble-text">{report}</span>
               <button
                 type="button"
                 className="deck-bubble-close"

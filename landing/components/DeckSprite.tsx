@@ -3,8 +3,25 @@
 export type SpriteStatus = "running" | "waiting" | "idle";
 export type Costume = "wizard" | "builder" | "sleuth" | "chef";
 
-/** The animated deck sprite — a blob in the persona's colour wearing its cast
- *  costume, with pose and expression driven by status (mirrors the app). */
+/** The real Claude Code mascot's raw shapes (32-unit viewBox), copied verbatim
+ *  from src/views/Persona/ClaudeMascot.tsx so the landing page's deck sprites
+ *  are the same creature as the shipping app, not a lookalike. */
+function MascotShapes() {
+  return (
+    <>
+      <rect x="9" y="20" width="4.4" height="6" rx="1.6" style={{ fill: "var(--mascot-deep, #a85b43)" }} />
+      <rect x="18.6" y="20" width="4.4" height="6" rx="1.6" style={{ fill: "var(--mascot-deep, #a85b43)" }} />
+      <rect x="5" y="6.5" width="22" height="15.5" rx="4.5" style={{ fill: "var(--mascot-base, #cc785c)" }} />
+      <rect x="7.5" y="8.5" width="17" height="3" rx="1.5" opacity="0.6" style={{ fill: "var(--mascot-sheen, #dd8e74)" }} />
+      <rect x="11" y="11.5" width="3.4" height="5.4" rx="1.7" fill="#2b1a14" />
+      <rect x="17.6" y="11.5" width="3.4" height="5.4" rx="1.7" fill="#2b1a14" />
+    </>
+  );
+}
+
+/** The animated deck sprite — the real Claude Code mascot re-tinted to the
+ *  persona's colour and dressed in its cast costume, pose driven by status
+ *  (mirrors src/views/Claude/SessionDeck.tsx's DeckSprite). */
 export function DeckSprite({
   color,
   costume,
@@ -23,11 +40,16 @@ export function DeckSprite({
       <div
         className="dk-body"
         style={{
-          background: `radial-gradient(circle at 34% 28%, ${color}, ${color}66 82%)`,
-          boxShadow: `0 0 14px ${color}33, inset 0 -4px 8px rgba(10,14,26,0.25)`,
+          ["--mascot-base" as string]: color,
+          ["--mascot-deep" as string]: `color-mix(in srgb, #000 28%, ${color})`,
+          ["--mascot-sheen" as string]: `color-mix(in srgb, #fff 30%, ${color})`,
+          filter: `drop-shadow(0 3px 8px ${color}66)`,
           animationDelay: `${-delay}ms`,
         }}
       >
+        <svg className="dk-mascot-svg" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <MascotShapes />
+        </svg>
         {costume === "wizard" && <span className="dk-hat-wizard" aria-hidden />}
         {costume === "builder" && <span className="dk-hat-hard" aria-hidden />}
         {costume === "sleuth" && (
@@ -37,9 +59,9 @@ export function DeckSprite({
           </>
         )}
         {costume === "chef" && <span className="dk-toque" aria-hidden />}
-        <span className="dk-eye l" />
-        <span className="dk-eye r" />
-        <span className="dk-mouth" />
+        {status === "idle" && !cheer && <span className="dk-eyes shut" aria-hidden><i className="l" /><i className="r" /></span>}
+        {status === "waiting" && <span className="dk-eyes plead" aria-hidden><i className="l" /><i className="r" /></span>}
+        {cheer && <span className="dk-eyes happy" aria-hidden><i className="l" /><i className="r" /></span>}
         {status === "running" && costume === "wizard" && (
           <>
             <span className="dk-spark-i" style={{ top: -4, left: -8 }}>✦</span>

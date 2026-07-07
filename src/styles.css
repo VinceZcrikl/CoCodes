@@ -4697,21 +4697,6 @@ body.resizing-row {
 .deck-bubble-text { flex: 1; min-width: 0; word-break: break-word; }
 /* Attribution chip: which model produced this report. Floated into the text so
    it reads inline ("[model] the sentence…") without stealing a flex column. */
-.deck-bubble-model {
-  float: left;
-  margin: 1px 5px 0 0;
-  padding: 0 5px;
-  border-radius: 5px;
-  border: 1px solid color-mix(in srgb, var(--accent-gold) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
-  color: color-mix(in srgb, var(--accent-gold) 70%, var(--text-main));
-  font-size: 9.5px;
-  font-weight: 600;
-  line-height: 1.5;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  cursor: default;
-}
 .deck-bubble-close {
   flex: none;
   display: flex;
@@ -4777,7 +4762,7 @@ body.resizing-row {
   border-color: var(--accent-gold);
 }
 .deck-card-label {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   text-align: left;
   font-size: 13px;
@@ -4792,6 +4777,25 @@ body.resizing-row {
   text-overflow: ellipsis;
 }
 .deck-card-label:hover { color: var(--accent-gold); }
+/* Model subtitle beside the title — which model wrote this card's latest report.
+   A quiet gold chip, second-rank to the title; shrinks before the title does. */
+.deck-card-model {
+  flex: 0 2 auto;
+  min-width: 0;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
+  color: color-mix(in srgb, var(--accent-gold) 70%, var(--text-main));
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
 .deck-icon-btn {
   display: flex;
   padding: 3px;
@@ -4811,6 +4815,7 @@ body.resizing-row {
    Fades out while the hover actions occupy that corner, so they never overlap. */
 .deck-meta-state {
   flex: none;
+  margin-left: auto;
   font-size: 10.5px;
   color: var(--text-muted);
   text-transform: capitalize;
