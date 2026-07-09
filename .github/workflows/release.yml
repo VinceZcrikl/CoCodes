@@ -49,6 +49,10 @@ jobs:
             tauri-args: ''
 
     runs-on: ${{ matrix.platform }}
+    # Cap every leg so a wedged step (notably macOS `hdiutil`/`bundle_dmg.sh`,
+    # which has hung for the full 24h default before) fails fast instead of
+    # blocking the whole release and burning a runner for a day.
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -170,11 +174,33 @@ jobs:
           APPLE_PASS: ${{ secrets.APPLE_PASSWORD }}
           TEAM_ID:    ${{ secrets.APPLE_TEAM_ID }}
 
+      # ── macOS DMG flake mitigation ─────────────────────────────────────
+      # `bundle_dmg.sh` failed in v0.6.5 seconds after "Running bundle_dmg.sh"
+      # — an `hdiutil attach` flake on the runner (a stale/leaked disk image
+      # left the mount wedged; the job even had to reap an orphan
+      # `diskimages-help`). Detach any disk images left over from a previous
+      # attempt so the fresh attach starts clean.
+      - name: Detach stale disk images (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          hdiutil info | awk '/^\/dev\/disk/ {print $1}' | while read -r dev; do
+            echo "Detaching stale image $dev"
+            hdiutil detach "$dev" -force || true
+          done
+
       # ── Build & publish ────────────────────────────────────────────────
       - name: Build Tauri app and publish release assets
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Force the bundler's `--skip-jenkins` path so `bundle_dmg.sh` never
+          # runs the Finder-prettifying AppleScript, which needs a GUI session
+          # the headless runner lacks. The bundler adds the flag only when
+          # CI == "true" AND TAURI_BUNDLER_DMG_IGNORE_CI != "true"; pin both so
+          # a still-styled DMG can't be one more way the mac leg fails.
+          CI: 'true'
+          TAURI_BUNDLER_DMG_IGNORE_CI: 'false'
           # Signing vars are only forwarded when the guard step confirmed all
           # six secrets are present. Empty strings tell tauri-action to skip
           # signing rather than attempting an import that would fail.
