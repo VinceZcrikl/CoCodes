@@ -6,6 +6,10 @@ import CostumedClaudeMascot, {
   MASCOT_COSTUMES,
   type MascotCostume,
 } from "./CostumedClaudeMascot";
+import CostumedGrokMascot, {
+  GROK_COSTUMES,
+  type GrokCostume,
+} from "./CostumedGrokMascot";
 
 /** Special avatar values that render a built-in mascot SVG rather than an image
  *  or emoji. Stored literally in meta.json as e.g. "__mascot:claude__". */
@@ -16,16 +20,32 @@ export const MASCOT_SENTINEL = {
   kimi:   "__mascot:kimi__",
 } as const;
 
-/** Sentinel for a costumed Claude mascot, e.g. "__mascot:claude:cowboy__". */
-export function costumeSentinel(costume: MascotCostume): string {
-  return `__mascot:claude:${costume}__`;
+export type MascotFamily = "claude" | "grok";
+
+/** Sentinel for a costumed family mascot, e.g. "__mascot:claude:cowboy__" or
+ *  "__mascot:grok:comet__". Each family has its own cast of costume ids. */
+export function costumeSentinel(
+  costume: MascotCostume | GrokCostume,
+  family: MascotFamily = "claude",
+): string {
+  return `__mascot:${family}:${costume}__`;
 }
 
-/** The costume encoded in an avatar value, if it is a costume sentinel. */
-function costumeOf(v: string): MascotCostume | null {
-  const m = /^__mascot:claude:([a-z]+)__$/.exec(v);
-  if (m && (MASCOT_COSTUMES as readonly string[]).includes(m[1])) {
-    return m[1] as MascotCostume;
+type CostumedAvatar =
+  | { family: "claude"; costume: MascotCostume }
+  | { family: "grok"; costume: GrokCostume };
+
+/** The costume + family encoded in an avatar value, if it is a costume sentinel. */
+function costumeOf(v: string): CostumedAvatar | null {
+  const m = /^__mascot:(claude|grok):([a-z]+)__$/.exec(v);
+  if (!m) return null;
+  const family = m[1] as MascotFamily;
+  const id = m[2];
+  if (family === "claude" && (MASCOT_COSTUMES as readonly string[]).includes(id)) {
+    return { family: "claude", costume: id as MascotCostume };
+  }
+  if (family === "grok" && (GROK_COSTUMES as readonly string[]).includes(id)) {
+    return { family: "grok", costume: id as GrokCostume };
   }
   return null;
 }
@@ -95,15 +115,22 @@ const MASCOT_SVG = {
 } as const;
 
 /** A persona avatar. Renders, in order of preference: a custom image, a custom
- *  emoji, the Claude mascot (for the default persona), or a tinted initial. */
+ *  emoji, a costumed/plain family mascot, or a tinted initial. */
 export default function PersonaAvatar({ id, name, avatar, className = "" }: Props) {
   const v = (avatar ?? "").trim();
 
-  const costume = costumeOf(v);
-  if (costume) {
+  const costumed = costumeOf(v);
+  if (costumed) {
+    if (costumed.family === "grok") {
+      return (
+        <span className={`persona-avatar persona-avatar-mascot ${className}`} aria-hidden="true">
+          <CostumedGrokMascot costume={costumed.costume} className="persona-mascot-svg" />
+        </span>
+      );
+    }
     return (
       <span className={`persona-avatar persona-avatar-mascot ${className}`} aria-hidden="true">
-        <CostumedClaudeMascot costume={costume} className="persona-mascot-svg" />
+        <CostumedClaudeMascot costume={costumed.costume} className="persona-mascot-svg" />
       </span>
     );
   }

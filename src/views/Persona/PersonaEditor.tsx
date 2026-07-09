@@ -14,10 +14,14 @@ import CostumedClaudeMascot, {
   MASCOT_COSTUMES,
   COSTUME_LABELS,
 } from "./CostumedClaudeMascot";
+import CostumedGrokMascot, {
+  GROK_COSTUMES,
+  GROK_COSTUME_LABELS,
+} from "./CostumedGrokMascot";
 
-/** Gallery rows, one per CLI: the CLI's mark leads its row, followed by that
- *  CLI's character variants (only the Claude creature has a wardrobe so far —
- *  the other marks are logos, but their rows leave room for future variants). */
+/** Gallery rows, one per CLI: the CLI's mascot leads its row, followed by that
+ *  CLI's own character wardrobe. Claude and Grok each have a distinct 24-role
+ *  cast; Codex is a full creature without variants yet; Kimi is still a mark. */
 const AVATAR_ROWS: {
   label: string;
   cells: { sentinel: string; title: string; Component: React.ComponentType<{ className?: string }> }[];
@@ -27,7 +31,7 @@ const AVATAR_ROWS: {
     cells: [
       { sentinel: MASCOT_SENTINEL.claude, title: "Claude mascot", Component: ClaudeMascot },
       ...MASCOT_COSTUMES.map((costume) => ({
-        sentinel: costumeSentinel(costume),
+        sentinel: costumeSentinel(costume, "claude"),
         title: COSTUME_LABELS[costume],
         Component: ({ className }: { className?: string }) => (
           <CostumedClaudeMascot costume={costume} className={className} />
@@ -35,8 +39,20 @@ const AVATAR_ROWS: {
       })),
     ],
   },
-  { label: "Codex", cells: [{ sentinel: MASCOT_SENTINEL.codex, title: "Codex mark", Component: CodexMascot }] },
-  { label: "Grok", cells: [{ sentinel: MASCOT_SENTINEL.grok, title: "Grok mark", Component: GrokMascot }] },
+  { label: "Codex", cells: [{ sentinel: MASCOT_SENTINEL.codex, title: "Codex mascot", Component: CodexMascot }] },
+  {
+    label: "Grok",
+    cells: [
+      { sentinel: MASCOT_SENTINEL.grok, title: "Grok mascot", Component: GrokMascot },
+      ...GROK_COSTUMES.map((costume) => ({
+        sentinel: costumeSentinel(costume, "grok"),
+        title: GROK_COSTUME_LABELS[costume],
+        Component: ({ className }: { className?: string }) => (
+          <CostumedGrokMascot costume={costume} className={className} />
+        ),
+      })),
+    ],
+  },
   { label: "Kimi", cells: [{ sentinel: MASCOT_SENTINEL.kimi, title: "Kimi mark", Component: KimiMascot }] },
 ];
 

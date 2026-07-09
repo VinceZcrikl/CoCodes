@@ -58,8 +58,8 @@ export const COSTUME_LABELS: Record<MascotCostume, string> = {
   chef: "Chef",
 };
 
-/** Costume props drawn behind the mascot (capes, quills and the like). */
-function CostumeBack({ costume }: { costume: MascotCostume }) {
+/** Costume props drawn behind the Claude mascot (capes, quills and the like). */
+export function MascotCostumeBack({ costume }: { costume: MascotCostume }) {
   switch (costume) {
     case "hero":
       // Crimson cape flaring out past the body's sides and bottom.
@@ -82,10 +82,10 @@ function CostumeBack({ costume }: { costume: MascotCostume }) {
   }
 }
 
-/** Costume props drawn in front of the mascot (hats, bands, specs, …).
+/** Costume props drawn in front of the Claude mascot (hats, bands, specs, …).
  *  Geometry notes: head top y=6.5 · body x 5–27 · eye centres (12.7, 14.2) and
  *  (19.3, 14.2) in the 32-unit viewBox. */
-function CostumeFront({ costume }: { costume: MascotCostume }) {
+export function MascotCostumeFront({ costume }: { costume: MascotCostume }) {
   switch (costume) {
     case "cowboy":
       return (
@@ -301,9 +301,9 @@ export default function CostumedClaudeMascot({
       aria-hidden="true"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <CostumeBack costume={costume} />
+      <MascotCostumeBack costume={costume} />
       <ClaudeMascotShapes />
-      <CostumeFront costume={costume} />
+      <MascotCostumeFront costume={costume} />
     </svg>
   );
 }
