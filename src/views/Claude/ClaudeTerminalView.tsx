@@ -286,7 +286,11 @@ export default function ClaudeTerminalView({
           );
         })}
       </section>
-      {!mini && deckEverOpened && activeSession && (
+      {/* The deck owns window-level outside-click handling, so only the visible
+          keep-alive panel may mount it. Otherwise every hidden persona/CLI deck
+          treats clicks inside the visible deck as outside clicks and closes the
+          shared store before actions such as "Dock" receive their click. */}
+      {!mini && panelVisible && deckEverOpened && activeSession && (
         <SessionDeck
           open={deckOpen}
           layout={resolveLayout(activeSession)}

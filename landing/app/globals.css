@@ -31,6 +31,52 @@ body {
   color: #fff8e8;
 }
 
+/* ---- mouse spacetime rift ---- */
+.mouse-rift-refractions {
+  position: fixed;
+  inset: 0;
+  z-index: 89;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.mouse-rift-refraction {
+  position: absolute;
+  display: block;
+  opacity: 0;
+  visibility: hidden;
+  background: linear-gradient(
+    180deg,
+    rgba(98, 79, 218, 0.035),
+    rgba(255, 69, 10, 0.055)
+  );
+  -webkit-backdrop-filter: blur(1.1px) saturate(1.6) contrast(1.14) hue-rotate(-8deg);
+  backdrop-filter: blur(1.1px) saturate(1.6) contrast(1.14) hue-rotate(-8deg);
+  box-shadow:
+    inset 0 8px 18px rgba(112, 71, 255, 0.05),
+    inset 0 -7px 16px rgba(255, 67, 8, 0.07);
+  will-change: clip-path, opacity;
+}
+
+.mouse-rift {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mouse-rift,
+  .mouse-rift-refractions {
+    display: none;
+  }
+}
+
 /* ---- reveal on scroll ---- */
 .reveal {
   opacity: 0;

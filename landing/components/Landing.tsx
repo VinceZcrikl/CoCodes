@@ -12,10 +12,12 @@ import ThemeGallery from "./ThemeGallery";
 import FeatureBento from "./FeatureBento";
 import DownloadCta from "./DownloadCta";
 import Footer from "./Footer";
+import MouseRift from "./MouseRift";
 
 export default function Landing() {
   return (
     <LangProvider>
+      <MouseRift />
       <Nav />
       <main>
         <Hero />
