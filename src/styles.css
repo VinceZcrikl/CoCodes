@@ -2751,6 +2751,30 @@ body.resizing-row {
   height: 46px;
   display: block;
 }
+/* Custom persona face (uploaded image / emoji) — same footprint as the mascot SVG
+   so the deck sprite stays aligned with costumed / plain mascots. */
+.sprite-custom-img {
+  position: relative;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--sprite-color) 40%, transparent);
+}
+.sprite-custom-emoji {
+  position: relative;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 1;
+  user-select: none;
+}
 
 /* ── Mascot wardrobe & expression eyes ──
    The mascot SVG itself never changes; character costumes (hashed per pane)

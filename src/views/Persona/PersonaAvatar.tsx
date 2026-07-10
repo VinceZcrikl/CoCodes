@@ -36,7 +36,7 @@ type CostumedAvatar =
   | { family: "grok"; costume: GrokCostume };
 
 /** The costume + family encoded in an avatar value, if it is a costume sentinel. */
-function costumeOf(v: string): CostumedAvatar | null {
+export function costumeOf(v: string): CostumedAvatar | null {
   const m = /^__mascot:(claude|grok):([a-z]+)__$/.exec(v);
   if (!m) return null;
   const family = m[1] as MascotFamily;
@@ -48,6 +48,30 @@ function costumeOf(v: string): CostumedAvatar | null {
     return { family: "grok", costume: id as GrokCostume };
   }
   return null;
+}
+
+/** Wardrobe index (0–23) for a costumed avatar, matching Session Deck cos0–cos23. */
+export function costumeIndexOf(v: string): number | null {
+  const c = costumeOf(v);
+  if (!c) return null;
+  if (c.family === "claude") return MASCOT_COSTUMES.indexOf(c.costume);
+  return GROK_COSTUMES.indexOf(c.costume);
+}
+
+/** True when the avatar is a built-in plain (uncostumed) mascot sentinel. */
+export function isPlainMascotAvatar(v: string): boolean {
+  const t = v.trim();
+  return (
+    t === MASCOT_SENTINEL.claude ||
+    t === MASCOT_SENTINEL.codex ||
+    t === MASCOT_SENTINEL.grok ||
+    t === MASCOT_SENTINEL.kimi
+  );
+}
+
+/** True when the avatar is a custom image URL / data URL. */
+export function isImageAvatar(v: string): boolean {
+  return isImage(v.trim());
 }
 
 /** Stable accent palette for persona avatars (mirrors orb's member palette). */

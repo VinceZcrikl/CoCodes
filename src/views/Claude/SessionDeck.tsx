@@ -21,6 +21,14 @@ import ClaudeMascot from "../Persona/ClaudeMascot";
 import CodexMascot from "../Persona/CodexMascot";
 import GrokMascot from "../Persona/GrokMascot";
 import KimiMascot from "../Persona/KimiMascot";
+import CostumedGrokMascot, { type GrokCostume } from "../Persona/CostumedGrokMascot";
+import {
+  MASCOT_SENTINEL,
+  costumeOf,
+  costumeIndexOf,
+  isPlainMascotAvatar,
+  isImageAvatar,
+} from "../Persona/PersonaAvatar";
 import { usePaletteStore } from "../../state/paletteStore";
 import { cssVarsForPalette } from "../../state/uiPalette";
 import {
@@ -167,7 +175,7 @@ export default function SessionDeck({
   };
   const { busyPanes } = useTerminalBusy();
   const attention = useAttentionStore((s) => s.queue);
-  const { get: getPersona } = usePersonas();
+  const { get: getPersona, personas } = usePersonas();
 
   // Model picker — which provider the sprites summarize with (speech bubble +
   // hover status). "Auto" follows each pane persona's base model; an explicit
@@ -203,8 +211,19 @@ export default function SessionDeck({
     return out.filter((p) => p.cli); // skip unbound (empty) panes
   }, [layout]);
 
-  // The deck's cast — paneId → character costume, distinct across terminals.
-  const costumes = useMemo(() => castCostumes(panes), [panes]);
+  // persona id → avatar string (reacts when the library is edited).
+  const avatarByProfile = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of personas) m.set(p.id, p.avatar ?? "");
+    return m;
+  }, [personas]);
+
+  // The deck's cast — paneId → character costume. Personas with an explicit
+  // costume avatar pin that wardrobe slot; remaining panes fill free slots.
+  const costumes = useMemo(
+    () => castCostumes(panes, sessionProfileId, avatarByProfile),
+    [panes, sessionProfileId, avatarByProfile],
+  );
 
   // paneId → status. Attention (waiting on user) outranks running outranks idle.
   const waitingPaneIds = useMemo(() => {
@@ -751,6 +770,7 @@ export default function SessionDeck({
             key={p.paneId}
             pane={p}
             costume={costumes.get(p.paneId) ?? 0}
+            avatar={avatarByProfile.get(p.profileId ?? sessionProfileId) ?? ""}
             status={statusOf(p)}
             sessionProfileId={sessionProfileId}
             checked={checked?.has(p.paneId) ?? false}
@@ -921,15 +941,40 @@ const RUN_BADGES: Record<number, React.ReactNode> = {
   23: <span className="sprite-steam" aria-hidden="true"><i /><i /></span>,
 };
 
-/** Cast the deck: each terminal gets a character it keeps (drawn from its pane
- *  id), and no two terminals on stage wear the same one — a hash collision
- *  probes forward to the next free costume, in layout order. Characters repeat
- *  only when a session has more panes than costumes. State changes a sprite's
- *  pose and expression, never its costume. */
-function castCostumes(panes: PaneNode[]): Map<string, number> {
+/** Cast the deck: personas with an explicit costume avatar pin that wardrobe
+ *  index (so the Session Deck sprite matches the persona picker). Remaining
+ *  terminals fill free slots from their pane id — a hash collision probes
+ *  forward so no two unpinned panes share a costume until the wardrobe is
+ *  exhausted. State changes a sprite's pose and expression, never its costume. */
+function castCostumes(
+  panes: PaneNode[],
+  sessionProfileId: string,
+  avatarByProfile: Map<string, string>,
+): Map<string, number> {
   const out = new Map<string, number>();
   const taken = new Set<number>();
+
+  // Pin costume avatars first so auto-cast panes avoid those slots when possible.
   for (const p of panes) {
+    const avatar = (avatarByProfile.get(p.profileId ?? sessionProfileId) ?? "").trim();
+    const idx = costumeIndexOf(avatar);
+    if (idx == null || idx < 0) continue;
+    out.set(p.paneId, idx);
+    taken.add(idx);
+  }
+
+  for (const p of panes) {
+    if (out.has(p.paneId)) continue;
+    // Explicit plain / custom faces don't need a wardrobe pin — still assign a
+    // stable cos index for work-animation rhythm when the face later falls back
+    // to a mascot, but don't reserve a unique slot.
+    const avatar = (avatarByProfile.get(p.profileId ?? sessionProfileId) ?? "").trim();
+    if (avatar && (isPlainMascotAvatar(avatar) || isImageAvatar(avatar) || !avatar.startsWith("__mascot:"))) {
+      // Custom image / emoji / plain mascot: cos class still drives body motion
+      // when a mascot is shown; use a stable per-pane pick without uniqueness.
+      out.set(p.paneId, spriteHash(`cos:${p.paneId}`) % COSTUME_COUNT);
+      continue;
+    }
     let c = spriteHash(`cos:${p.paneId}`) % COSTUME_COUNT;
     if (taken.size < COSTUME_COUNT) {
       while (taken.has(c)) c = (c + 1) % COSTUME_COUNT;
@@ -940,6 +985,81 @@ function castCostumes(panes: PaneNode[]): Map<string, number> {
   return out;
 }
 
+/** Resolve how a persona avatar should appear on a deck sprite.
+ *  Costume avatars pin the wardrobe; plain mascots / images / emoji override
+ *  the face; an empty avatar falls back to the pane's CLI mascot + auto cast. */
+function spriteFaceFromAvatar(avatar: string, cli: string): {
+  /** Render CSS wardrobe props (Claude cos hats). */
+  wardrobe: boolean;
+  /** Face is a built-in mascot (expression eyes / badges apply). */
+  isMascot: boolean;
+  /** Face element inside `.sprite-body`. null → drawn blob. */
+  face: React.ReactNode | null;
+} {
+  const v = avatar.trim();
+  const costumed = costumeOf(v);
+  if (costumed?.family === "claude") {
+    // Claude wardrobe is CSS props around the plain mascot — same cos index as
+    // the persona picker's CostumedClaudeMascot.
+    return {
+      wardrobe: true,
+      isMascot: true,
+      face: <ClaudeMascot className="sprite-mascot-svg" />,
+    };
+  }
+  if (costumed?.family === "grok") {
+    // Grok's cast is SVG-drawn (no CSS wardrobe). The cos class still drives
+    // body-work animations by index.
+    return {
+      wardrobe: false,
+      isMascot: true,
+      face: (
+        <CostumedGrokMascot
+          costume={costumed.costume as GrokCostume}
+          className="sprite-mascot-svg"
+        />
+      ),
+    };
+  }
+  if (v === MASCOT_SENTINEL.claude) {
+    return { wardrobe: false, isMascot: true, face: <ClaudeMascot className="sprite-mascot-svg" /> };
+  }
+  if (v === MASCOT_SENTINEL.codex) {
+    return { wardrobe: false, isMascot: true, face: <CodexMascot className="sprite-mascot-svg" /> };
+  }
+  if (v === MASCOT_SENTINEL.grok) {
+    return { wardrobe: false, isMascot: true, face: <GrokMascot className="sprite-mascot-svg" /> };
+  }
+  if (v === MASCOT_SENTINEL.kimi) {
+    return { wardrobe: false, isMascot: true, face: <KimiMascot className="sprite-mascot-svg" /> };
+  }
+  if (v && isImageAvatar(v)) {
+    return {
+      wardrobe: false,
+      isMascot: false,
+      face: <img className="sprite-custom-img" src={v} alt="" draggable={false} />,
+    };
+  }
+  if (v && !v.startsWith("__mascot:")) {
+    // Emoji / short text avatar.
+    return {
+      wardrobe: false,
+      isMascot: false,
+      face: <span className="sprite-custom-emoji" aria-hidden="true">{v}</span>,
+    };
+  }
+  // Empty / unknown — CLI mascot + auto-cast wardrobe (or blob for unknown CLIs).
+  const CliMascot = SPRITE_MASCOTS[cli];
+  if (CliMascot) {
+    return {
+      wardrobe: true,
+      isMascot: true,
+      face: <CliMascot className="sprite-mascot-svg" />,
+    };
+  }
+  return { wardrobe: false, isMascot: false, face: null };
+}
+
 /** The card's animated mascot, mirroring the pane's state: working (bobbing /
  *  swaying / tapping / pondering / scribbling — picked per pane; the strenuous
  *  rhythms break a sweat, ponderers float thought dots, and every worker blinks
@@ -948,13 +1068,11 @@ function castCostumes(panes: PaneNode[]): Map<string, number> {
  *  with half-open eyes and rising bubbles), cheering (report just landed —
  *  a happy hop under a burst of sparkles).
  *
- *  Faces are diverse: known CLIs wear their real mascot (claude → the Claude
- *  Code avatar); others get a drawn blob whose shape (round / square / antenna /
- *  ears) derives from the pane id. Mascots additionally wear the character the
- *  deck cast them as (see castCostumes — distinct per terminal; state changes
- *  pose and expression, never the costume) and swap in overlay "expression
- *  eyes" for moods the static face can't make. Every sprite runs at its own
- *  animation phase so a deck full of workers never moves in lockstep. */
+ *  Faces follow the persona's selected avatar when set (costume / plain mascot /
+ *  image / emoji); otherwise known CLIs wear their real mascot and the deck
+ *  casts a wardrobe costume (see castCostumes). Mascots swap in overlay
+ *  "expression eyes" for moods the static face can't make. Every sprite runs
+ *  at its own animation phase so a deck full of workers never moves in lockstep. */
 function DeckSprite({
   status,
   color,
@@ -963,6 +1081,7 @@ function DeckSprite({
   cli,
   paneId,
   costume,
+  avatar,
   sign,
 }: {
   status: PaneStatus;
@@ -971,12 +1090,14 @@ function DeckSprite({
   name: string;
   cli: string;
   paneId: string;
-  /** The terminal's character (0–7), cast once per deck — state-invariant. */
+  /** The terminal's character (0–23), cast once per deck — state-invariant. */
   costume: number;
+  /** Persona avatar string — costume sentinel, image, emoji, or empty. */
+  avatar: string;
   /** Waiting only: the hand-held sign's text ("Bash?"). null = no sign. */
   sign: string | null;
 }) {
-  const Mascot = SPRITE_MASCOTS[cli];
+  const look = spriteFaceFromAvatar(avatar, cli);
   // Pat — clicking the sprite pets it: a happy squeeze under drifting hearts.
   const [pat, setPat] = useState(false);
   const patTimer = useRef<number | undefined>(undefined);
@@ -992,10 +1113,10 @@ function DeckSprite({
   const work = (h >> 2) % 5; // work rhythm: bob / sway / tap / think / scribble
   const waitV = (h >> 5) % 2; // waiting style: jump-"!" / shiver-"?"
   const idleV = (h >> 6) % 2; // idle style: sleep-zzz / daydream-bubbles
-  const isMascot = !!Mascot;
+  const isMascot = look.isMascot;
   const phase = { animationDelay: `${-(h % 900)}ms` };
   // Running props follow the character for mascots (see RUN_SWEAT / RUN_BADGES
-  // / RUN_EYES); blobs keep their hashed work rhythm's props.
+  // / RUN_EYES); blobs / custom faces keep their hashed work rhythm's props.
   const sweat = isMascot ? RUN_SWEAT.has(costume) : work === 2 || work === 4;
   const dots = isMascot ? costume === 3 : work === 3;
   // Overlay eye mood — expression eyes drawn over the mascot's own (a skin
@@ -1018,18 +1139,19 @@ function DeckSprite({
             ? "shut" // fast asleep
             : "drowsy" // half-lidded daydream
           : runningMood;
+  const hasFace = look.face != null;
   return (
     <div
-      className={`deck-sprite ${status} v${variant} work${work} wait${waitV} idle${idleV} cos${costume}${Mascot ? " mascot" : ""}${cheer ? " cheer" : ""}${pat ? " pat" : ""}`}
+      className={`deck-sprite ${status} v${variant} work${work} wait${waitV} idle${idleV} cos${costume}${hasFace ? " mascot" : ""}${cheer ? " cheer" : ""}${pat ? " pat" : ""}`}
       title={name}
       style={{ ["--sprite-color" as string]: color } as React.CSSProperties}
       onClick={onPat}
     >
-      {Mascot ? (
+      {hasFace ? (
         <div className="sprite-body sprite-mascot" style={phase}>
-          {/* Wardrobe — the terminal's cast character, layered around the
-              unchanged mascot (see COSTUME_PROPS). */}
-          {COSTUME_PROPS[costume]}
+          {/* Wardrobe — Claude CSS props when the persona (or auto-cast) uses
+              the shared cos0–23 cast. Grok SVG costumes / custom faces skip it. */}
+          {look.wardrobe && COSTUME_PROPS[costume]}
           {/* State props — halo when sound asleep, wings when daydreaming. */}
           {status === "idle" && !cheer && idleV === 0 && (
             <span className="m-halo" aria-hidden="true" />
@@ -1040,10 +1162,9 @@ function DeckSprite({
               <span className="m-wing r" aria-hidden="true" />
             </>
           )}
-          <Mascot className="sprite-mascot-svg" />
-          {/* Expression eyes — drawn over the mascot's own for moods its
-              static face can't make. */}
-          {eyeMood && (
+          {look.face}
+          {/* Expression eyes — only over built-in mascot SVGs. */}
+          {isMascot && eyeMood && (
             <span className={`m-eyes ${eyeMood}`} aria-hidden="true">
               <i className="l" /><i className="r" />
             </span>
@@ -1089,7 +1210,7 @@ function DeckSprite({
       {status === "running" && sweat && (
         <span className="sprite-sweat" aria-hidden="true" />
       )}
-      {status === "running" && isMascot && RUN_BADGES[costume]}
+      {status === "running" && isMascot && look.wardrobe && RUN_BADGES[costume]}
       {cheer && (
         <span className="sprite-sparkles" aria-hidden="true">
           <i>✦</i><i>✦</i><i>✦</i>
@@ -1102,6 +1223,7 @@ function DeckSprite({
 function DeckCard({
   pane,
   costume,
+  avatar,
   status,
   sessionProfileId,
   checked,
@@ -1118,8 +1240,10 @@ function DeckCard({
   getPersona,
 }: {
   pane: PaneNode;
-  /** The terminal's character (0–7), cast once per deck by castCostumes. */
+  /** The terminal's character (0–23), cast once per deck by castCostumes. */
   costume: number;
+  /** Persona avatar string — synced into the deck sprite face/costume. */
+  avatar: string;
   status: PaneStatus;
   sessionProfileId: string;
   checked: boolean;
@@ -1513,6 +1637,7 @@ function DeckCard({
               cli={pane.cli}
               paneId={pane.paneId}
               costume={costume}
+              avatar={avatar || identity.avatar}
               sign={status === "waiting" ? signTextFor(attentionMsg) : null}
             />
           </div>
