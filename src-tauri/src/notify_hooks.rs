@@ -53,16 +53,16 @@ pub fn ensure_started(app: &AppHandle) -> Result<u16, String> {
     Ok(port)
 }
 
-/// The `--settings` JSON string for a Claude spawn: a Notification hook that
+/// The settings JSON for a Claude spawn: a Notification hook that
 /// POSTs its payload (with `notification_type`) to this server, tagged with the
 /// terminal `key` so the cockpit can resolve the waiting pane. Returns `None`
 /// when the server isn't up (then no hook is attached — claude runs normally).
-pub fn claude_settings_arg(key: &str) -> Option<String> {
+pub fn claude_settings_json(key: &str) -> Option<String> {
     let port = PORT.get()?;
     let url = format!("http://127.0.0.1:{port}/notify?cli=claude&id={}", encode(key));
     // The hook receives the notification JSON on stdin; forward it so the server
     // can read `notification_type`. `-s`/`-m` keep it quiet and bounded.
-    let command = format!("curl -s -m 5 -X POST --data-binary @- '{url}'");
+    let command = hook_command(&url);
     Some(
         json!({
             "hooks": { "Notification": [ { "hooks": [ { "type": "command", "command": command } ] } ] }
@@ -76,7 +76,7 @@ pub fn claude_settings_arg(key: &str) -> Option<String> {
 /// Codex fail config parsing with "expected struct HooksToml"). So we emit the
 /// `PermissionRequest` matcher group inline, with a `command` that POSTs the
 /// approval event to this server tagged with the terminal `key`. The command's
-/// URL uses single quotes only, so it stays a clean TOML basic string. Returns
+/// URL is quoted for the shell so `&id=...` is not split on Windows. Returns
 /// `None` when the server isn't up (then no hook is attached — codex runs as is).
 pub fn codex_hooks_config_arg(key: &str) -> Option<String> {
     let port = PORT.get()?;
@@ -84,10 +84,19 @@ pub fn codex_hooks_config_arg(key: &str) -> Option<String> {
         "http://127.0.0.1:{port}/notify?cli=codex&kind=permission&id={}",
         encode(key)
     );
-    let command = format!("curl -s -m 5 -X POST --data-binary @- '{url}'");
+    let command = hook_command(&url);
     Some(format!(
-        "hooks.PermissionRequest=[{{ hooks = [{{ type = \"command\", command = \"{command}\" }}] }}]"
+        "hooks.PermissionRequest=[{{ hooks = [{{ type = \"command\", command = {} }}] }}]",
+        toml_str(&command)
     ))
+}
+
+fn hook_command(url: &str) -> String {
+    format!("curl -s -m 5 -X POST --data-binary @- \"{url}\"")
+}
+
+fn toml_str(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 /// Minimal percent-encoding for the bits of a terminal key that aren't query-safe

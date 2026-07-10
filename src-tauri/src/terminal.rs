@@ -45,6 +45,7 @@ struct TerminalSession {
     master: Box<dyn MasterPty + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     persona_file: Option<PathBuf>,
+    claude_settings_file: Option<PathBuf>,
     /// Most-recent PTY output, replayed when an xterm view reconnects to this
     /// still-running session (after a reload / remount).
     buffer: Arc<Mutex<Vec<u8>>>,
@@ -448,6 +449,31 @@ fn write_persona_file(id: &str, ctx: &PersonaContext, identity: Option<&str>) ->
     }
 }
 
+fn write_claude_settings_file(id: &str) -> Option<PathBuf> {
+    let settings = crate::notify_hooks::claude_settings_json(id)?;
+    let safe_id = filename_part(id);
+    let path = std::env::temp_dir().join(format!(
+        "cocodes-claude-settings-{}-{safe_id}.json",
+        std::process::id()
+    ));
+    match std::fs::write(&path, settings) {
+        Ok(()) => Some(path),
+        Err(e) => {
+            tracing::warn!("terminal: failed to write claude settings file: {e}");
+            None
+        }
+    }
+}
+
+fn filename_part(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' => c,
+            _ => '_',
+        })
+        .collect()
+}
+
 /// Render `s` as a TOML basic string (double-quoted, with `\` and `"` escaped)
 /// for a Codex `-c key=value` override. Values are URLs / model / provider names,
 /// but quoting defensively keeps a stray character from breaking the TOML parse.
@@ -592,6 +618,11 @@ pub async fn terminal_open(
     } else {
         None
     };
+    let claude_settings_file = if cli_name == "claude" {
+        write_claude_settings_file(&id)
+    } else {
+        None
+    };
     // Whether the SOUL replaces Claude Code's default system prompt
     // (`--system-prompt-file`) or appends to it (`--append-system-prompt-file`,
     // the default). Replace lets the persona fully dominate on third-party
@@ -661,9 +692,9 @@ pub async fn terminal_open(
         // MCP servers are NOT injected here — they are written to
         // ~/.claude/settings.json by mcp_save() so Claude Code picks them up from
         // the file, which avoids double-starting the same MCP process.
-        if let Some(settings) = crate::notify_hooks::claude_settings_arg(&id) {
+        if let Some(settings) = claude_settings_file.as_ref() {
             cmd.arg("--settings");
-            cmd.arg(settings);
+            cmd.arg(settings.as_os_str());
         }
     }
 
@@ -834,10 +865,14 @@ pub async fn terminal_open(
         .try_clone_reader()
         .map_err(TerminalError::internal)?;
 
-    let child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| TerminalError::Spawn(e.to_string()))?;
+    let child = match pair.slave.spawn_command(cmd) {
+        Ok(child) => child,
+        Err(e) => {
+            cleanup_temp_file(&persona_file);
+            cleanup_temp_file(&claude_settings_file);
+            return Err(TerminalError::Spawn(e.to_string()));
+        }
+    };
     // Drop the slave handle so the master sees EOF once claude exits — without
     // this the read thread would block forever after the child is gone.
     drop(pair.slave);
@@ -851,6 +886,7 @@ pub async fn terminal_open(
             master: pair.master,
             child,
             persona_file,
+            claude_settings_file,
             buffer: buffer.clone(),
             detected_model: detected_model.clone(),
         },
@@ -950,7 +986,8 @@ pub async fn terminal_open(
         let reg = app_for_thread.state::<TerminalRegistry>();
         let session = reg.sessions.lock().unwrap().remove(&id_for_thread);
         let code = session.and_then(|mut s| {
-            cleanup_persona(&s.persona_file);
+            cleanup_temp_file(&s.persona_file);
+            cleanup_temp_file(&s.claude_settings_file);
             s.child.wait().ok().map(|status| status.exit_code() as i32)
         });
         let _ = app_for_thread.emit(
@@ -1148,13 +1185,14 @@ pub async fn terminal_close(
     if let Some(mut session) = session {
         let _ = session.child.kill();
         let _ = session.child.wait();
-        cleanup_persona(&session.persona_file);
+        cleanup_temp_file(&session.persona_file);
+        cleanup_temp_file(&session.claude_settings_file);
     }
     Ok(())
 }
 
-fn cleanup_persona(persona_file: &Option<PathBuf>) {
-    if let Some(path) = persona_file {
+fn cleanup_temp_file(file: &Option<PathBuf>) {
+    if let Some(path) = file {
         let _ = std::fs::remove_file(path);
     }
 }
