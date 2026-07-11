@@ -1,4 +1,4 @@
-export const MAX_LAVA_WEBGL_CURTAINS = 6;
+export const MAX_LAVA_WEBGL_CURTAINS = 9;
 
 export type LavaWebGLQuality = 0 | 1 | 2;
 
@@ -17,6 +17,10 @@ export type LavaWebGLCurtain = {
   heat: number;
   tangentX: number;
   tangentY: number;
+  /** 0 = broad sheet, 1 = pillar, 2 = filament. */
+  variant: 0 | 1 | 2;
+  /** 0 = tapered, 1 = split, 2 = continues beyond the viewport. */
+  tipStyle: 0 | 1 | 2;
 };
 
 export type LavaWebGLRenderer = {
@@ -49,7 +53,7 @@ const FRAGMENT_SHADER = `#version 300 es
 precision highp float;
 precision highp int;
 
-#define MAX_CURTAINS 6
+#define MAX_CURTAINS 9
 #define LAVA_QUALITY __QUALITY__
 
 uniform vec2 uResolution;
@@ -60,6 +64,7 @@ uniform int uCurtainCount;
 // A: top.xy, bottom.xy
 // B: topWidth, bottomWidth, opacity, seed
 // C: ageSeconds, flowSpeedPxPerSecond, drain01, heat01
+// D: tangent.xy, variant, tipStyle
 uniform vec4 uCurtainA[MAX_CURTAINS];
 uniform vec4 uCurtainB[MAX_CURTAINS];
 uniform vec4 uCurtainC[MAX_CURTAINS];
@@ -157,6 +162,8 @@ void main() {
     float flowSpeed = max(c.y, 1.0);
     float drain = clamp(c.z, 0.0, 1.0);
     float heat = clamp(c.w, 0.0, 1.0);
+    float variant = d.z;
+    float tipStyle = d.w;
 
     // Conservative bounds include the glow, smoke, and sparks. Expensive
     // material noise only runs close to a visible curtain.
@@ -172,11 +179,41 @@ void main() {
     float rawV = (fragPx.y - topPt.y) / lengthPx;
     float v = clamp(rawV, 0.0, 1.0);
     float curve = v * v * (3.0 - 2.0 * v);
-    float centerX = mix(topPt.x, bottomPt.x, curve);
-    centerX += sin(v * 5.5 + uTime * 0.55 + seed * 6.28318) *
-      (0.7 + 1.3 * v) * heat;
 
-    float halfWidth = max(1.0, 0.5 * mix(topWidth, bottomWidth, curve));
+    // The silhouette moves much more slowly than the hot material inside it.
+    // A low-frequency bend and a stable seeded drift keep the fall organic
+    // without making a heavy sheet flap like fabric.
+    float centerX = mix(topPt.x, bottomPt.x, curve);
+    centerX += sin(v * 3.2 + uTime * 0.30 + seed * 6.28318) *
+      (0.30 + 0.82 * v) * heat;
+    centerX += (valueNoise(vec2(v * 2.6 + seed * 31.0, seed * 13.0)) - 0.5) *
+      maxWidth * 0.11 * smoothstep(0.10, 0.88, v);
+
+    // Different width profiles produce broad sheets, necked pillars and
+    // trailing filaments instead of uniformly interpolated capsules.
+    float widthProfile = 1.0;
+    if (variant < 0.5) {
+      float neck = exp(-pow((v - 0.20) / 0.13, 2.0));
+      float lowerSwell = smoothstep(0.34, 0.58, v) *
+        (1.0 - smoothstep(0.72, 0.94, v));
+      widthProfile = 1.01 - neck * 0.10 + lowerSwell * 0.10;
+    } else if (variant < 1.5) {
+      widthProfile = 0.96 - 0.16 * smoothstep(0.18, 0.58, v) +
+        0.10 * smoothstep(0.58, 0.82, v);
+    } else {
+      widthProfile = 0.92 - 0.28 * smoothstep(0.34, 0.92, v);
+    }
+    float tipTaper = 1.0;
+    if (tipStyle < 0.5) {
+      tipTaper = 1.0 - mix(0.48, 0.70, step(1.5, variant)) *
+        smoothstep(0.70, 1.0, v);
+    } else if (tipStyle < 1.5) {
+      tipTaper = 1.0 - 0.14 * smoothstep(0.76, 1.0, v);
+    }
+    float halfWidth = max(
+      1.0,
+      0.5 * mix(topWidth, bottomWidth, curve) * widthProfile * tipTaper
+    );
     float x = (fragPx.x - centerX) / halfWidth;
     float leftEdgeNoise = valueNoise(vec2(
       v * 5.0 + seed * 37.1,
@@ -191,8 +228,16 @@ void main() {
       v * 13.0 + seed * 53.0,
       seed * 7.3 + uTime * 0.018
     ));
-    float boundary = 1.0 + (edgeNoise - 0.5) * 0.30 +
-      (edgeFine - 0.5) * 0.11 + sin(v * 15.0 + seed * 9.0) * 0.045;
+    float boundary = 1.0 + (edgeNoise - 0.5) * mix(0.42, 0.25, step(1.5, variant)) +
+      (edgeFine - 0.5) * 0.15 + sin(v * 15.0 + seed * 9.0) * 0.055;
+    float edgeBiteField = valueNoise(vec2(
+      v * 8.4 + seed * 47.0,
+      (x < 0.0 ? seed * 19.0 : seed * 31.0 + 7.0) + uTime * 0.012
+    ));
+    float edgeBite = smoothstep(0.69, 0.89, edgeBiteField) *
+      smoothstep(0.12, 0.38, v) * (1.0 - smoothstep(0.90, 1.0, v));
+    boundary -= edgeBite * mix(0.25, 0.13, step(1.5, variant));
+    boundary = max(boundary, 0.56);
     float bottomNoise = valueNoise(vec2(
       x * 2.1 + seed * 17.0,
       seed * 31.0 + uTime * 0.025
@@ -202,9 +247,33 @@ void main() {
     float aaX = 1.5 / halfWidth;
     float aaY = 1.5 / lengthPx;
     float sideMask = 1.0 - smoothstep(boundary - aaX, boundary + aaX, abs(x));
-    float topMask = smoothstep(-aaY, aaY, rawV);
-    float endMask = 1.0 - smoothstep(bottomV - aaY, bottomV + aaY, rawV);
+    float topRelief = (valueNoise(vec2(
+      x * 2.7 + seed * 43.0,
+      seed * 29.0 + uTime * 0.022
+    )) - 0.5) * (variant < 0.5 ? 0.038 : 0.022);
+    float topMask = smoothstep(topRelief - aaY, topRelief + aaY, rawV);
+    float endMask = tipStyle > 1.5
+      ? 1.0 - smoothstep(1.08, 1.18, rawV)
+      : 1.0 - smoothstep(bottomV - aaY, bottomV + aaY, rawV);
     float bodyMask = sideMask * topMask * endMask;
+
+    // Broad falls can fork around a cooling cleft near the bottom. Sparse
+    // translucent voids keep the sheet from reading as one solid rectangle.
+    if (tipStyle > 0.5 && tipStyle < 1.5) {
+      float cleft = smoothstep(0.73, 0.97, v) *
+        (1.0 - smoothstep(0.035, 0.14, abs(x)));
+      bodyMask *= 1.0 - cleft * 0.72;
+    }
+    if (variant < 0.5) {
+      float voidField = fbm(vec2(
+        x * 1.42 + seed * 23.0,
+        v * 3.15 - uTime * 0.035 + seed * 11.0
+      ));
+      float voids = smoothstep(0.76, 0.91, voidField) *
+        smoothstep(0.20, 0.46, v) * (1.0 - smoothstep(0.88, 1.0, v)) *
+        smoothstep(0.38, 0.78, abs(x));
+      bodyMask *= 1.0 - voids * 0.22;
+    }
 
     // A thick shared molten lip keeps the waterfall attached to the tear.
     vec2 mouthTangent = normalize(d.xy + vec2(0.0001, 0.0));
@@ -213,20 +282,26 @@ void main() {
     float mouthAlong = dot(mouthDelta, mouthTangent);
     float mouthAcross = dot(mouthDelta, mouthNormal);
     float mouthX = 1.0 - smoothstep(
-      topWidth * 0.42,
-      topWidth * 0.58,
+      topWidth * 0.48,
+      topWidth * 0.70,
       abs(mouthAlong)
     );
-    float mouth = exp(-abs(mouthAcross) / 3.3) * mouthX;
-    float shapeMask = max(bodyMask, mouth * 0.92);
+    float reservoirRipple = 0.74 + 0.26 * valueNoise(vec2(
+      mouthAlong * 0.035 + seed * 27.0,
+      seed * 17.0 + uTime * 0.055
+    ));
+    float mouthThickness = variant < 0.5 ? 10.0 : (variant < 1.5 ? 6.8 : 3.4);
+    float localMouthThickness = mouthThickness * (0.72 + reservoirRipple * 0.56);
+    float mouth = exp(-abs(mouthAcross) / localMouthThickness) * mouthX * reservoirRipple;
+    float shapeMask = max(bodyMask, mouth * mix(0.98, 0.70, step(1.5, variant)));
 
     float dx = max(abs(fragPx.x - centerX) - halfWidth * boundary, 0.0);
     float bottomEdgeY = topPt.y + lengthPx * bottomV;
     float dy = max(max(topPt.y - fragPx.y, fragPx.y - bottomEdgeY), 0.0);
     float outsideDistance = length(vec2(dx, dy));
-    float haloNear = exp(-outsideDistance / (8.0 + 5.0 * heat));
-    float haloFar = exp(-outsideDistance / (24.0 + 10.0 * heat));
-    float halo = (haloNear * 0.72 + haloFar * 0.28) *
+    float haloNear = exp(-outsideDistance / (10.0 + 6.0 * heat));
+    float haloFar = exp(-outsideDistance / (32.0 + 14.0 * heat));
+    float halo = (haloNear * 0.66 + haloFar * 0.34) *
       (1.0 - 0.62 * shapeMask);
 
 #if LAVA_QUALITY >= 1
@@ -264,64 +339,73 @@ void main() {
     compositeOver(
       accum,
       vec3(1.0, 0.105, 0.008),
-      halo * opacity * (0.11 + 0.15 * heat) * (1.0 - 0.25 * drain)
+      halo * opacity * (0.16 + 0.20 * heat) * (1.0 - 0.25 * drain)
     );
 
     if (shapeMask > 0.001) {
-      // Domain-warped, downward-advection fields create branching hot veins.
+      // Three anisotropic flow scales make wide hot tongues, braided mid-size
+      // channels and fine sparks of white heat. Their vertical coordinates
+      // advect faster than the silhouette, giving the waterfall real gravity.
       float flow = age * flowSpeed / lengthPx;
-      vec2 warpUv = vec2(x * 1.30, (rawV - flow) * 1.80);
-      warpUv += vec2(seed * 23.1, seed * 7.3);
+      vec2 warpUv = vec2(
+        x * 1.08 + seed * 23.1,
+        (rawV - flow * 0.72) * 0.82 + seed * 7.3
+      );
       float warp = fbm(warpUv);
-      vec2 lavaUv = vec2(
-        x * 1.62 + (warp - 0.5) * 1.30,
-        (rawV - flow) * 2.05
-      );
-      lavaUv += vec2(seed * 41.7, seed * 19.2);
-      float field = fbm(lavaUv);
-      vec2 branchUv = vec2(
-        (x + (rawV - 0.45) * (seed - 0.5) * 0.72) * 1.24 -
-          (warp - 0.5) * 0.82,
-        (rawV - flow * 0.92) * 1.58
+      vec2 broadUv = vec2(
+        x * 1.34 + (warp - 0.5) * 1.05,
+        (rawV - flow) * 0.48
+      ) + vec2(seed * 41.7, seed * 19.2);
+      float broadField = fbm(broadUv);
+      float broadRidge = 1.0 - smoothstep(0.045, 0.16, abs(broadField - 0.52));
+
+      vec2 channelUv = vec2(
+        x * 2.05 - (warp - 0.5) * 1.18 + (rawV - 0.45) * (seed - 0.5) * 0.6,
+        (rawV - flow * 1.08) * 0.92
       ) + vec2(seed * 27.3, seed * 13.9);
-      float branchField = fbm(branchUv);
-      float ridge = 1.0 - smoothstep(0.014, 0.052, abs(field - 0.51));
-      float branchRidge = 1.0 - smoothstep(0.012, 0.046, abs(branchField - 0.535));
-      float fineField = valueNoise(lavaUv * 1.68 + vec2(7.1, 3.7));
-      float fineRidge = 1.0 - smoothstep(0.008, 0.026, abs(fineField - 0.52));
+      float channelField = fbm(channelUv);
+      float channelRidge = 1.0 - smoothstep(0.026, 0.105, abs(channelField - 0.535));
+
+      float fineField = valueNoise(vec2(
+        x * 3.8 + (warp - 0.5) * 1.6 + seed * 63.0,
+        (rawV - flow * 1.24) * 1.34 + seed * 31.0
+      ));
+      float fineRidge = 1.0 - smoothstep(0.016, 0.055, abs(fineField - 0.515));
       float veins = clamp(
-        max(ridge * 0.88, branchRidge * (0.5 + 0.2 * warp)) + fineRidge * 0.04,
+        broadRidge * 0.66 + channelRidge * 0.41 + fineRidge * 0.08,
         0.0,
         1.0
       );
+
       float depthFromEdge = boundary - abs(x);
-      float interior = smoothstep(0.02, 0.34, depthFromEdge);
-      float coolingPatches = smoothstep(
-        0.64,
-        0.84,
-        warp + 0.08 * valueNoise(lavaUv * 0.45)
-      ) * (1.0 - veins);
-      float cooling = clamp(
-        (1.0 - interior) * 0.98 + coolingPatches * 0.45,
-        0.0,
-        1.0
-      );
+      float interior = smoothstep(0.015, 0.28, depthFromEdge);
+      float edgeCooling = 1.0 - interior;
+      float slowCrust = fbm(vec2(
+        x * 1.32 + seed * 17.0,
+        rawV * 1.65 - uTime * 0.018 + seed * 37.0
+      ));
+      float coolingPatches = smoothstep(0.79, 0.91, slowCrust) * (1.0 - veins);
+      float cooling = clamp(edgeCooling * 0.72 + coolingPatches * 0.34, 0.0, 1.0);
       float centerCore = pow(
         clamp(1.0 - abs(x) / max(boundary, 0.001), 0.0, 1.0),
-        1.7
+        1.45
       );
-      float liveHeat = heat * (1.0 - 0.30 * drain);
+      float heatPulse = 0.92 + 0.08 * sin(
+        rawV * 8.0 - age * flowSpeed * 0.010 + seed * 18.0 + warp * 2.0
+      );
+      float liveHeat = mix(0.90, 1.0, heat) * (1.0 - 0.24 * drain);
       float temperature = clamp(
-        (0.17 + field * 0.10 + centerCore * 0.12 + veins * 0.68) * liveHeat,
+        (0.34 + broadField * 0.12 + centerCore * 0.08 + veins * 0.48) *
+          heatPulse * liveHeat,
         0.0,
         1.0
       );
-      temperature *= 1.0 - cooling * 0.72;
-      temperature = max(temperature, mouth * 0.82 * liveHeat);
+      temperature *= 1.0 - cooling * 0.31;
+      temperature = max(temperature, mouth * 0.91 * liveHeat);
       vec3 bodyColor = lavaPalette(temperature);
-      float crustMix = clamp(cooling * (0.80 - veins * 0.45), 0.0, 0.90);
-      bodyColor = mix(bodyColor, vec3(0.018, 0.0015, 0.003), crustMix);
-      float bodyAlpha = shapeMask * opacity * (0.91 + 0.07 * cooling);
+      float crustMix = clamp(cooling * (0.48 - veins * 0.26), 0.0, 0.52);
+      bodyColor = mix(bodyColor, vec3(0.024, 0.0018, 0.0028), crustMix);
+      float bodyAlpha = shapeMask * opacity * (0.93 + 0.05 * cooling);
       compositeOver(accum, bodyColor, bodyAlpha);
     }
 
@@ -557,8 +641,8 @@ export const createLavaWebGLRenderer = (
         curtainC[offset + 3] = curtain.heat;
         curtainD[offset] = curtain.tangentX;
         curtainD[offset + 1] = curtain.tangentY;
-        curtainD[offset + 2] = 0;
-        curtainD[offset + 3] = 0;
+        curtainD[offset + 2] = curtain.variant;
+        curtainD[offset + 3] = curtain.tipStyle;
 
         const maxWidth = Math.max(curtain.topWidth, curtain.bottomWidth);
         const horizontalPad = maxWidth * 1.6 + 48;

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import {
+  MAX_LAVA_WEBGL_CURTAINS,
   createLavaWebGLRenderer,
   type LavaWebGLCurtain,
 } from "./lavaWebGL";
@@ -18,7 +19,7 @@ const RESTART_DELAY = 280;
 const RESTART_DISTANCE = 240;
 const MAX_STROKES = 4;
 const MAX_POINTS = 420;
-const MAX_LAVA_CURTAINS = 6;
+const MAX_LAVA_CURTAINS = MAX_LAVA_WEBGL_CURTAINS;
 
 const CLAW_LANES = [
   { shift: -8.5, aperture: 0.46, alpha: 0.38, start: 0.08, end: 0.84, phase: 0.4 },
@@ -41,6 +42,7 @@ type RiftStroke = {
   lavaTravel: number;
   nextLavaGap: number;
   lavaCount: number;
+  hasWideLava: boolean;
 };
 
 type LavaCurtain = {
@@ -63,6 +65,10 @@ type LavaCurtain = {
   sway: number;
   flowSpeed: number;
   filaments: number;
+  variant: 0 | 1 | 2;
+  tipStyle: 0 | 1 | 2;
+  clusterId: number;
+  isRoot: boolean;
   seed: number;
   phase: number;
 };
@@ -99,7 +105,6 @@ export default function MouseRift() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const magmaCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const refractionRefs = useRef<Array<HTMLSpanElement | null>>([]);
-  const heatRefractionRefs = useRef<Array<HTMLSpanElement | null>>([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -145,11 +150,6 @@ export default function MouseRift() {
         refraction.style.visibility = "hidden";
         refraction.style.clipPath = "none";
         refraction.style.setProperty("-webkit-clip-path", "none");
-      }
-      for (const heat of heatRefractionRefs.current) {
-        if (!heat) continue;
-        heat.style.opacity = "0";
-        heat.style.visibility = "hidden";
       }
     };
 
@@ -225,8 +225,9 @@ export default function MouseRift() {
         points: [makePoint(x, y, now, 0.48)],
         lastMove: now,
         lavaTravel: 0,
-        nextLavaGap: 250 + Math.random() * 60,
+        nextLavaGap: 240 + Math.random() * 80,
         lavaCount: 0,
+        hasWideLava: false,
       };
       strokes.push(stroke);
       if (strokes.length > MAX_STROKES) strokes.shift();
@@ -614,13 +615,12 @@ export default function MouseRift() {
     };
 
     const curtainOpening = (curtain: LavaCurtain, now: number) => {
-      const closure = smoothstep(
+      return smoothstep(
         1 - Math.max(0, now - curtain.sourceStroke.lastMove - HOLD_TIME) / HEAL_DURATION,
       );
-      return pointOpening(curtain.sourcePoint, now, closure);
     };
 
-    const spawnLavaCurtain = (
+    const spawnLavaCluster = (
       stroke: RiftStroke,
       point: RiftPoint,
       dx: number,
@@ -630,7 +630,8 @@ export default function MouseRift() {
       if (lavaCurtains.length >= MAX_LAVA_CURTAINS) return;
       if (
         lavaCurtains.some(
-          (curtain) => Math.hypot(curtain.baseX - point.x, curtain.baseY - point.y) < 72,
+          (curtain) =>
+            curtain.isRoot && Math.hypot(curtain.baseX - point.x, curtain.baseY - point.y) < 96,
         )
       ) {
         return;
@@ -642,39 +643,121 @@ export default function MouseRift() {
       const nx = -ty;
       const ny = tx;
       const lipSide: -1 | 1 = ny >= 0 ? 1 : -1;
-      const seed = point.seed;
       const baseHalfWidth =
         (3.15 + point.power * 2.2) * CLAW_LANES[1].aperture * 0.92;
-      const baseX = point.x;
-      const baseY = point.y;
-      const anchorX = baseX + nx * lipSide * baseHalfWidth;
-      const anchorY = baseY + ny * lipSide * baseHalfWidth + 0.8;
       const horizontalScale = Math.abs(tx) < 0.35 ? 0.58 : 1;
-      const curtainWidth = (40 + point.power * (36 + seed * 36)) * horizontalScale;
+      const clusterId = Math.random();
+      const mainVariant: 0 | 1 = !stroke.hasWideLava && point.seed < 0.72 ? 0 : 1;
+      if (mainVariant === 0) stroke.hasWideLava = true;
 
-      lavaCurtains.push({
-        sourcePoint: point,
-        sourceStroke: stroke,
-        baseX,
-        baseY,
-        tx,
-        ty,
-        nx,
-        ny,
-        lipSide,
-        baseHalfWidth,
-        anchorX,
-        anchorY,
-        born: now,
-        drainAt: null,
-        width: curtainWidth,
-        targetLength: (108 + seed * 105 + point.power * 44) * (0.74 + horizontalScale * 0.26),
-        sway: 3 + seed * 4.5,
-        flowSpeed: 22 + seed * 23,
-        filaments: 2 + (seed > 0.7 ? 1 : 0),
+      const addCurtain = ({
+        variant,
+        lateralOffset,
+        width,
+        lengthScale,
         seed,
-        phase: seed * Math.PI * 2,
+        delay,
+        isRoot,
+      }: {
+        variant: 0 | 1 | 2;
+        lateralOffset: number;
+        width: number;
+        lengthScale: number;
+        seed: number;
+        delay: number;
+        isRoot: boolean;
+      }) => {
+        if (lavaCurtains.length >= MAX_LAVA_CURTAINS) return;
+        const baseX = point.x + tx * lateralOffset;
+        const baseY = point.y + ty * lateralOffset;
+        const anchorX = baseX + nx * lipSide * baseHalfWidth;
+        const anchorY = baseY + ny * lipSide * baseHalfWidth + 1.4;
+        const availableHeight = Math.max(150, height - anchorY + 30);
+        const cinematicLength =
+          mainVariant === 0
+            ? 250 + seed * 175 + point.power * 78
+            : 215 + seed * 150 + point.power * 62;
+        const targetLength = Math.min(
+          height * 0.72,
+          Math.max(170, Math.min(cinematicLength * lengthScale, availableHeight + 78)),
+        );
+        const reachesViewport = anchorY + targetLength > height + 18;
+        const tipStyle: 0 | 1 | 2 = reachesViewport
+          ? 2
+          : (variant === 0 && seed > 0.44) || (variant === 1 && seed > 0.82)
+            ? 1
+            : 0;
+
+        lavaCurtains.push({
+          sourcePoint: point,
+          sourceStroke: stroke,
+          baseX,
+          baseY,
+          tx,
+          ty,
+          nx,
+          ny,
+          lipSide,
+          baseHalfWidth,
+          anchorX,
+          anchorY,
+          born: now + delay,
+          drainAt: null,
+          width: width * horizontalScale,
+          targetLength,
+          sway: variant === 2 ? 2.2 + seed * 2.8 : 2.6 + seed * 3.8,
+          flowSpeed: 38 + seed * 36 + variant * 6,
+          filaments: variant === 0 ? 4 : variant === 1 ? 3 : 1,
+          variant,
+          tipStyle,
+          clusterId,
+          isRoot,
+          seed,
+          phase: seed * Math.PI * 2,
+        });
+      };
+
+      const mainSeed = point.seed;
+      addCurtain({
+        variant: mainVariant,
+        lateralOffset: 0,
+        width:
+          mainVariant === 0
+            ? 92 + point.power * 38 + mainSeed * 24
+            : 48 + point.power * 25 + mainSeed * 16,
+        lengthScale: 1,
+        seed: mainSeed,
+        delay: 0,
+        isRoot: true,
       });
+
+      // Wide falls shed a necked side pillar; pillars usually trail a narrow
+      // companion. The delayed third strand reads as a viscous drip rather
+      // than another copy appearing at the same instant.
+      const side = mainSeed > 0.5 ? 1 : -1;
+      const companionSeed = (mainSeed * 7.17 + 0.31) % 1;
+      addCurtain({
+        variant: mainVariant === 0 ? 1 : 2,
+        lateralOffset: side * (mainVariant === 0 ? 82 + mainSeed * 40 : 48 + mainSeed * 26),
+        width: mainVariant === 0 ? 28 + companionSeed * 18 : 10 + companionSeed * 9,
+        lengthScale: 0.72 + companionSeed * 0.22,
+        seed: companionSeed,
+        delay: 90 + companionSeed * 130,
+        isRoot: false,
+      });
+
+      if (mainVariant === 0 && lavaCurtains.length < MAX_LAVA_CURTAINS) {
+        const dripSeed = (mainSeed * 11.73 + 0.67) % 1;
+        addCurtain({
+          variant: 2,
+          lateralOffset: -side * (118 + dripSeed * 42),
+          width: 7 + dripSeed * 7,
+          lengthScale: 0.48 + dripSeed * 0.22,
+          seed: dripSeed,
+          delay: 180 + dripSeed * 180,
+          isRoot: false,
+        });
+      }
       stroke.lavaCount += 1;
       canvas.style.visibility = "visible";
       canvas.style.opacity = "1";
@@ -694,12 +777,12 @@ export default function MouseRift() {
           const edge = curtain.baseHalfWidth * opening;
           curtain.anchorX = curtain.baseX + curtain.nx * curtain.lipSide * edge;
           curtain.anchorY = curtain.baseY + curtain.ny * curtain.lipSide * edge + 0.8;
-        } else if (opening <= 0.12 && curtain.drainAt === null && age > 220) {
+        } else if (opening <= 0.12 && curtain.drainAt === null && age > 2200) {
           curtain.drainAt = now;
         }
 
-        if (curtain.drainAt === null && age > 2350) curtain.drainAt = now;
-        if (curtain.drainAt !== null && now - curtain.drainAt > 820) {
+        if (curtain.drainAt === null && age > 3400) curtain.drainAt = now;
+        if (curtain.drainAt !== null && now - curtain.drainAt > 1500) {
           lavaCurtains.splice(index, 1);
         }
       }
@@ -775,25 +858,29 @@ export default function MouseRift() {
       lavaWebGLCurtains.length = 0;
       for (const curtain of lavaCurtains) {
         const age = now - curtain.born;
-        const wetting = smoothstep(age / 180);
-        const growth = smoothstep(age / (720 + curtain.seed * 240));
+        const wetting = smoothstep(age / (curtain.variant === 2 ? 210 : 280));
+        const growth = smoothstep(
+          age / (curtain.variant === 2 ? 720 + curtain.seed * 180 : 940 + curtain.seed * 300),
+        );
         const drainAge = curtain.drainAt === null ? 0 : now - curtain.drainAt;
-        const drain = curtain.drainAt === null ? 0 : smoothstep(drainAge / 760);
-        const fade = curtain.drainAt === null ? 1 : 1 - smoothstep((drainAge - 360) / 420);
+        const drain = curtain.drainAt === null ? 0 : smoothstep(drainAge / 1050);
+        const fade = curtain.drainAt === null ? 1 : 1 - smoothstep((drainAge - 520) / 720);
         const opacity = wetting * fade;
         if (opacity <= 0.01) continue;
 
-        const topSeal = curtain.drainAt === null ? 1 : 1 - smoothstep(drainAge / 320);
+        const topSeal = curtain.drainAt === null ? 1 : 1 - smoothstep(drainAge / 440);
         const topWidth = Math.max(2, curtain.width * wetting * (0.18 + topSeal * 0.82));
-        const length = curtain.targetLength * (0.08 + growth * 0.92) + drain * 34;
+        const length = curtain.targetLength * (0.05 + growth * 0.95) + drain * 58;
         const topX =
-          curtain.anchorX + Math.sin(now * 0.0011 + curtain.phase) * curtain.sway * 0.35;
-        const topY = curtain.anchorY + drain * 18;
-        const wave = Math.sin(now * 0.00135 + curtain.phase) * curtain.sway;
+          curtain.anchorX + Math.sin(now * 0.00082 + curtain.phase) * curtain.sway * 0.18;
+        const topY = curtain.anchorY + drain * 24;
+        const wave = Math.sin(now * 0.0009 + curtain.phase) * curtain.sway;
+        const widthRatio = curtain.variant === 0 ? 0.84 : curtain.variant === 1 ? 0.66 : 0.46;
         const bottomWidth =
           curtain.width *
-          (0.72 + curtain.seed * 0.18 + Math.sin(now * 0.001 + curtain.phase * 1.7) * 0.065) *
-          (1 - drain * 0.12);
+          (widthRatio + curtain.seed * 0.12 +
+            Math.sin(now * 0.0008 + curtain.phase * 1.7) * 0.045) *
+          (1 - drain * 0.2);
 
         lavaWebGLCurtains.push({
           topX,
@@ -810,39 +897,11 @@ export default function MouseRift() {
           heat: clamp01(0.76 + curtain.sourcePoint.power * 0.24),
           tangentX: curtain.tx,
           tangentY: curtain.ty,
+          variant: curtain.variant,
+          tipStyle: curtain.tipStyle,
         });
       }
       return lavaWebGLCurtains;
-    };
-
-    const updateLavaHeatRefractions = (
-      curtains: readonly LavaWebGLCurtain[],
-      now: number,
-    ) => {
-      for (let index = 0; index < MAX_LAVA_CURTAINS; index += 1) {
-        const heat = heatRefractionRefs.current[index];
-        const curtain = curtains[index];
-        if (!heat || !curtain || curtain.opacity <= 0.02) {
-          if (heat) {
-            heat.style.opacity = "0";
-            heat.style.visibility = "hidden";
-          }
-          continue;
-        }
-
-        const bandWidth = Math.max(curtain.topWidth, curtain.bottomWidth) * 1.68 + 30;
-        const bandHeight = Math.max(24, curtain.bottomY - curtain.topY + 48);
-        const centerX = (curtain.topX + curtain.bottomX) * 0.5;
-        const shimmer = Math.sin(now * 0.0023 + curtain.seed * 14) * 2.2;
-        heat.style.left = centerX - bandWidth * 0.5 + "px";
-        heat.style.top = curtain.topY - 18 + "px";
-        heat.style.width = bandWidth + "px";
-        heat.style.height = bandHeight + "px";
-        heat.style.transform =
-          "translateX(" + shimmer + "px) skewX(" + (curtain.seed - 0.5) * 2.4 + "deg)";
-        heat.style.visibility = "visible";
-        heat.style.opacity = String(Math.min(0.24, curtain.opacity * 0.2));
-      }
     };
 
     const drawLavaCurtains = (now: number) => {
@@ -852,31 +911,35 @@ export default function MouseRift() {
 
       for (const curtain of lavaCurtains) {
         const age = now - curtain.born;
-        const wetting = smoothstep(age / 180);
-        const growth = smoothstep(age / (720 + curtain.seed * 240));
+        const wetting = smoothstep(age / (curtain.variant === 2 ? 210 : 280));
+        const growth = smoothstep(
+          age / (curtain.variant === 2 ? 720 + curtain.seed * 180 : 940 + curtain.seed * 300),
+        );
         const drainAge = curtain.drainAt === null ? 0 : now - curtain.drainAt;
-        const drain = curtain.drainAt === null ? 0 : smoothstep(drainAge / 760);
-        const fade = curtain.drainAt === null ? 1 : 1 - smoothstep((drainAge - 360) / 420);
+        const drain = curtain.drainAt === null ? 0 : smoothstep(drainAge / 1050);
+        const fade = curtain.drainAt === null ? 1 : 1 - smoothstep((drainAge - 520) / 720);
         const alpha = wetting * fade;
         if (alpha <= 0.01) continue;
 
-        const topSeal = curtain.drainAt === null ? 1 : 1 - smoothstep(drainAge / 320);
+        const topSeal = curtain.drainAt === null ? 1 : 1 - smoothstep(drainAge / 440);
         const topWidth = Math.max(2, curtain.width * wetting * (0.18 + topSeal * 0.82));
-        const length = curtain.targetLength * (0.08 + growth * 0.92) + drain * 34;
+        const length = curtain.targetLength * (0.05 + growth * 0.95) + drain * 58;
         const topCenterX =
-          curtain.anchorX + Math.sin(now * 0.0011 + curtain.phase) * curtain.sway * 0.35;
-        const topCenterY = curtain.anchorY + drain * 18;
+          curtain.anchorX + Math.sin(now * 0.00082 + curtain.phase) * curtain.sway * 0.18;
+        const topCenterY = curtain.anchorY + drain * 24;
         const topVectorX = curtain.tx * topWidth * 0.5;
         const topVectorY = curtain.ty * topWidth * 0.18;
         const leftTopX = topCenterX - topVectorX;
         const leftTopY = topCenterY - topVectorY;
         const rightTopX = topCenterX + topVectorX;
         const rightTopY = topCenterY + topVectorY;
-        const wave = Math.sin(now * 0.00135 + curtain.phase) * curtain.sway;
+        const wave = Math.sin(now * 0.0009 + curtain.phase) * curtain.sway;
+        const widthRatio = curtain.variant === 0 ? 0.84 : curtain.variant === 1 ? 0.66 : 0.46;
         const bottomWidth =
           curtain.width *
-          (0.72 + curtain.seed * 0.18 + Math.sin(now * 0.001 + curtain.phase * 1.7) * 0.065) *
-          (1 - drain * 0.12);
+          (widthRatio + curtain.seed * 0.12 +
+            Math.sin(now * 0.0008 + curtain.phase * 1.7) * 0.045) *
+          (1 - drain * 0.2);
         const bottomCenterX = topCenterX + wave + (curtain.seed - 0.5) * 2;
         const bottomCenterY = topCenterY + length;
         const leftBottomX = bottomCenterX - bottomWidth * 0.5;
@@ -903,10 +966,10 @@ export default function MouseRift() {
         };
 
         const body = ctx.createLinearGradient(0, topCenterY, 0, bottomCenterY + 8);
-        body.addColorStop(0, "rgba(134, 17, 25, 0.98)");
-        body.addColorStop(0.1, "rgba(255, 82, 9, 0.98)");
-        body.addColorStop(0.5, "rgba(218, 39, 9, 0.96)");
-        body.addColorStop(1, "rgba(103, 12, 23, 0.94)");
+        body.addColorStop(0, "rgba(255, 105, 10, 0.99)");
+        body.addColorStop(0.16, "rgba(255, 69, 5, 0.99)");
+        body.addColorStop(0.58, "rgba(236, 42, 4, 0.98)");
+        body.addColorStop(1, "rgba(142, 13, 16, 0.96)");
 
         ctx.globalCompositeOperation = "lighter";
         traceLavaCurtain(geometry);
@@ -1106,7 +1169,6 @@ export default function MouseRift() {
       }
       updateLavaCurtains(now);
       const currentLavaWebGLCurtains = collectLavaWebGLCurtains(now);
-      updateLavaHeatRefractions(currentLavaWebGLCurtains, now);
       updateRefractions(now);
 
       if (!strokes.length && !lavaCurtains.length) {
@@ -1197,11 +1259,11 @@ export default function MouseRift() {
         spawnedFromSegment < 1
       ) {
         stroke.lavaTravel -= stroke.nextLavaGap;
-        stroke.nextLavaGap = 190 + Math.random() * 60;
+        stroke.nextLavaGap = 240 + Math.random() * 80;
         const sourceProgress = 0.76;
         const sourcePoint =
           newPoints[Math.min(newPoints.length - 1, Math.floor(newPoints.length * sourceProgress))];
-        spawnLavaCurtain(stroke, sourcePoint, dx, dy, now);
+        spawnLavaCluster(stroke, sourcePoint, dx, dy, now);
         spawnedFromSegment += 1;
       }
       if (stroke.points.length > MAX_POINTS) {
@@ -1277,15 +1339,6 @@ export default function MouseRift() {
               refractionRefs.current[index] = node;
             }}
             className="mouse-rift-refraction"
-          />
-        ))}
-        {Array.from({ length: MAX_LAVA_CURTAINS }, (_, index) => (
-          <span
-            key={"heat-" + index}
-            ref={(node) => {
-              heatRefractionRefs.current[index] = node;
-            }}
-            className="mouse-rift-heat"
           />
         ))}
       </div>
