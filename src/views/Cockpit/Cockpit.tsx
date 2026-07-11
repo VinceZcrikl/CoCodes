@@ -216,13 +216,35 @@ export default function Cockpit() {
   useEffect(() => applyPaletteVars(paletteName, accent), [paletteName, accent]);
   useEffect(() => installPaletteSync(), []);
 
-  // Check for updates 5s after launch, then quietly re-check every 6 hours so a
-  // version published while the app stays open surfaces the download button on
-  // its own (the check is silent unless an update is found).
+  // Check for updates 5s after launch, then quietly re-check every 30 minutes so
+  // a version published while the app stays open surfaces the download button on
+  // its own (the check is silent unless an update is found). We also re-check the
+  // moment the window regains focus — so returning to a long-open app picks up a
+  // release right away instead of waiting out the interval — and when the machine
+  // wakes from sleep, since timers don't fire while suspended. Both are throttled
+  // to at most once a minute so rapid focus/blur can't hammer the endpoint.
   useEffect(() => {
-    const t = window.setTimeout(() => { void checkForUpdate(); }, 5000);
-    const i = window.setInterval(() => { void checkForUpdate(); }, 6 * 60 * 60 * 1000);
-    return () => { window.clearTimeout(t); window.clearInterval(i); };
+    let last = 0;
+    const run = () => {
+      const now = Date.now();
+      if (now - last < 60 * 1000) return;
+      last = now;
+      void checkForUpdate();
+    };
+    // First check bypasses the throttle so it always runs, even if a focus event
+    // fired during the 5s startup window.
+    const t = window.setTimeout(() => { last = Date.now(); void checkForUpdate(); }, 5000);
+    const i = window.setInterval(run, 30 * 60 * 1000);
+    const onFocus = () => run();
+    const onVisible = () => { if (document.visibilityState === "visible") run(); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearTimeout(t);
+      window.clearInterval(i);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   // Celebration: fire when the user *switches into* a decorated theme (World Cup
