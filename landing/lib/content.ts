@@ -3,6 +3,16 @@ export type Lang = "en" | "zh";
 export const GITHUB_URL = "https://github.com/VinceZcrikl/CoCodes";
 export const RELEASES_URL = `${GITHUB_URL}/releases/latest`;
 
+/** Pulled from the GitHub API by hand — refresh periodically rather than
+ * faking growth. Installer downloads exclude .sig files and the updater's
+ * latest.json manifest (auto-pinged by every running instance, not a human
+ * download), so this undercounts real usage rather than inflating it. */
+export const STATS = {
+  releases: 41,
+  installerDownloads: 63,
+  stars: 1,
+};
+
 export interface PersonaSpec {
   id: string;
   name: string;
@@ -82,6 +92,9 @@ export interface Content {
     downloadOther: string;
     platforms: string;
     scrollHint: string;
+    statsReleases: string;
+    statsDownloads: string;
+    statsStars: string;
   };
   live: {
     kicker: string;
@@ -173,6 +186,9 @@ export const CONTENT: Record<Lang, Content> = {
       downloadOther: "All downloads",
       platforms: "Free & open source · auto-updates from GitHub Releases",
       scrollHint: "Enter the cockpit",
+      statsReleases: "releases shipped",
+      statsDownloads: "installer downloads",
+      statsStars: "GitHub stars",
     },
     live: {
       kicker: "The difference",
@@ -362,6 +378,9 @@ export const CONTENT: Record<Lang, Content> = {
       downloadOther: "全部下载",
       platforms: "免费开源 · 由 GitHub Releases 自动更新",
       scrollHint: "进入座舱",
+      statsReleases: "次发布",
+      statsDownloads: "次安装包下载",
+      statsStars: "GitHub 星标",
     },
     live: {
       kicker: "本质区别",

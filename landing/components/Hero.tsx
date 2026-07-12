@@ -1,7 +1,7 @@
 "use client";
 
 import { useLang } from "@/lib/lang";
-import { RELEASES_URL } from "@/lib/content";
+import { RELEASES_URL, STATS } from "@/lib/content";
 import TerminalMock from "./TerminalMock";
 
 /** Deterministic pseudo-random star field (stable across SSR/hydration). */
@@ -85,6 +85,18 @@ export default function Hero() {
         <p className="mt-5 font-mono text-[11px] tracking-wider text-ivory-muted">
           {t.hero.platforms}
         </p>
+
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 font-mono text-[11px] tracking-wider text-ivory-muted">
+          <span>
+            <span className="text-gold">{STATS.releases}</span> {t.hero.statsReleases}
+          </span>
+          <span>
+            <span className="text-gold">{STATS.installerDownloads}</span> {t.hero.statsDownloads}
+          </span>
+          <span>
+            <span className="text-gold">{STATS.stars}</span> {t.hero.statsStars}
+          </span>
+        </div>
 
         <div className="mt-16">
           <TerminalMock />
